@@ -1,0 +1,270 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
+
+from app.api.v1.deps import (
+    check_ai_rate_limit,
+    get_current_tenant,
+    get_db_session_factory,
+    require_permission,
+)
+from app.core.rbac import Permission, TenantContext
+from app.db.postgres_repositories import PostgresMarketplaceRepository
+from app.domain.country_packs import CountryCode
+from app.domain.marketplace_service import (
+    MarketplaceService,
+    PublisherType,
+    generate_listing_copy,
+)
+from app.domain.real_estate_engines import SearchPerimeterMode, TransportMode
+
+marketplace_router = APIRouter(prefix="/marketplace", tags=["Phase 2 — Annonces & Mobilité"])
+_market = MarketplaceService()
+
+
+def _listing_dto(item) -> dict:
+    return {
+        "id": item.id,
+        "country_code": item.country_code.value,
+        "publisher_type": item.publisher_type.value,
+        "publisher_label": item.publisher_label,
+        "title": item.title,
+        "property_kind": item.property_kind,
+        "city": item.city,
+        "region_name": item.region_name,
+        "sector_label": item.sector_label,
+        "price_euro": item.price_euro,
+        "surface_m2": item.surface_m2,
+        "rooms": item.rooms,
+        "dpe": item.dpe,
+        "condition_label": item.condition_label,
+        "highlights": list(item.highlights),
+        "description": item.description,
+        "photo_count": item.photo_count,
+        "latitude": item.latitude,
+        "longitude": item.longitude,
+        "moderation_status": item.moderation_status.value,
+        "moderation_note": item.moderation_note,
+        "sale_timeline": {
+            "status": item.sale_timeline.status,
+            "low_days": item.sale_timeline.low_days,
+            "likely_days": item.sale_timeline.likely_days,
+            "high_days": item.sale_timeline.high_days,
+            "confidence_label": item.sale_timeline.confidence_label,
+        },
+        "published_at": item.published_at,
+    }
+
+
+@marketplace_router.get("/listings")
+async def search_marketplace_listings(
+    country_code: CountryCode = CountryCode.FR,
+    publisher_type: PublisherType | None = None,
+    origin_address: str = Query(default="Lyon", max_length=120),
+    search_mode: SearchPerimeterMode = SearchPerimeterMode.TRAVEL_TIME,
+    transport_mode: TransportMode = TransportMode.TRAM,
+    max_radius_km: int = Query(default=20, ge=1, le=500),
+    max_travel_minutes: int = Query(default=35, ge=5, le=240),
+    max_price_euro: int | None = Query(default=None, ge=10_000),
+    min_surface_m2: int = Query(default=0, ge=0),
+    only_within_perimeter: bool = True,
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    if sf is not None:
+        hits = await PostgresMarketplaceRepository(sf).search_listings(
+            country_code=country_code,
+            publisher_type=publisher_type,
+            origin_address=origin_address,
+            search_mode=search_mode,
+            transport_mode=transport_mode,
+            max_radius_km=max_radius_km,
+            max_travel_minutes=max_travel_minutes,
+            max_price_euro=max_price_euro,
+            min_surface_m2=min_surface_m2,
+            only_within_perimeter=only_within_perimeter,
+        )
+    else:
+        hits = _market.search_listings(
+            country_code=country_code,
+            publisher_type=publisher_type,
+            origin_address=origin_address,
+            search_mode=search_mode,
+            transport_mode=transport_mode,
+            max_radius_km=max_radius_km,
+            max_travel_minutes=max_travel_minutes,
+            max_price_euro=max_price_euro,
+            min_surface_m2=min_surface_m2,
+            only_within_perimeter=only_within_perimeter,
+        )
+    return {
+        "count": len(hits),
+        "hits": [
+            {
+                "listing": _listing_dto(h.listing),
+                "distance_km": h.distance_km,
+                "estimated_minutes": h.estimated_minutes,
+                "transport_badge": h.transport_badge,
+                "within_perimeter": h.within_perimeter,
+            }
+            for h in hits
+        ],
+    }
+
+
+class CopywritingRequest(BaseModel):
+    country_code: CountryCode = CountryCode.FR
+    property_kind: str = "Appartement"
+    city: str = "Lyon"
+    sector_label: str = "Centre"
+    surface_m2: int = Field(ge=9, le=2000)
+    rooms: int = Field(ge=1, le=30)
+    price_euro: int = Field(ge=10_000, le=50_000_000)
+    dpe: str = "C"
+    condition_label: str = "Bon état"
+    highlights: list[str] = Field(default_factory=list)
+    photo_count: int = Field(default=5, ge=0, le=50)
+    estimated_sale_days: int | None = None
+
+
+@marketplace_router.post("/ad-copy-assistant")
+async def assist_listing_copywriting(
+    body: CopywritingRequest,
+    ctx: TenantContext = Depends(get_current_tenant),
+) -> dict:
+    if not (ctx.has_permission(Permission.AI_ASSISTANT_PRO) or ctx.has_permission(Permission.AI_ASSISTANT_CLIENT)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Authentification Pro ou Vendeur/Acquéreur requise pour l'assistant rédactionnel.",
+        )
+    check_ai_rate_limit(ctx)
+    return generate_listing_copy(
+        country_code=body.country_code,
+        property_kind=body.property_kind,
+        city=body.city,
+        sector_label=body.sector_label,
+        surface_m2=body.surface_m2,
+        rooms=body.rooms,
+        price_euro=body.price_euro,
+        dpe=body.dpe,
+        condition_label=body.condition_label,
+        highlights=body.highlights,
+        photo_count=body.photo_count,
+        estimated_sale_days=body.estimated_sale_days,
+    )
+
+
+class PublishListingRequest(BaseModel):
+    country_code: CountryCode = CountryCode.FR
+    publisher_type: PublisherType = PublisherType.PARTICULIER
+    publisher_label: str = ""
+    title: str = Field(min_length=5, max_length=180)
+    property_kind: str = "Appartement"
+    city: str = Field(min_length=2, max_length=80)
+    sector_label: str = ""
+    price_euro: int = Field(ge=10_000, le=50_000_000)
+    surface_m2: int = Field(ge=9, le=2000)
+    rooms: int = Field(ge=1, le=30)
+    dpe: str = "C"
+    condition_label: str = "Bon état"
+    highlights: list[str] = Field(default_factory=list)
+    description: str = Field(min_length=10, max_length=2000)
+    photo_count: int = Field(default=5, ge=0, le=50)
+
+
+@marketplace_router.post("/listings", status_code=status.HTTP_201_CREATED)
+async def publish_marketplace_listing(
+    body: PublishListingRequest,
+    ctx: TenantContext = Depends(get_current_tenant),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            created = await PostgresMarketplaceRepository(sf).publish_listing(
+                ctx,
+                country_code=body.country_code,
+                publisher_type=body.publisher_type,
+                publisher_label=body.publisher_label,
+                title=body.title,
+                property_kind=body.property_kind,
+                city=body.city,
+                sector_label=body.sector_label,
+                price_euro=body.price_euro,
+                surface_m2=body.surface_m2,
+                rooms=body.rooms,
+                dpe=body.dpe,
+                condition_label=body.condition_label,
+                highlights=body.highlights,
+                description=body.description,
+                photo_count=body.photo_count,
+            )
+        else:
+            created = _market.publish_listing(
+                ctx=ctx,
+                country_code=body.country_code,
+                publisher_type=body.publisher_type,
+                publisher_label=body.publisher_label,
+                title=body.title,
+                property_kind=body.property_kind,
+                city=body.city,
+                sector_label=body.sector_label,
+                price_euro=body.price_euro,
+                surface_m2=body.surface_m2,
+                rooms=body.rooms,
+                dpe=body.dpe,
+                condition_label=body.condition_label,
+                highlights=body.highlights,
+                description=body.description,
+                photo_count=body.photo_count,
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _listing_dto(created)
+
+
+@marketplace_router.get("/moderation/pending")
+async def list_pending_moderation_listings(
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_MODERATE)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    if sf is not None:
+        items = await PostgresMarketplaceRepository(sf).list_pending_moderation(ctx)
+    else:
+        items = _market.list_pending_moderation(ctx)
+    return {"count": len(items), "listings": [_listing_dto(item) for item in items]}
+
+
+class ModerationDecisionRequest(BaseModel):
+    approve: bool
+    moderation_note: str = Field(default="", max_length=500)
+
+
+@marketplace_router.post("/listings/{listing_id}/moderate")
+async def moderate_marketplace_listing(
+    listing_id: str,
+    body: ModerationDecisionRequest,
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_MODERATE)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            updated = await PostgresMarketplaceRepository(sf).moderate_listing(
+                ctx,
+                listing_id=listing_id,
+                approve=body.approve,
+                moderation_note=body.moderation_note,
+            )
+        else:
+            updated = _market.moderate_listing(
+                ctx,
+                listing_id=listing_id,
+                approve=body.approve,
+                moderation_note=body.moderation_note,
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _listing_dto(updated)

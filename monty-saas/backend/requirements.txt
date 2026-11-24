@@ -1,0 +1,16 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg[binary]==3.2.3
+alembic==1.14.0
+redis==5.2.1
+arq==0.26.1
+httpx==0.28.1
+openai==1.59.6
+stripe==11.4.1
+openpyxl==3.1.5
+pytest==8.3.4
+pytest-asyncio==0.25.2

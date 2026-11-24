@@ -1,0 +1,964 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny: tout chemin sans `match` explicite ci-dessous est refusé par Firestore.
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null &&
+             request.auth.token.get('firebase', {}).get('sign_in_provider', '') != 'anonymous';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    function isBoundedQuery(maxLimit) {
+      return request.query.limit != null && request.query.limit >= 1 && request.query.limit <= maxLimit;
+    }
+
+    function isBoundedString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isBoundedStringList(listVal, maxCount) {
+      return listVal is list && listVal.size() <= maxCount && (listVal.size() == 0 || (listVal[0] is string && listVal[listVal.size() - 1] is string));
+    }
+
+    function isNonEmptyUidList(listVal, maxCount) {
+      return listVal is list && listVal.size() >= 1 && listVal.size() <= maxCount && listVal[0] is string && listVal[listVal.size() - 1] is string;
+    }
+
+    function isOptStr(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isOptInt(data, key, maxVal) {
+      return !(key in data) || (data[key] is int && data[key] >= 0 && data[key] <= maxVal);
+    }
+
+    function isAgencyMember(agencyId) {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid)).data.status == 'ACTIVE';
+    }
+
+    function isAgencyDirector(agencyId) {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid)).data.status == 'ACTIVE' &&
+             get(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid)).data.role in ['DIRECTOR', 'ADMIN'];
+    }
+
+    // Claim custom `staff` posé uniquement via Admin SDK (modération des annonces).
+    function isStaff() {
+      return isSignedIn() && request.auth.token.get('staff', false) == true;
+    }
+
+    function agencyDirectorUids(agencyId) {
+      return get(/databases/$(database)/documents/agencies/$(agencyId)).data.directorUids;
+    }
+
+    function agencyDirectorUidsAfter(agencyId) {
+      return getAfter(/databases/$(database)/documents/agencies/$(agencyId)).data.directorUids;
+    }
+
+    // Une annonce de Particulier ne peut pas être PUBLIEE sans validation staff.
+    function propertyPublicationAllowed(d) {
+      return request.auth.token.get('staff', false) == true ||
+             d.get('publisherType', 'AGENCE') != 'PARTICULIER' ||
+             d.get('publicationStatus', 'PUBLIEE') != 'PUBLIEE';
+    }
+
+    function isValidClient(d) {
+      return d.userId is string && d.userId.size() >= 1 && d.userId.size() <= 128 &&
+             d.name is string && d.name.size() >= 1 && d.name.size() <= 120 &&
+             d.get('phone', '') is string &&
+             d.get('email', '') is string &&
+             d.get('situation', '') is string &&
+             d.get('status', '') is string &&
+             d.projectStage is int && d.projectStage >= 0 && d.projectStage <= 5 &&
+             d.budgetMax is int && d.budgetMax >= 10000 && d.budgetMax <= 50000000 &&
+             d.get('downPayment', 0) is int && d.get('downPayment', 0) >= 0 && d.get('downPayment', 0) <= 50000000 &&
+             d.get('monthlyIncome', 0) is int && d.get('monthlyIncome', 0) >= 0 && d.get('monthlyIncome', 0) <= 1000000 &&
+             d.get('existingCredits', 0) is int && d.get('existingCredits', 0) >= 0 && d.get('existingCredits', 0) <= 500000 &&
+             d.get('bankApproval', '') is string &&
+             d.get('sectors', []) is list && d.get('sectors', []).size() <= 15 &&
+             d.get('propertyType', '') is string &&
+             d.get('minSurface', 0) is int && d.get('minSurface', 0) >= 0 && d.get('minSurface', 0) <= 2000 &&
+             d.get('minRooms', 0) is int && d.get('minRooms', 0) >= 0 && d.get('minRooms', 0) <= 20 &&
+             d.get('essentialCriteria', []) is list && d.get('essentialCriteria', []).size() <= 20 &&
+             d.get('secondaryCriteria', []) is list && d.get('secondaryCriteria', []).size() <= 20 &&
+             d.get('timelineDelai', '') is string &&
+             d.get('clientMessageToAdvisor', '') is string &&
+             d.get('criteriaModifiedByClient', false) is bool &&
+             (!('lastClientUpdateLabel' in d) || d.lastClientUpdateLabel == null || d.lastClientUpdateLabel is string) &&
+             d.get('selectedPropertyIds', []) is list && d.get('selectedPropertyIds', []).size() <= 50 &&
+             d.get('propertyFeedback', {}) is map &&
+             d.portalActive is bool &&
+             d.get('portalToken', '') is string &&
+             d.get('portalExpiration', '') is string &&
+             d.get('privateNotes', '') is string && d.get('privateNotes', '').size() <= 3000 &&
+             d.get('timeline', []) is list && d.get('timeline', []).size() <= 60 &&
+             d.get('rgpdConsentGranted', false) is bool &&
+             d.get('rgpdConsentDate', '') is string &&
+             d.get('searchCenterAddress', '') is string &&
+             d.get('searchCenterLat', 0) is number && d.get('searchCenterLat', 0) >= -90 && d.get('searchCenterLat', 0) <= 90 &&
+             d.get('searchCenterLon', 0) is number && d.get('searchCenterLon', 0) >= -180 && d.get('searchCenterLon', 0) <= 180 &&
+             d.get('searchMode', 'SECTOR_LIST') in ['SECTOR_LIST', 'RADIUS_KM', 'TRAVEL_TIME'] &&
+             d.get('searchRadiusKm', 5) is int && d.get('searchRadiusKm', 5) >= 1 && d.get('searchRadiusKm', 5) <= 100 &&
+             d.get('searchMaxTravelMinutes', 20) is int && d.get('searchMaxTravelMinutes', 20) >= 5 && d.get('searchMaxTravelMinutes', 20) <= 120 &&
+             d.get('searchTransportMode', 'TRAM') in ['VOITURE', 'TRAM', 'BUS', 'TRAIN', 'VELO', 'PIED'] &&
+             d.createdAt is timestamp && d.createdAt <= request.time &&
+             d.updatedAt is timestamp && d.updatedAt <= request.time;
+    }
+
+    function isValidPropertyCore() {
+      let d = request.resource.data;
+      return d.title is string && d.title.size() >= 1 && d.title.size() <= 160 &&
+             d.sector is string && d.sector.size() >= 1 && d.sector.size() <= 100 &&
+             d.get('address', '') is string &&
+             d.type is string && d.type.size() >= 1 && d.type.size() <= 60 &&
+             d.price is int && d.price >= 10000 && d.price <= 50000000 &&
+             d.surface is int && d.surface >= 5 && d.surface <= 5000 &&
+             (!('rooms' in d) || (d.rooms is int && d.rooms >= 1 && d.rooms <= 50)) &&
+             d.bedrooms is int && d.bedrooms >= 0 && d.bedrooms <= 30 &&
+             d.get('floor', '') is string &&
+             d.dpe is string && d.dpe.size() >= 1 && d.dpe.size() <= 5 &&
+             d.get('ges', '') is string &&
+             d.createdAt is timestamp && d.createdAt <= request.time &&
+             d.updatedAt is timestamp && d.updatedAt <= request.time;
+    }
+
+    function isValidPropertyDetails() {
+      let d = request.resource.data;
+      return d.get('monthlyCharges', 0) is int &&
+             d.get('propertyTax', 0) is int &&
+             d.get('estimatedWorks', 0) is int &&
+             d.get('listingStatus', '') is string &&
+             d.get('source', '') is string &&
+             d.get('exterior', '') is string &&
+             d.get('parking', '') is string &&
+             d.get('environment', '') is string &&
+             d.get('transports', '') is string &&
+             d.get('schoolsShops', '') is string &&
+             d.get('generalCondition', '') is string &&
+             (!('strengths' in d) || (d.strengths is list && d.strengths.size() <= 15)) &&
+             (!('weaknesses' in d) || (d.weaknesses is list && d.weaknesses.size() <= 15)) &&
+             (!('description' in d) || (d.description is string && d.description.size() <= 1500));
+    }
+
+    function isValidPropertyMandateDvf() {
+      let d = request.resource.data;
+      return d.get('mandateRef', '') is string &&
+             d.get('mandateType', '') is string &&
+             d.get('mandateDate', '') is string &&
+             (!('agencyFeePercent' in d) || (d.agencyFeePercent is number && d.agencyFeePercent >= 0 && d.agencyFeePercent <= 25)) &&
+             (!('listingUrl' in d) || (d.listingUrl is string && d.listingUrl.size() <= 500)) &&
+             d.get('listingPortal', '') is string &&
+             d.get('dvfEstimatedEuro', 0) is int &&
+             d.get('dvfEstimatedLowEuro', 0) is int &&
+             d.get('dvfEstimatedHighEuro', 0) is int &&
+             (!('dvfScore' in d) || (d.dvfScore is int && d.dvfScore >= 0 && d.dvfScore <= 100)) &&
+             d.get('dvfCriteriaSummary', '') is string &&
+             (!('advisorValuationNotes' in d) || (d.advisorValuationNotes is string && d.advisorValuationNotes.size() <= 1500));
+    }
+
+    function isValidPropertyPublication() {
+      let d = request.resource.data;
+      return d.get('publisherType', 'AGENCE') in ['AGENCE', 'PARTICULIER'] &&
+             d.get('publicationStatus', 'PUBLIEE') in ['BROUILLON', 'A_VERIFIER', 'PUBLIEE'] &&
+             d.get('publisherName', '') is string &&
+             d.get('hideExactAddress', false) is bool &&
+             d.get('ownerConfirmedAccuracy', true) is bool &&
+             d.get('legalPublicationConsent', true) is bool &&
+             (!('latitude' in d) || (d.latitude is number && d.latitude >= -90 && d.latitude <= 90)) &&
+             (!('longitude' in d) || (d.longitude is number && d.longitude >= -180 && d.longitude <= 180)) &&
+             (!('photoVaultPaths' in d) || (d.photoVaultPaths is list && d.photoVaultPaths.size() <= 6)) &&
+             d.get('photoCount', 0) in [0, 1, 2, 3, 4, 5, 6] &&
+             d.get('saleDelayMinDays', 0) is int &&
+             d.get('saleDelayLikelyDays', 0) is int &&
+             d.get('saleDelayMaxDays', 0) is int &&
+             d.get('saleDelayConfidence', '') is string &&
+             d.get('saleDelaySummary', '') is string &&
+             d.get('cadastralRef', '') is string &&
+             d.get('pluZone', '') is string;
+    }
+
+    function isValidProperty() {
+      return isValidPropertyCore() &&
+             isValidPropertyPublication() &&
+             isValidPropertyMandateDvf() &&
+             isValidPropertyDetails();
+    }
+
+    function isValidVisit(data) {
+      return isBoundedString(data.userId, 1, 128) &&
+             isBoundedString(data.date, 1, 40) &&
+             isBoundedString(data.timeSlot, 1, 80) &&
+             isBoundedString(data.clientId, 1, 128) &&
+             isBoundedString(data.propertyId, 1, 128) &&
+             isBoundedString(data.status, 1, 80) &&
+             (!('overallRating' in data) || data.overallRating == null || (data.overallRating is number && data.overallRating >= 0 && data.overallRating <= 10)) &&
+             (!('clientImpressions' in data) || isBoundedString(data.clientImpressions, 0, 1000)) &&
+             (!('positives' in data) || isBoundedString(data.positives, 0, 600)) &&
+             (!('negatives' in data) || isBoundedString(data.negatives, 0, 600)) &&
+             (!('technicalNotes' in data) || isBoundedString(data.technicalNotes, 0, 600)) &&
+             (!('nextAction' in data) || isBoundedString(data.nextAction, 0, 600)) &&
+             data.sharedWithClient is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidOffer(data) {
+      return isBoundedString(data.userId, 1, 128) &&
+             isBoundedString(data.date, 1, 40) &&
+             isBoundedString(data.clientId, 1, 128) &&
+             isBoundedString(data.propertyId, 1, 128) &&
+             data.askingPrice is int && data.askingPrice >= 10000 && data.askingPrice <= 50000000 &&
+             data.offeredPrice is int && data.offeredPrice >= 10000 && data.offeredPrice <= 50000000 &&
+             (!('estimatedWorks' in data) || (data.estimatedWorks is int && data.estimatedWorks >= 0 && data.estimatedWorks <= 5000000)) &&
+             isBoundedString(data.status, 1, 80) &&
+             (!('sellerContext' in data) || isBoundedString(data.sellerContext, 0, 600)) &&
+             (!('clientFinancing' in data) || isBoundedString(data.clientFinancing, 0, 600)) &&
+             (!('suspensiveConditions' in data) || isBoundedString(data.suspensiveConditions, 0, 600)) &&
+             (!('arguments' in data) || isBoundedStringList(data.arguments, 15)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidBuyerChatMessage(data) {
+      return isBoundedString(data.userId, 1, 128) &&
+             isBoundedString(data.clientId, 1, 128) &&
+             (data.role == 'user' || data.role == 'assistant') &&
+             isBoundedString(data.content, 1, 6000) &&
+             (!('topic' in data) || isBoundedString(data.topic, 0, 80)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAgency(data) {
+      return isBoundedString(data.name, 2, 120) &&
+             (data.plan == 'INDIVIDUAL' || data.plan == 'AGENCY') &&
+             (data.subscriptionStatus == 'ACTIVE' || data.subscriptionStatus == 'TRIAL') &&
+             isBoundedString(data.ownerUid, 1, 128) &&
+             isOptStr(data, 'city', 80) &&
+             isOptStr(data, 'inviteCode', 64) &&
+             isNonEmptyUidList(data.directorUids, 5) &&
+             isNonEmptyUidList(data.memberUids, 25) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAgencyMember(data) {
+      return isBoundedString(data.agencyId, 1, 128) &&
+             isOptStr(data, 'uid', 128) &&
+             data.email is string && data.email.size() <= 160 &&
+             isBoundedString(data.displayName, 1, 120) &&
+             data.role in ['ADMIN', 'DIRECTOR', 'AGENT'] &&
+             data.status in ['ACTIVE', 'INVITED'] &&
+             isOptStr(data, 'inviteCode', 64) &&
+             isNonEmptyUidList(data.viewerUids, 25) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCrmContact(d) {
+      return d.agencyId is string && d.agencyId.size() >= 1 && d.agencyId.size() <= 128 &&
+             d.createdByUid is string && d.createdByUid.size() >= 1 && d.createdByUid.size() <= 128 &&
+             d.assignedToUid is string && d.assignedToUid.size() >= 1 && d.assignedToUid.size() <= 128 &&
+             d.assignedToName is string && d.assignedToName.size() >= 1 && d.assignedToName.size() <= 120 &&
+             d.fullName is string && d.fullName.size() >= 1 && d.fullName.size() <= 140 &&
+             d.contactType in ['Acquéreur', 'Vendeur', 'Propriétaire', 'Locataire', 'Investisseur', 'Partenaire', 'Autre', 'Mixte'] &&
+             d.status is string && d.status.size() >= 1 && d.status.size() <= 60 &&
+             d.get('priority', 'Normal') in ['Faible', 'Normal', 'Élevé', 'Urgent'] &&
+             d.get('firstName', '') is string &&
+             d.get('lastName', '') is string &&
+             d.get('email', '') is string &&
+             d.get('phone', '') is string &&
+             d.get('postalAddress', '') is string &&
+             d.get('sector', '') is string &&
+             d.get('desiredPropertyType', '') is string &&
+             d.get('financingMode', '') is string &&
+             d.get('projectTimeline', '') is string &&
+             d.get('source', '') is string &&
+             d.get('notes', '') is string && d.get('notes', '').size() <= 2500 &&
+             d.get('lastContactedAt', '') is string &&
+             d.get('nextFollowUpAt', '') is string &&
+             d.get('linkedPropertyId', '') is string &&
+             d.get('linkedPropertyTitle', '') is string &&
+             d.get('budgetMin', 0) is int && d.get('budgetMin', 0) >= 0 && d.get('budgetMin', 0) <= 50000000 &&
+             d.get('budgetMax', 0) is int && d.get('budgetMax', 0) >= 0 && d.get('budgetMax', 0) <= 50000000 &&
+             d.get('desiredSurfaceMin', 0) is int && d.get('desiredSurfaceMin', 0) >= 0 && d.get('desiredSurfaceMin', 0) <= 5000 &&
+             d.get('desiredRoomsMin', 0) is int && d.get('desiredRoomsMin', 0) >= 0 && d.get('desiredRoomsMin', 0) <= 30 &&
+             d.get('archived', false) is bool &&
+             d.get('exchangeLogs', []) is list && d.get('exchangeLogs', []).size() <= 60 &&
+             d.get('rgpdConsentGranted', false) is bool &&
+             d.get('rgpdConsentDate', '') is string &&
+             d.get('rgpdLegalBasis', '') is string &&
+             d.get('rgpdRetentionUntil', '') is string &&
+             isNonEmptyUidList(d.viewerUids, 25) &&
+             d.createdAt is timestamp && d.createdAt <= request.time &&
+             d.updatedAt is timestamp && d.updatedAt <= request.time;
+    }
+
+    function isValidFollowUpTask(d) {
+      return d.agencyId is string && d.agencyId.size() >= 1 && d.agencyId.size() <= 128 &&
+             d.get('contactId', '') is string &&
+             d.contactName is string && d.contactName.size() >= 1 && d.contactName.size() <= 140 &&
+             d.createdByUid is string && d.createdByUid.size() >= 1 && d.createdByUid.size() <= 128 &&
+             d.assignedToUid is string && d.assignedToUid.size() >= 1 && d.assignedToUid.size() <= 128 &&
+             d.assignedToName is string && d.assignedToName.size() >= 1 && d.assignedToName.size() <= 120 &&
+             d.title is string && d.title.size() >= 1 && d.title.size() <= 200 &&
+             d.channel in ['Appel', 'Email', 'SMS', 'Visite'] &&
+             d.dueDate is string && d.dueDate.size() >= 1 && d.dueDate.size() <= 40 &&
+             d.get('dueTime', '') is string &&
+             d.priority in ['Faible', 'Normale', 'Haute', 'Urgente', 'Basse', 'Normal', 'Élevé', 'Urgent'] &&
+             d.status in ['À faire', 'En cours', 'Terminée'] &&
+             d.get('autoGenerated', false) is bool &&
+             isNonEmptyUidList(d.viewerUids, 25) &&
+             d.createdAt is timestamp && d.createdAt <= request.time &&
+             d.updatedAt is timestamp && d.updatedAt <= request.time;
+    }
+
+    function isValidSellerDossier(d) {
+      return isBoundedString(d.userId, 1, 128) &&
+             isBoundedString(d.propertyId, 1, 128) &&
+             isBoundedString(d.propertyTitle, 1, 160) &&
+             d.propertyKind in ['Maison', 'Appartement'] &&
+             d.residenceType in ['Maison individuelle', 'Résidence / Copropriété', 'Lotissement ASL'] &&
+             d.get('sellerName', '') is string &&
+             d.get('sellerEmail', '') is string &&
+             d.get('sellerPhone', '') is string &&
+             d.get('mandateRef', '') is string && d.get('mandateRef', '').size() <= 64 &&
+             d.get('mandateType', '') is string && d.get('mandateType', '').size() <= 40 &&
+             d.get('mandateDate', '') is string && d.get('mandateDate', '').size() <= 30 &&
+             d.get('agencyFeePercent', 0) is number && d.get('agencyFeePercent', 0) >= 0 && d.get('agencyFeePercent', 0) <= 25 &&
+             d.get('listingUrl', '') is string && d.get('listingUrl', '').size() <= 500 &&
+             d.get('listingPortal', '') is string && d.get('listingPortal', '').size() <= 60 &&
+             d.get('advisorEstimatedEuro', 0) is int && d.get('advisorEstimatedEuro', 0) >= 0 && d.get('advisorEstimatedEuro', 0) <= 50000000 &&
+             d.get('advisorValuationNotes', '') is string && d.get('advisorValuationNotes', '').size() <= 1500 &&
+             d.get('syndicName', '') is string &&
+             d.get('annualCoproCharges', 0) is int && d.get('annualCoproCharges', 0) >= 0 && d.get('annualCoproCharges', 0) <= 500000 &&
+             d.get('alurWorkFundEuro', 0) is int && d.get('alurWorkFundEuro', 0) >= 0 && d.get('alurWorkFundEuro', 0) <= 5000000 &&
+             d.packPriceEuro is int && d.packPriceEuro >= 0 && d.packPriceEuro <= 5000 &&
+             d.get('paymentLinkUrl', '') is string && d.get('paymentLinkUrl', '').size() <= 500 &&
+             d.get('executiveSummary', '') is string && d.get('executiveSummary', '').size() <= 4000 &&
+             d.documents is list && d.documents.size() <= 40 &&
+             d.get('buyerOrders', []) is list && d.get('buyerOrders', []).size() <= 50 &&
+             (!('dvfValuation' in d) || d.dvfValuation is map) &&
+             d.get('callbackRequests', []) is list && d.get('callbackRequests', []).size() <= 30 &&
+             d.get('rgpdConsentGranted', false) is bool &&
+             d.get('rgpdConsentDate', '') is string &&
+             d.createdAt is timestamp && d.createdAt <= request.time &&
+             d.updatedAt is timestamp && d.updatedAt <= request.time;
+    }
+
+    function isValidAgencyAuditLog(data) {
+      return isBoundedString(data.agencyId, 1, 128) &&
+             isBoundedString(data.actorUid, 1, 128) &&
+             isBoundedString(data.actorName, 1, 120) &&
+             isBoundedString(data.actionType, 1, 60) &&
+             isBoundedString(data.targetLabel, 1, 140) &&
+             isBoundedString(data.detail, 1, 500) &&
+             isNonEmptyUidList(data.viewerUids, 25) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidAgencyInvite(data) {
+      return isBoundedString(data.inviteCode, 4, 64) &&
+             isBoundedString(data.agencyId, 1, 128) &&
+             isBoundedString(data.agencyName, 1, 120) &&
+             (!('targetEmail' in data) || isBoundedString(data.targetEmail, 0, 160)) &&
+             (!('targetName' in data) || isBoundedString(data.targetName, 0, 120)) &&
+             data.role == 'AGENT' &&
+             isBoundedString(data.directorUid, 1, 128) &&
+             data.used is bool &&
+             (!('claimedByUid' in data) || isBoundedString(data.claimedByUid, 0, 128)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isAllowedClientUpdate() {
+      return incoming().diff(existing()).affectedKeys().hasOnly(['projectStage', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly(['portalActive', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly(['privateNotes', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly(['criteriaModifiedByClient', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly(['rgpdConsentGranted', 'rgpdConsentDate', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly(['selectedPropertyIds', 'criteriaModifiedByClient', 'timeline', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly(['propertyFeedback', 'criteriaModifiedByClient', 'updatedAt']) ||
+             incoming().diff(existing()).affectedKeys().hasOnly([
+               'budgetMax', 'downPayment', 'sectors', 'propertyType', 'minSurface', 'minRooms',
+               'essentialCriteria', 'secondaryCriteria', 'timelineDelai', 'clientMessageToAdvisor',
+               'criteriaModifiedByClient', 'lastClientUpdateLabel', 'timeline',
+               'searchCenterAddress', 'searchCenterLat', 'searchCenterLon', 'searchMode',
+               'searchRadiusKm', 'searchMaxTravelMinutes', 'searchTransportMode',
+               'rgpdConsentGranted', 'rgpdConsentDate', 'updatedAt'
+             ]);
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create, update, delete: if false;
+
+      match /clients/{clientId} {
+        allow list: if isOwner(userId) && isBoundedQuery(100);
+        allow get: if isOwner(userId) && isValidId(clientId);
+        allow create: if isOwner(userId) &&
+                         isValidId(clientId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'name', 'budgetMax', 'projectStage', 'portalActive', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'phone', 'email', 'situation', 'status', 'projectStage',
+                           'budgetMax', 'downPayment', 'monthlyIncome', 'existingCredits', 'bankApproval',
+                           'sectors', 'propertyType', 'minSurface', 'minRooms', 'essentialCriteria',
+                           'secondaryCriteria', 'timelineDelai', 'clientMessageToAdvisor',
+                           'criteriaModifiedByClient', 'lastClientUpdateLabel', 'selectedPropertyIds',
+                           'propertyFeedback', 'portalActive', 'portalToken', 'portalExpiration',
+                           'privateNotes', 'timeline',
+                           'rgpdConsentGranted', 'rgpdConsentDate',
+                           'searchCenterAddress', 'searchCenterLat', 'searchCenterLon', 'searchMode',
+                           'searchRadiusKm', 'searchMaxTravelMinutes', 'searchTransportMode',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidClient(incoming());
+        allow update: if isOwner(userId) &&
+                         isValidId(clientId) &&
+                         isValidClient(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isAllowedClientUpdate();
+        allow delete: if isOwner(userId) && isValidId(clientId);
+      }
+
+      match /properties/{propertyId} {
+        allow list: if isOwner(userId) && isBoundedQuery(100);
+        allow get: if (isOwner(userId) || isStaff()) && isValidId(propertyId);
+        allow create: if isOwner(userId) &&
+                         isValidId(propertyId) &&
+                         incoming().userId == request.auth.uid &&
+                         propertyPublicationAllowed(incoming()) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'sector', 'address', 'type', 'price', 'surface', 'rooms',
+                           'bedrooms', 'floor', 'dpe', 'ges', 'monthlyCharges', 'propertyTax', 'estimatedWorks',
+                           'listingStatus', 'source', 'exterior', 'parking', 'environment', 'transports',
+                           'schoolsShops', 'generalCondition', 'strengths', 'weaknesses', 'description',
+                           'mandateRef', 'mandateType', 'mandateDate', 'agencyFeePercent', 'listingUrl',
+                           'listingPortal', 'dvfEstimatedEuro', 'dvfEstimatedLowEuro', 'dvfEstimatedHighEuro',
+                           'dvfScore', 'dvfCriteriaSummary', 'advisorValuationNotes',
+                           'latitude', 'longitude',
+                           'publisherType', 'publisherName', 'publicationStatus',
+                           'hideExactAddress', 'ownerConfirmedAccuracy', 'legalPublicationConsent',
+                           'photoVaultPaths', 'photoCount',
+                           'saleDelayMinDays', 'saleDelayLikelyDays', 'saleDelayMaxDays',
+                           'saleDelayConfidence', 'saleDelaySummary', 'cadastralRef', 'pluZone',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidProperty();
+        allow update: if isOwner(userId) &&
+                         isValidId(propertyId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         propertyPublicationAllowed(incoming()) &&
+                         incoming().get('publisherType', 'AGENCE') == existing().get('publisherType', 'AGENCE') &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'sector', 'address', 'type', 'price', 'surface', 'rooms',
+                           'bedrooms', 'floor', 'dpe', 'ges', 'monthlyCharges', 'propertyTax', 'estimatedWorks',
+                           'listingStatus', 'source', 'exterior', 'parking', 'environment', 'transports',
+                           'schoolsShops', 'generalCondition', 'strengths', 'weaknesses', 'description',
+                           'mandateRef', 'mandateType', 'mandateDate', 'agencyFeePercent', 'listingUrl',
+                           'listingPortal', 'dvfEstimatedEuro', 'dvfEstimatedLowEuro', 'dvfEstimatedHighEuro',
+                           'dvfScore', 'dvfCriteriaSummary', 'advisorValuationNotes',
+                           'latitude', 'longitude',
+                           'publisherType', 'publisherName', 'publicationStatus',
+                           'hideExactAddress', 'ownerConfirmedAccuracy', 'legalPublicationConsent',
+                           'photoVaultPaths', 'photoCount',
+                           'saleDelayMinDays', 'saleDelayLikelyDays', 'saleDelayMaxDays',
+                           'saleDelayConfidence', 'saleDelaySummary', 'cadastralRef', 'pluZone',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidProperty();
+        // Modération: le staff (autre UID que le propriétaire) ne peut changer que le statut de publication.
+        allow update: if isStaff() &&
+                         isValidId(propertyId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['publicationStatus', 'listingStatus', 'updatedAt']) &&
+                         incoming().get('publicationStatus', 'PUBLIEE') in ['BROUILLON', 'A_VERIFIER', 'PUBLIEE'] &&
+                         incoming().get('listingStatus', '') is string &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time;
+        allow delete: if isOwner(userId) && isValidId(propertyId);
+      }
+
+      match /visits/{visitId} {
+        allow list: if isOwner(userId) && isBoundedQuery(100);
+        allow get: if isOwner(userId) && isValidId(visitId);
+        allow create: if isOwner(userId) &&
+                         isValidId(visitId) &&
+                         incoming().userId == request.auth.uid &&
+                         isValidId(incoming().clientId) &&
+                         isValidId(incoming().propertyId) &&
+                         incoming().keys().hasAll(['userId', 'date', 'timeSlot', 'clientId', 'propertyId', 'status', 'sharedWithClient', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'date', 'timeSlot', 'clientId', 'propertyId', 'status',
+                           'overallRating', 'clientImpressions', 'positives', 'negatives',
+                           'technicalNotes', 'nextAction', 'sharedWithClient', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidVisit(incoming()) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/clients/$(incoming().clientId)) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/properties/$(incoming().propertyId));
+        allow update: if isOwner(userId) &&
+                         isValidId(visitId) &&
+                         isValidVisit(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'date', 'timeSlot', 'status', 'overallRating', 'clientImpressions',
+                           'positives', 'negatives', 'technicalNotes', 'nextAction',
+                           'sharedWithClient', 'updatedAt'
+                         ]);
+        allow delete: if isOwner(userId) && isValidId(visitId);
+      }
+
+      match /offers/{offerId} {
+        allow list: if isOwner(userId) && isBoundedQuery(100);
+        allow get: if isOwner(userId) && isValidId(offerId);
+        allow create: if isOwner(userId) &&
+                         isValidId(offerId) &&
+                         incoming().userId == request.auth.uid &&
+                         isValidId(incoming().clientId) &&
+                         isValidId(incoming().propertyId) &&
+                         incoming().keys().hasAll(['userId', 'date', 'clientId', 'propertyId', 'askingPrice', 'offeredPrice', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'date', 'clientId', 'propertyId', 'askingPrice', 'offeredPrice',
+                           'estimatedWorks', 'status', 'sellerContext', 'clientFinancing',
+                           'suspensiveConditions', 'arguments', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidOffer(incoming()) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/clients/$(incoming().clientId)) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/properties/$(incoming().propertyId));
+        allow update: if isOwner(userId) &&
+                         isValidId(offerId) &&
+                         isValidOffer(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'offeredPrice', 'status', 'sellerContext', 'clientFinancing',
+                           'suspensiveConditions', 'arguments', 'updatedAt'
+                         ]);
+        allow delete: if isOwner(userId) && isValidId(offerId);
+      }
+
+      match /buyer_chats/{messageId} {
+        allow list: if isOwner(userId) && isBoundedQuery(150);
+        allow get: if isOwner(userId) && isValidId(messageId);
+        allow create: if isOwner(userId) &&
+                         isValidId(messageId) &&
+                         incoming().userId == request.auth.uid &&
+                         isValidId(incoming().clientId) &&
+                         incoming().keys().hasAll(['userId', 'clientId', 'role', 'content', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'clientId', 'role', 'content', 'topic', 'createdAt', 'updatedAt']) &&
+                         isValidBuyerChatMessage(incoming()) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/clients/$(incoming().clientId));
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(messageId);
+      }
+
+      match /seller_dossiers/{dossierId} {
+        allow list: if isOwner(userId) && isBoundedQuery(100);
+        allow get: if isOwner(userId) && isValidId(dossierId);
+        allow create: if isOwner(userId) &&
+                         isValidId(dossierId) &&
+                         request.resource.data.userId == request.auth.uid &&
+                         request.resource.data.keys().hasAll([
+                           'userId', 'propertyId', 'propertyTitle', 'propertyKind',
+                           'residenceType', 'packPriceEuro', 'documents', 'createdAt', 'updatedAt'
+                         ]) &&
+                         request.resource.data.keys().hasOnly([
+                           'userId', 'propertyId', 'propertyTitle', 'propertyKind', 'residenceType',
+                           'sellerName', 'sellerEmail', 'sellerPhone', 'mandateRef', 'mandateType',
+                           'mandateDate', 'agencyFeePercent', 'listingUrl', 'listingPortal',
+                           'advisorEstimatedEuro', 'advisorValuationNotes', 'syndicName',
+                           'annualCoproCharges', 'alurWorkFundEuro', 'packPriceEuro', 'paymentLinkUrl',
+                           'executiveSummary', 'documents', 'buyerOrders', 'dvfValuation',
+                           'callbackRequests', 'rgpdConsentGranted', 'rgpdConsentDate',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidSellerDossier(request.resource.data);
+        allow update: if isOwner(userId) &&
+                         isValidId(dossierId) &&
+                         isValidSellerDossier(request.resource.data) &&
+                         request.resource.data.userId == resource.data.userId &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'propertyTitle', 'propertyKind', 'residenceType',
+                           'sellerName', 'sellerEmail', 'sellerPhone', 'mandateRef', 'mandateType',
+                           'mandateDate', 'agencyFeePercent', 'listingUrl', 'listingPortal',
+                           'advisorEstimatedEuro', 'advisorValuationNotes', 'syndicName',
+                           'annualCoproCharges', 'alurWorkFundEuro', 'packPriceEuro', 'paymentLinkUrl',
+                           'executiveSummary', 'documents', 'buyerOrders', 'dvfValuation',
+                           'callbackRequests', 'rgpdConsentGranted', 'rgpdConsentDate', 'updatedAt'
+                         ]);
+        allow delete: if isOwner(userId) && isValidId(dossierId);
+      }
+    }
+
+    match /agency_invites/{inviteCode} {
+      allow list: if false;
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow create: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       incoming().keys().hasAll(['inviteCode', 'agencyId', 'agencyName', 'role', 'directorUid', 'used', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'inviteCode', 'agencyId', 'agencyName', 'targetEmail', 'targetName',
+                         'role', 'directorUid', 'used', 'claimedByUid', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidAgencyInvite(incoming()) &&
+                       incoming().inviteCode == inviteCode &&
+                       incoming().directorUid == request.auth.uid &&
+                       incoming().role == 'AGENT' &&
+                       incoming().used == false &&
+                       isAgencyDirector(incoming().agencyId);
+      allow update: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       isValidAgencyInvite(incoming()) &&
+                       existing().used == false &&
+                       incoming().used == true &&
+                       incoming().claimedByUid == request.auth.uid &&
+                       incoming().agencyId == existing().agencyId &&
+                       incoming().directorUid == existing().directorUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['used', 'claimedByUid', 'updatedAt']) &&
+                       (
+                         !('targetEmail' in existing()) ||
+                         existing().targetEmail == '' ||
+                         (request.auth.token.email_verified == true && request.auth.token.email.lower() == existing().targetEmail.lower())
+                       );
+      allow delete: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       existing().directorUid == request.auth.uid &&
+                       isAgencyDirector(existing().agencyId);
+    }
+
+    match /agencies/{agencyId} {
+      // List without get()/exists() — strictly bounded to memberUids array on resource.data
+      allow list: if isSignedIn() &&
+                     request.auth.uid in resource.data.memberUids &&
+                     isBoundedQuery(20);
+      allow get: if isSignedIn() &&
+                    isValidId(agencyId) &&
+                    request.auth.uid in existing().memberUids;
+      allow create: if isSignedIn() &&
+                       isValidId(agencyId) &&
+                       incoming().keys().hasAll([
+                         'name', 'plan', 'subscriptionStatus', 'ownerUid',
+                         'directorUids', 'memberUids', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'name', 'plan', 'subscriptionStatus', 'ownerUid', 'city',
+                         'inviteCode', 'directorUids', 'memberUids', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidAgency(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       request.auth.uid in incoming().directorUids &&
+                       request.auth.uid in incoming().memberUids &&
+                       existsAfter(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid));
+      allow update: if isSignedIn() &&
+                       isValidId(agencyId) &&
+                       isValidAgency(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (
+                           isAgencyDirector(agencyId) &&
+                           request.auth.uid in incoming().directorUids &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'plan', 'subscriptionStatus', 'city', 'inviteCode', 'memberUids', 'updatedAt'
+                           ]) &&
+                           // Le directeur peut uniquement RETIRER des membres (jamais en ajouter) et ne peut pas se retirer
+                           incoming().memberUids.toSet().difference(existing().memberUids.toSet()).size() == 0 &&
+                           incoming().memberUids.hasAll(existing().directorUids)
+                         ) ||
+                         (
+                           // Verified self-join branch: only adds request.auth.uid to memberUids alongside active member doc creation
+                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+                           !(request.auth.uid in existing().memberUids) &&
+                           incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                           incoming().memberUids.hasAll(existing().memberUids) &&
+                           incoming().memberUids.hasAll([request.auth.uid]) &&
+                           getAfter(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid)).data.uid == request.auth.uid &&
+                           getAfter(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid)).data.status == 'ACTIVE'
+                         )
+                       );
+      allow delete: if isSignedIn() &&
+                       isValidId(agencyId) &&
+                       existing().ownerUid == request.auth.uid &&
+                       isAgencyDirector(agencyId);
+
+      match /members/{memberId} {
+        allow list: if isSignedIn() &&
+                       request.auth.uid in resource.data.viewerUids &&
+                       isAgencyMember(agencyId) &&
+                       isBoundedQuery(50);
+        allow get: if isSignedIn() &&
+                      isValidId(agencyId) &&
+                      isValidId(memberId) &&
+                      ((request.auth.uid in existing().viewerUids && isAgencyMember(agencyId)) || isAgencyDirector(agencyId));
+        allow create: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(memberId) &&
+                         incoming().keys().hasAll([
+                           'agencyId', 'email', 'displayName', 'role', 'status',
+                           'viewerUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'agencyId', 'uid', 'email', 'displayName', 'role', 'status',
+                           'inviteCode', 'viewerUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidAgencyMember(incoming()) &&
+                         incoming().agencyId == agencyId &&
+                         (
+                           // 1) Bootstrap Director during atomic agency creation
+                           (
+                             memberId == request.auth.uid &&
+                             incoming().uid == request.auth.uid &&
+                             incoming().role == 'DIRECTOR' &&
+                             incoming().status == 'ACTIVE' &&
+                             getAfter(/databases/$(database)/documents/agencies/$(agencyId)).data.ownerUid == request.auth.uid
+                           ) ||
+                           // 2) Director creates an invited collaborator seat (AGENT only)
+                           (
+                             isAgencyDirector(agencyId) &&
+                             incoming().role == 'AGENT' &&
+                             incoming().status == 'INVITED'
+                           ) ||
+                           // 3) Invited user claims invite code and joins as AGENT
+                           (
+                             memberId == request.auth.uid &&
+                             incoming().uid == request.auth.uid &&
+                             incoming().role == 'AGENT' &&
+                             incoming().status == 'ACTIVE' &&
+                             ('inviteCode' in incoming()) &&
+                             isValidId(incoming().inviteCode) &&
+                             exists(/databases/$(database)/documents/agency_invites/$(incoming().inviteCode)) &&
+                             get(/databases/$(database)/documents/agency_invites/$(incoming().inviteCode)).data.agencyId == agencyId &&
+                             get(/databases/$(database)/documents/agency_invites/$(incoming().inviteCode)).data.used == false &&
+                             getAfter(/databases/$(database)/documents/agency_invites/$(incoming().inviteCode)).data.used == true &&
+                             getAfter(/databases/$(database)/documents/agency_invites/$(incoming().inviteCode)).data.claimedByUid == request.auth.uid &&
+                             request.auth.uid in incoming().viewerUids
+                           )
+                         );
+        allow update: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(memberId) &&
+                         isValidAgencyMember(incoming()) &&
+                         incoming().agencyId == existing().agencyId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isAgencyDirector(agencyId) &&
+                         (
+                           (memberId != request.auth.uid && incoming().role == 'AGENT') ||
+                           (memberId == request.auth.uid && incoming().role == existing().role && incoming().status == existing().status)
+                         ) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'displayName', 'role', 'status', 'viewerUids', 'updatedAt'
+                         ]);
+        allow delete: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(memberId) &&
+                         memberId != request.auth.uid &&
+                         isAgencyDirector(agencyId);
+      }
+
+      match /contacts/{contactId} {
+        allow list: if isSignedIn() &&
+                       request.auth.uid in resource.data.viewerUids &&
+                       isAgencyMember(agencyId) &&
+                       isBoundedQuery(100);
+        allow get: if isSignedIn() &&
+                      isValidId(agencyId) &&
+                      isValidId(contactId) &&
+                      request.auth.uid in existing().viewerUids &&
+                      isAgencyMember(agencyId);
+        allow create: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(contactId) &&
+                         request.resource.data.keys().hasAll([
+                           'agencyId', 'createdByUid', 'assignedToUid', 'assignedToName',
+                           'fullName', 'contactType', 'status', 'viewerUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         request.resource.data.keys().hasOnly([
+                           'agencyId', 'createdByUid', 'assignedToUid', 'assignedToName',
+                           'firstName', 'lastName', 'fullName', 'email', 'phone', 'postalAddress',
+                           'contactType', 'status', 'priority', 'budgetMin', 'budgetMax', 'sector',
+                           'desiredPropertyType', 'desiredSurfaceMin', 'desiredRoomsMin',
+                           'financingMode', 'projectTimeline', 'source', 'notes', 'lastContactedAt',
+                           'nextFollowUpAt', 'linkedPropertyId', 'linkedPropertyTitle', 'archived',
+                           'exchangeLogs', 'viewerUids',
+                           'rgpdConsentGranted', 'rgpdConsentDate', 'rgpdLegalBasis', 'rgpdRetentionUntil',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCrmContact(request.resource.data) &&
+                         request.resource.data.agencyId == agencyId &&
+                         request.resource.data.createdByUid == request.auth.uid &&
+                         request.resource.data.viewerUids.hasAll(agencyDirectorUids(agencyId)) &&
+                         (
+                           isAgencyDirector(agencyId) ||
+                           (
+                             isAgencyMember(agencyId) &&
+                             request.resource.data.assignedToUid == request.auth.uid &&
+                             request.auth.uid in request.resource.data.viewerUids
+                           )
+                         );
+        allow update: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(contactId) &&
+                         isValidCrmContact(request.resource.data) &&
+                         request.resource.data.agencyId == resource.data.agencyId &&
+                         request.resource.data.createdByUid == resource.data.createdByUid &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             isAgencyDirector(agencyId) &&
+                             request.resource.data.viewerUids.hasAll(agencyDirectorUids(agencyId)) &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                               'assignedToUid', 'assignedToName', 'firstName', 'lastName', 'fullName',
+                               'email', 'phone', 'postalAddress', 'contactType', 'status', 'priority',
+                               'budgetMin', 'budgetMax', 'sector', 'desiredPropertyType',
+                               'desiredSurfaceMin', 'desiredRoomsMin', 'financingMode', 'projectTimeline',
+                               'source', 'notes', 'lastContactedAt', 'nextFollowUpAt',
+                               'linkedPropertyId', 'linkedPropertyTitle', 'archived', 'exchangeLogs',
+                               'viewerUids', 'rgpdConsentGranted', 'rgpdConsentDate', 'rgpdLegalBasis',
+                               'rgpdRetentionUntil', 'updatedAt'
+                             ])
+                           ) ||
+                           (
+                             isAgencyMember(agencyId) &&
+                             resource.data.assignedToUid == request.auth.uid &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                               'firstName', 'lastName', 'fullName', 'email', 'phone', 'postalAddress',
+                               'contactType', 'status', 'priority', 'budgetMin', 'budgetMax', 'sector',
+                               'desiredPropertyType', 'desiredSurfaceMin', 'desiredRoomsMin',
+                               'financingMode', 'projectTimeline', 'source', 'notes', 'lastContactedAt',
+                               'nextFollowUpAt', 'linkedPropertyId', 'linkedPropertyTitle', 'archived',
+                               'exchangeLogs', 'rgpdConsentGranted', 'rgpdConsentDate', 'rgpdLegalBasis',
+                               'rgpdRetentionUntil', 'updatedAt'
+                             ])
+                           )
+                         );
+        allow delete: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(contactId) &&
+                         isAgencyDirector(agencyId);
+      }
+
+      match /tasks/{taskId} {
+        allow list: if isSignedIn() &&
+                       request.auth.uid in resource.data.viewerUids &&
+                       isAgencyMember(agencyId) &&
+                       isBoundedQuery(100);
+        allow get: if isSignedIn() &&
+                      isValidId(agencyId) &&
+                      isValidId(taskId) &&
+                      request.auth.uid in existing().viewerUids &&
+                      isAgencyMember(agencyId);
+        allow create: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll([
+                           'agencyId', 'contactName', 'createdByUid', 'assignedToUid',
+                           'assignedToName', 'title', 'channel', 'dueDate', 'priority',
+                           'status', 'viewerUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'agencyId', 'contactId', 'contactName', 'createdByUid',
+                           'assignedToUid', 'assignedToName', 'title', 'channel', 'dueDate', 'dueTime',
+                           'priority', 'status', 'autoGenerated', 'viewerUids',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidFollowUpTask(incoming()) &&
+                         incoming().agencyId == agencyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         incoming().viewerUids.hasAll(agencyDirectorUids(agencyId)) &&
+                         isAgencyMember(agencyId) &&
+                         (
+                           isAgencyDirector(agencyId) ||
+                           (incoming().assignedToUid == request.auth.uid && request.auth.uid in incoming().viewerUids)
+                         );
+        allow update: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(taskId) &&
+                         isValidFollowUpTask(incoming()) &&
+                         incoming().agencyId == existing().agencyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isAgencyMember(agencyId) &&
+                         (
+                           (
+                             isAgencyDirector(agencyId) &&
+                             incoming().viewerUids.hasAll(agencyDirectorUids(agencyId)) &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'assignedToUid', 'assignedToName', 'title', 'channel',
+                               'dueDate', 'dueTime', 'priority', 'status', 'viewerUids', 'updatedAt'
+                             ])
+                           ) ||
+                           (
+                             existing().assignedToUid == request.auth.uid &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'title', 'channel', 'dueDate', 'dueTime', 'priority', 'status', 'updatedAt'
+                             ])
+                           )
+                         );
+        allow delete: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(taskId) &&
+                         (
+                           isAgencyDirector(agencyId) ||
+                           (isAgencyMember(agencyId) && existing().createdByUid == request.auth.uid && existing().assignedToUid == request.auth.uid)
+                         );
+      }
+
+      match /audit_logs/{logId} {
+        allow list: if isSignedIn() &&
+                       request.auth.uid in resource.data.viewerUids &&
+                       isAgencyMember(agencyId) &&
+                       isBoundedQuery(100);
+        allow get: if isSignedIn() &&
+                      isValidId(agencyId) &&
+                      isValidId(logId) &&
+                      request.auth.uid in existing().viewerUids &&
+                      isAgencyMember(agencyId);
+        allow create: if isSignedIn() &&
+                         isValidId(agencyId) &&
+                         isValidId(logId) &&
+                         incoming().keys().hasAll([
+                           'agencyId', 'actorUid', 'actorName', 'actionType',
+                           'targetLabel', 'detail', 'viewerUids', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'agencyId', 'actorUid', 'actorName', 'actionType',
+                           'targetLabel', 'detail', 'viewerUids', 'createdAt'
+                         ]) &&
+                         isValidAgencyAuditLog(incoming()) &&
+                         incoming().agencyId == agencyId &&
+                         incoming().actorUid == request.auth.uid &&
+                         request.auth.uid in incoming().viewerUids &&
+                         incoming().viewerUids.hasAll(agencyDirectorUidsAfter(agencyId)) &&
+                         (
+                           isAgencyMember(agencyId) ||
+                           existsAfter(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid))
+                         );
+        allow update, delete: if false;
+      }
+    }
+  }
+}

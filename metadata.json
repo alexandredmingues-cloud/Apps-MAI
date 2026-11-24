@@ -1,0 +1,6 @@
+{
+  "name": "Mon Agent Immo",
+  "description": "Application de conseil immobilier et portail client sécurisé pour Montpellier & Métropole : CRM acquéreurs, matching de biens, comparateur, visites, offres, simulateur bancaire HCSF et copilote IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
