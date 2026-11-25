@@ -475,7 +475,7 @@ export function MarketplaceAndPublishView({
       )}
 
       {activeTab === "feeds" ? (
-        <PartnerFeedsPanel onSynced={() => handleSearch()} />
+        <PartnerFeedsPanel onSynced={() => runSearch()} />
       ) : activeTab === "search" ? (
         <div className="space-y-6">
           {/* Barre de critères mobilité 6 modes */}
