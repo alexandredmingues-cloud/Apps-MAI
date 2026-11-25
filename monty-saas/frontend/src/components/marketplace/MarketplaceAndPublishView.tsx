@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
+  Bell,
   Bike,
   Building2,
   Bus,
@@ -12,21 +14,20 @@ import {
   Footprints,
   GitCompare,
   Globe2,
-  Home,
+  LocateFixed,
   MapPin,
   PlusCircle,
   Search,
-  ShieldCheck,
   Sparkles,
   TrainFront,
   TramFront,
   UserCheck,
 } from "lucide-react";
 import { hasInMemoryAccessToken, montyApi } from "@/lib/api-client";
-import { PartnerFeedsPanel } from "./PartnerFeedsPanel";
 import {
   buildLocalListingCopy,
   computeLocalSaleTimeline,
+  findNearestCityName,
   INITIAL_LOCAL_LISTINGS,
   redactPiiText,
   resolveCityGeo,
@@ -40,6 +41,9 @@ import type {
   SearchPerimeterMode,
   TransportMode,
 } from "@/lib/types";
+import { BuyerSearchTools } from "./BuyerSearchTools";
+import { MarketplacePublishForm, type PublishFormState } from "./MarketplacePublishForm";
+import { PartnerFeedsPanel } from "./PartnerFeedsPanel";
 
 interface MarketplaceAndPublishViewProps {
   initialTab?: "search" | "publish";
@@ -57,6 +61,11 @@ const TRANSPORT_OPTIONS: { mode: TransportMode; label: string; Icon: React.Compo
   { mode: "VOITURE", label: "Voiture", Icon: Car },
 ];
 
+const QUICK_CITIES: Record<CountryCode, string[]> = {
+  FR: ["Lyon", "Paris", "Montpellier", "Bordeaux", "Nantes"],
+  PT: ["Lisboa", "Porto", "Faro"],
+};
+
 export function MarketplaceAndPublishView({
   initialTab = "search",
   initialCountry = "FR",
@@ -68,45 +77,70 @@ export function MarketplaceAndPublishView({
 
   // Filtres recherche mobilité
   const [originAddress, setOriginAddress] = useState(initialCountry === "PT" ? "Lisboa" : "Lyon");
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [geoNotice, setGeoNotice] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState<SearchPerimeterMode>("TRAVEL_TIME");
   const [transportMode, setTransportMode] = useState<TransportMode>("TRAM");
   const [maxMinutes, setMaxMinutes] = useState(40);
   const [maxRadiusKm, setMaxRadiusKm] = useState(25);
   const [publisherFilter, setPublisherFilter] = useState<"ALL" | PublisherType>("ALL");
   const [maxPrice, setMaxPrice] = useState<number>(900000);
-  const [minSurface, setMinSurface] = useState<number>(0);
+  const [minSurface] = useState<number>(0);
   const [onlyWithinPerimeter, setOnlyWithinPerimeter] = useState<boolean>(false);
+  const [showAlertDrawer, setShowAlertDrawer] = useState<boolean>(false);
 
-  // Catalogue local fusionné + état API
+  // Catalogue local fusionné + état API (initialisé immédiatement pour éviter 0 annonce au premier rendu)
   const [localCatalog, setLocalCatalog] = useState<MarketplaceListing[]>(INITIAL_LOCAL_LISTINGS);
-  const [hits, setHits] = useState<MarketplaceSearchHit[]>([]);
+  const [hits, setHits] = useState<MarketplaceSearchHit[]>(() =>
+    searchLocalListings(INITIAL_LOCAL_LISTINGS, {
+      country_code: initialCountry,
+      origin_address: initialCountry === "PT" ? "Lisboa" : "Lyon",
+      search_mode: "TRAVEL_TIME",
+      transport_mode: "TRAM",
+      max_radius_km: 25,
+      max_travel_minutes: 40,
+      max_price_euro: 900000,
+      min_surface_m2: 0,
+      only_within_perimeter: false,
+    })
+  );
   const [dataSourceMode, setDataSourceMode] = useState<"api" | "local">("local");
+  const [isDemoCatalog, setIsDemoCatalog] = useState<boolean>(true);
   const [loadingSearch, setLoadingSearch] = useState(false);
 
-  // Comparateur côte à côte (max 3 biens) — avantage concurrentiel majeur vs Leboncoin/SeLoger
+  // Comparateur côte à côte (max 3 biens)
   const [compareIds, setCompareIds] = useState<string[]>([]);
 
   // Formulaire publication vendeur
-  const [pubType, setPubType] = useState<PublisherType>("PARTICULIER");
-  const [pubLabel, setPubLabel] = useState("");
-  const [pubKind, setPubKind] = useState("Appartement");
-  const [pubCity, setPubCity] = useState(initialCountry === "PT" ? "Lisboa" : "Nantes");
-  const [pubSector, setPubSector] = useState("Centre / Tram");
-  const [pubPrice, setPubPrice] = useState(325000);
-  const [pubSurface, setPubSurface] = useState(72);
-  const [pubRooms, setPubRooms] = useState(3);
-  const [pubDpe, setPubDpe] = useState("B");
-  const [pubCondition, setPubCondition] = useState("Bon état");
-  const [pubHighlightsRaw, setPubHighlightsRaw] = useState("Balcon plein sud, Tram 4 min, Faibles charges");
-  const [pubPhotos, setPubPhotos] = useState(6);
-  const [pubTitle, setPubTitle] = useState("");
-  const [pubDescription, setPubDescription] = useState("");
+  const [pubState, setPubState] = useState<PublishFormState>({
+    pubType: "PARTICULIER",
+    pubLabel: "",
+    pubKind: "Appartement",
+    pubCity: initialCountry === "PT" ? "Lisboa" : "Nantes",
+    pubSector: "Centre / Tram",
+    pubPrice: 325000,
+    pubSurface: 72,
+    pubRooms: 3,
+    pubDpe: "B",
+    pubCondition: "Bon état",
+    pubHighlightsRaw: "Balcon plein sud, Tram 4 min, Faibles charges",
+    pubPhotos: 6,
+    pubTitle: "",
+    pubDescription: "",
+    wantProAccompaniment: false,
+  });
   const [copyTip, setCopyTip] = useState<string | null>(null);
   const [publishNotice, setPublishNotice] = useState<string | null>(null);
+  const [showPostPublishCta, setShowPostPublishCta] = useState<boolean>(false);
+  const [valuationRequested, setValuationRequested] = useState<boolean>(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [pendingModeration, setPendingModeration] = useState<MarketplaceListing[]>([]);
 
   const isProView = audienceLabel.includes("Monty Pro");
+
+  function patchPubState(patch: Partial<PublishFormState>) {
+    setPubState((prev) => ({ ...prev, ...patch }));
+  }
 
   async function loadPendingModeration() {
     if (!isProView || !hasInMemoryAccessToken()) {
@@ -136,9 +170,26 @@ export function MarketplaceAndPublishView({
 
   useEffect(() => {
     setOriginAddress(countryCode === "PT" ? "Lisboa" : "Lyon");
-    setPubCity(countryCode === "PT" ? "Lisboa" : "Nantes");
+    setOriginCoords(null);
+    setGeoNotice(null);
+    patchPubState({ pubCity: countryCode === "PT" ? "Lisboa" : "Nantes" });
     setCompareIds([]);
   }, [countryCode]);
+
+  function computeLocalHitsNow() {
+    return searchLocalListings(localCatalog, {
+      country_code: countryCode,
+      publisher_type: publisherFilter === "ALL" ? undefined : publisherFilter,
+      origin_address: originAddress,
+      search_mode: searchMode,
+      transport_mode: transportMode,
+      max_radius_km: maxRadiusKm,
+      max_travel_minutes: maxMinutes,
+      max_price_euro: maxPrice > 0 ? maxPrice : undefined,
+      min_surface_m2: minSurface,
+      only_within_perimeter: onlyWithinPerimeter,
+    });
+  }
 
   async function runSearch() {
     setLoadingSearch(true);
@@ -147,6 +198,8 @@ export function MarketplaceAndPublishView({
         country_code: countryCode,
         publisher_type: publisherFilter === "ALL" ? undefined : publisherFilter,
         origin_address: originAddress,
+        origin_lat: originCoords?.lat,
+        origin_lon: originCoords?.lon,
         search_mode: searchMode,
         transport_mode: transportMode,
         max_radius_km: maxRadiusKm,
@@ -155,23 +208,27 @@ export function MarketplaceAndPublishView({
         min_surface_m2: minSurface,
         only_within_perimeter: onlyWithinPerimeter,
       });
-      setHits(resp.hits);
-      setDataSourceMode("api");
+      if (resp.hits.length > 0) {
+        setHits(resp.hits);
+        setDataSourceMode("api");
+        setIsDemoCatalog(resp.hits.every((h) => h.listing.id.startsWith("lst-fr-") || h.listing.id.startsWith("lst-pt-")));
+      } else {
+        const localHits = computeLocalHitsNow();
+        if (!onlyWithinPerimeter && localHits.length > 0) {
+          setHits(localHits);
+          setDataSourceMode("local");
+          setIsDemoCatalog(true);
+        } else {
+          setHits(resp.hits);
+          setDataSourceMode("api");
+          setIsDemoCatalog(false);
+        }
+      }
     } catch {
-      const localHits = searchLocalListings(localCatalog, {
-        country_code: countryCode,
-        publisher_type: publisherFilter === "ALL" ? undefined : publisherFilter,
-        origin_address: originAddress,
-        search_mode: searchMode,
-        transport_mode: transportMode,
-        max_radius_km: maxRadiusKm,
-        max_travel_minutes: maxMinutes,
-        max_price_euro: maxPrice > 0 ? maxPrice : undefined,
-        min_surface_m2: minSurface,
-        only_within_perimeter: onlyWithinPerimeter,
-      });
+      const localHits = computeLocalHitsNow();
       setHits(localHits);
       setDataSourceMode("local");
+      setIsDemoCatalog(true);
     } finally {
       setLoadingSearch(false);
     }
@@ -181,20 +238,57 @@ export function MarketplaceAndPublishView({
     runSearch();
     loadPendingModeration();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryCode, publisherFilter, searchMode, transportMode, maxMinutes, maxRadiusKm, onlyWithinPerimeter, localCatalog]);
+  }, [countryCode, publisherFilter, searchMode, transportMode, maxMinutes, maxRadiusKm, onlyWithinPerimeter, localCatalog, originCoords]);
+
+  function handleGeolocate() {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setGeoNotice("Géolocalisation non supportée par ce navigateur : choisissez une ville ci-dessous.");
+      return;
+    }
+    setGeoNotice("Localisation en cours...");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const nearest = findNearestCityName(latitude, longitude, countryCode);
+        setOriginCoords({ lat: latitude, lon: longitude });
+        setOriginAddress(nearest);
+        setGeoNotice(`Position détectée : temps de trajet recalculés autour de ${nearest}.`);
+      },
+      () => {
+        setGeoNotice("Autorisation refusée : sélectionnez simplement votre ville de référence ci-dessous.");
+      },
+      { timeout: 6000 }
+    );
+  }
+
+  function handleBroadenSearch() {
+    setOnlyWithinPerimeter(false);
+    setMaxMinutes((m) => Math.min(180, m + 30));
+    setMaxRadiusKm((r) => Math.min(250, r + 35));
+    setMaxPrice((p) => (p < 900000 ? 900000 : p));
+  }
 
   const previewTimeline = useMemo(() => {
-    const geo = resolveCityGeo(pubCity, countryCode);
+    const geo = resolveCityGeo(pubState.pubCity, countryCode);
     return computeLocalSaleTimeline({
-      priceEuro: pubPrice,
-      surfaceM2: pubSurface,
-      dpe: pubDpe,
-      conditionLabel: pubCondition,
+      priceEuro: pubState.pubPrice,
+      surfaceM2: pubState.pubSurface,
+      dpe: pubState.pubDpe,
+      conditionLabel: pubState.pubCondition,
       refM2: geo.refM2,
-      photoCount: pubPhotos,
-      publisherType: pubType,
+      photoCount: pubState.pubPhotos,
+      publisherType: pubState.pubType,
     });
-  }, [pubCity, countryCode, pubPrice, pubSurface, pubDpe, pubCondition, pubPhotos, pubType]);
+  }, [
+    pubState.pubCity,
+    countryCode,
+    pubState.pubPrice,
+    pubState.pubSurface,
+    pubState.pubDpe,
+    pubState.pubCondition,
+    pubState.pubPhotos,
+    pubState.pubType,
+  ]);
 
   function toggleCompare(listingId: string) {
     setCompareIds((prev) => {
@@ -210,45 +304,43 @@ export function MarketplaceAndPublishView({
   );
 
   async function handleGenerateCopy() {
-    const hlList = pubHighlightsRaw
+    const hlList = pubState.pubHighlightsRaw
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
     try {
       const resp = await montyApi.assistListingCopywriting({
         country_code: countryCode,
-        property_kind: pubKind,
-        city: pubCity,
-        sector_label: pubSector,
-        surface_m2: pubSurface,
-        rooms: pubRooms,
-        price_euro: pubPrice,
-        dpe: pubDpe,
-        condition_label: pubCondition,
+        property_kind: pubState.pubKind,
+        city: pubState.pubCity,
+        sector_label: pubState.pubSector,
+        surface_m2: pubState.pubSurface,
+        rooms: pubState.pubRooms,
+        price_euro: pubState.pubPrice,
+        dpe: pubState.pubDpe,
+        condition_label: pubState.pubCondition,
         highlights: hlList,
-        photo_count: pubPhotos,
+        photo_count: pubState.pubPhotos,
         estimated_sale_days: previewTimeline.status === "READY" ? previewTimeline.likely_days : undefined,
       });
-      setPubTitle(resp.suggested_title);
-      setPubDescription(resp.suggested_description);
+      patchPubState({ pubTitle: resp.suggested_title, pubDescription: resp.suggested_description });
       setCopyTip(resp.photo_tip);
     } catch {
       const localResp = buildLocalListingCopy({
         country_code: countryCode,
-        property_kind: pubKind,
-        city: pubCity,
-        sector_label: pubSector,
-        surface_m2: pubSurface,
-        rooms: pubRooms,
-        price_euro: pubPrice,
-        dpe: pubDpe,
-        condition_label: pubCondition,
+        property_kind: pubState.pubKind,
+        city: pubState.pubCity,
+        sector_label: pubState.pubSector,
+        surface_m2: pubState.pubSurface,
+        rooms: pubState.pubRooms,
+        price_euro: pubState.pubPrice,
+        dpe: pubState.pubDpe,
+        condition_label: pubState.pubCondition,
         highlights: hlList,
-        photo_count: pubPhotos,
+        photo_count: pubState.pubPhotos,
         estimated_sale_days: previewTimeline.status === "READY" ? previewTimeline.likely_days : undefined,
       });
-      setPubTitle(localResp.suggested_title);
-      setPubDescription(localResp.suggested_description);
+      patchPubState({ pubTitle: localResp.suggested_title, pubDescription: localResp.suggested_description });
       setCopyTip(localResp.photo_tip);
     }
   }
@@ -257,37 +349,43 @@ export function MarketplaceAndPublishView({
     e.preventDefault();
     setPublishBusy(true);
     setPublishNotice(null);
-    const hlList = pubHighlightsRaw
+    setShowPostPublishCta(false);
+    setValuationRequested(false);
+    const hlList = pubState.pubHighlightsRaw
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
     const finalTitle =
-      pubTitle.trim() || `${pubKind} ${pubRooms} pièces • ${pubSurface} m² — ${pubCity}`;
+      pubState.pubTitle.trim() ||
+      `${pubState.pubKind} ${pubState.pubRooms} pièces • ${pubState.pubSurface} m² — ${pubState.pubCity}`;
     const finalDesc =
-      pubDescription.trim() ||
-      `Bien situé à ${pubCity} (${pubSector}), ${pubSurface} m², ${pubRooms} pièces, ${pubCondition}.`;
+      pubState.pubDescription.trim() ||
+      `Bien situé à ${pubState.pubCity} (${pubState.pubSector}), ${pubState.pubSurface} m², ${pubState.pubRooms} pièces, ${pubState.pubCondition}.`;
 
     try {
       const created = await montyApi.publishMarketplaceListing({
         country_code: countryCode,
-        publisher_type: pubType,
-        publisher_label: pubLabel,
+        publisher_type: pubState.pubType,
+        publisher_label: pubState.pubLabel,
         title: finalTitle,
-        property_kind: pubKind,
-        city: pubCity,
-        sector_label: pubSector,
-        price_euro: pubPrice,
-        surface_m2: pubSurface,
-        rooms: pubRooms,
-        dpe: pubDpe,
-        condition_label: pubCondition,
+        property_kind: pubState.pubKind,
+        city: pubState.pubCity,
+        sector_label: pubState.pubSector,
+        price_euro: pubState.pubPrice,
+        surface_m2: pubState.pubSurface,
+        rooms: pubState.pubRooms,
+        dpe: pubState.pubDpe,
+        condition_label: pubState.pubCondition,
         highlights: hlList,
         description: finalDesc,
-        photo_count: pubPhotos,
+        photo_count: pubState.pubPhotos,
       });
+      setShowPostPublishCta(true);
       if (created.moderation_status === "A_VERIFIER") {
         setPublishNotice(
-          `Annonce « ${created.title} » enregistrée en attente de modération (A_VERIFIER) pour protéger la qualité du catalogue.`
+          `Annonce « ${created.title} » enregistrée en attente de modération (A_VERIFIER)${
+            pubState.wantProAccompaniment ? " avec demande d'accompagnement conseiller Monty Pro" : ""
+          }.`
         );
       } else {
         setLocalCatalog((prev) => [created, ...prev]);
@@ -295,44 +393,46 @@ export function MarketplaceAndPublishView({
         setPublishNotice(
           `Annonce « ${created.title} » publiée avec succès (délai estimé : ~${created.sale_timeline.likely_days} jours).`
         );
-        setActiveTab("search");
       }
     } catch {
-      const geo = resolveCityGeo(pubCity, countryCode);
+      const geo = resolveCityGeo(pubState.pubCity, countryCode);
       const needsAuthHint = !hasInMemoryAccessToken();
       const localCreated: MarketplaceListing = {
-        id: `lst-${countryCode.toLowerCase()}-${Date.now()}`,
+        id: `usr-pub-${countryCode.toLowerCase()}-${Date.now()}`,
         country_code: countryCode,
-        publisher_type: pubType,
+        publisher_type: pubState.pubType,
         publisher_label:
-          pubLabel.trim() || (pubType === "PARTICULIER" ? "Particulier vérifié" : "Agence partenaire"),
+          pubState.pubLabel.trim() ||
+          (pubState.pubType === "PARTICULIER" ? "Particulier vérifié" : "Agence partenaire"),
         title: redactPiiText(finalTitle),
-        property_kind: pubKind,
-        city: pubCity.trim() || "Lyon",
+        property_kind: pubState.pubKind,
+        city: pubState.pubCity.trim() || "Lyon",
         region_name: geo.region,
-        sector_label: pubSector.trim() || pubCity,
-        price_euro: pubPrice,
-        surface_m2: pubSurface,
-        rooms: pubRooms,
-        dpe: pubDpe,
-        condition_label: pubCondition,
+        sector_label: pubState.pubSector.trim() || pubState.pubCity,
+        price_euro: pubState.pubPrice,
+        surface_m2: pubState.pubSurface,
+        rooms: pubState.pubRooms,
+        dpe: pubState.pubDpe,
+        condition_label: pubState.pubCondition,
         highlights: hlList,
         description: redactPiiText(finalDesc),
-        photo_count: pubPhotos,
+        photo_count: pubState.pubPhotos,
         latitude: geo.lat,
         longitude: geo.lon,
-        moderation_status: pubType === "PARTICULIER" ? "A_VERIFIER" : "PUBLIEE",
+        moderation_status: pubState.pubType === "PARTICULIER" ? "A_VERIFIER" : "PUBLIEE",
         sale_timeline: previewTimeline,
         published_at: new Date().toISOString().slice(0, 10),
       };
       setLocalCatalog((prev) => [localCreated, ...prev]);
       setOriginAddress(localCreated.city);
+      setShowPostPublishCta(true);
       setPublishNotice(
         needsAuthHint
-          ? `Prévisualisation locale créée pour « ${localCreated.title} ». Connectez-vous au Cockpit SaaS ou créez un compte pour soumettre officiellement l'annonce à la modération serveur.`
-          : `Annonce « ${localCreated.title} » ajoutée au catalogue interactif (masquage RGPD des PII appliqué).`
+          ? `Annonce « ${localCreated.title} » ajoutée à l'aperçu interactif${
+              pubState.wantProAccompaniment ? " (demande d'accompagnement Monty Pro notée)" : ""
+            }.`
+          : `Annonce « ${localCreated.title} » enregistrée (masquage RGPD des PII appliqué).`
       );
-      setActiveTab("search");
     } finally {
       setPublishBusy(false);
     }
@@ -355,7 +455,8 @@ export function MarketplaceAndPublishView({
                 : "Publier un bien avec aide à la rédaction & délai estimé"}
             </h2>
             <p className="text-xs sm:text-sm text-ivoryWarm/80">
-              Au-delà des portails classiques : 6 modes de mobilité réels, comparateur transparent, DPE/SCE et délai probable de vente.
+              Au-delà des portails classiques : 6 modes de mobilité réels, comparateur transparent, DPE/SCE et délai
+              probable de vente.
             </p>
           </div>
 
@@ -424,9 +525,40 @@ export function MarketplaceAndPublishView({
       </section>
 
       {publishNotice && (
-        <div className="rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-3 text-sm text-emerald-950 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span>{publishNotice}</span>
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-300 p-4 space-y-3 text-sm text-emerald-950">
+          <div className="flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
+            <span>{publishNotice}</span>
+          </div>
+          {showPostPublishCta && (
+            <div className="rounded-xl bg-white border border-emerald-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <p className="font-bold text-emeraldDeep text-sm flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-goldAntique" />
+                  Votre bien est publié. Souhaitez-vous obtenir une analyse plus précise de sa valeur et de son potentiel
+                  de vente ?
+                </p>
+                <p className="text-slateMuted">
+                  Affinez votre prix avec les références notariées DVF ou sollicitez un avis de valeur confidentiel.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <Link
+                  href="/simulateurs"
+                  className="px-3.5 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid"
+                >
+                  Estimer ma valeur DVF
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setValuationRequested(true)}
+                  className="px-3.5 py-2 rounded-xl border border-emeraldDeep text-emeraldDeep font-bold hover:bg-ivoryWarm"
+                >
+                  {valuationRequested ? "Demande enregistrée ✓" : "Demander un avis conseiller"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -436,9 +568,7 @@ export function MarketplaceAndPublishView({
             <h3 className="font-display text-sm font-bold text-amber-950">
               File de modération annonces ({pendingModeration.length} à vérifier)
             </h3>
-            <span className="text-[11px] font-semibold text-amber-800">
-              Contrôle RBAC PROPERTY_MODERATE
-            </span>
+            <span className="text-[11px] font-semibold text-amber-800">Contrôle RBAC PROPERTY_MODERATE</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingModeration.map((item) => (
@@ -449,7 +579,8 @@ export function MarketplaceAndPublishView({
                 <div>
                   <p className="font-bold text-obsidianInk">{item.title}</p>
                   <p className="text-slateMuted">
-                    {item.city} • {item.price_euro.toLocaleString("fr-FR")} € • {item.surface_m2} m² ({item.publisher_type})
+                    {item.city} • {item.price_euro.toLocaleString("fr-FR")} € • {item.surface_m2} m² (
+                    {item.publisher_type})
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -485,15 +616,29 @@ export function MarketplaceAndPublishView({
                 <span className="text-xs font-bold text-slateMuted">
                   Adresse / Ville de référence (travail, gare, école...)
                 </span>
-                <div className="mt-1 relative">
-                  <MapPin className="w-4 h-4 text-emeraldDeep absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    value={originAddress}
-                    onChange={(e) => setOriginAddress(e.target.value)}
-                    placeholder={countryCode === "PT" ? "Lisboa, Porto, Faro..." : "Paris, Lyon, Bordeaux, Nantes..."}
-                    className="w-full rounded-xl border border-borderSubtle bg-ivoryWarm pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-emeraldDeep"
-                  />
+                <div className="mt-1 flex gap-1.5">
+                  <div className="relative flex-1">
+                    <MapPin className="w-4 h-4 text-emeraldDeep absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={originAddress}
+                      onChange={(e) => {
+                        setOriginAddress(e.target.value);
+                        setOriginCoords(null);
+                      }}
+                      placeholder={countryCode === "PT" ? "Lisboa, Porto, Faro..." : "Paris, Lyon, Bordeaux, Nantes..."}
+                      className="w-full rounded-xl border border-borderSubtle bg-ivoryWarm pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-emeraldDeep"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGeolocate}
+                    title="Me localiser (optionnel)"
+                    className="px-3 py-2 rounded-xl border border-borderSubtle bg-ivoryWarm text-emeraldDeep hover:border-emeraldDeep text-xs font-semibold inline-flex items-center gap-1 shrink-0"
+                  >
+                    <LocateFixed className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Me localiser</span>
+                  </button>
                 </div>
               </label>
 
@@ -560,6 +705,31 @@ export function MarketplaceAndPublishView({
               </label>
             </div>
 
+            {/* Raccourcis villes + notice géolocalisation */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-slateMuted font-medium mr-1">Villes rapides :</span>
+                {QUICK_CITIES[countryCode].map((city) => (
+                  <button
+                    key={city}
+                    type="button"
+                    onClick={() => {
+                      setOriginAddress(city);
+                      setOriginCoords(null);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg border font-semibold transition ${
+                      originAddress.toLowerCase() === city.toLowerCase()
+                        ? "bg-emeraldDeep/10 text-emeraldDeep border-emeraldDeep"
+                        : "bg-ivoryWarm text-slateMuted border-borderSubtle hover:text-obsidianInk"
+                    }`}
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
+              {geoNotice && <span className="text-emeraldDeep font-medium">{geoNotice}</span>}
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 {TRANSPORT_OPTIONS.map(({ mode, label, Icon }) => {
@@ -582,7 +752,7 @@ export function MarketplaceAndPublishView({
                 })}
               </div>
 
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2.5 text-xs">
                 <label className="inline-flex items-center gap-1.5 font-medium text-obsidianInk cursor-pointer">
                   <input
                     type="checkbox"
@@ -592,6 +762,14 @@ export function MarketplaceAndPublishView({
                   />
                   Uniquement dans le périmètre strict
                 </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAlertDrawer((prev) => !prev)}
+                  className="px-3 py-2 rounded-xl border border-goldAntique text-emeraldDeep bg-ivoryWarm font-bold hover:bg-goldChampagne/20 transition inline-flex items-center gap-1.5"
+                >
+                  <Bell className="w-3.5 h-3.5 text-goldAntique" />
+                  Créer une alerte
+                </button>
                 <button
                   type="button"
                   onClick={runSearch}
@@ -604,12 +782,28 @@ export function MarketplaceAndPublishView({
             </div>
           </section>
 
+          {isDemoCatalog && (
+            <div className="rounded-xl bg-amber-50 border border-amber-300 px-4 py-2.5 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
+              <span>
+                <strong>Annonces de démonstration affichées :</strong> ces biens illustrent la recherche par temps de
+                trajet pendant l&apos;ouverture des flux partenaires locaux.
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveTab("publish")}
+                className="font-bold underline text-emeraldDeep"
+              >
+                Publier un bien réel →
+              </button>
+            </div>
+          )}
+
           {/* Barre récapitulative + Comparateur côte à côte */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slateMuted">
             <span>
               <strong className="text-emeraldDeep">{hits.length}</strong> annonce(s) classée(s) par temps de trajet depuis{" "}
               <strong className="text-obsidianInk">{originAddress}</strong> ({countryCode}) • Source :{" "}
-              {dataSourceMode === "api" ? "API FastAPI live" : "Moteur local paritaire"}
+              {dataSourceMode === "api" ? "API FastAPI live" : "Catalogue interactif"}
             </span>
             <span>Astuce : cochez jusqu&apos;à 3 biens pour ouvrir le comparateur transparent DVF / Trajet / Notaire.</span>
           </div>
@@ -646,7 +840,8 @@ export function MarketplaceAndPublishView({
                     {comparedHits.map((h) => (
                       <td key={h.listing.id} className="py-2 px-3 font-bold">
                         {h.listing.price_euro.toLocaleString("fr-FR")} € (
-                        {Math.round(h.listing.price_euro / Math.max(1, h.listing.surface_m2)).toLocaleString("fr-FR")} €/m²)
+                        {Math.round(h.listing.price_euro / Math.max(1, h.listing.surface_m2)).toLocaleString("fr-FR")}{" "}
+                        €/m²)
                       </td>
                     ))}
                   </tr>
@@ -682,13 +877,30 @@ export function MarketplaceAndPublishView({
 
           {/* Grille d'annonces */}
           {hits.length === 0 ? (
-            <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-8 text-center space-y-2">
+            <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-8 text-center space-y-4">
               <p className="font-display font-bold text-lg text-emeraldDeep">
-                Aucun bien dans ce périmètre strict
+                Aucun bien exact dans ce périmètre strict
               </p>
-              <p className="text-sm text-slateMuted">
-                Décochez « Uniquement dans le périmètre strict » ou augmentez le temps de trajet / rayon pour voir les villes voisines.
+              <p className="text-sm text-slateMuted max-w-xl mx-auto">
+                Élargissez le temps de trajet pour inclure les communes voisines bien desservies, ou activez une alerte
+                immédiate.
               </p>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleBroadenSearch}
+                  className="px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid"
+                >
+                  Élargir la recherche (+30 min / toutes villes)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAlertDrawer(true)}
+                  className="px-4 py-2.5 rounded-xl border border-emeraldDeep text-emeraldDeep text-xs font-bold hover:bg-ivoryWarm"
+                >
+                  Créer une alerte e-mail
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -696,29 +908,40 @@ export function MarketplaceAndPublishView({
                 const { listing } = hit;
                 const pricePerM2 = Math.round(listing.price_euro / Math.max(1, listing.surface_m2));
                 const isCompared = compareIds.includes(listing.id);
+                const isSampleListing =
+                  listing.id.startsWith("lst-fr-") || listing.id.startsWith("lst-pt-");
                 return (
                   <article
                     key={listing.id}
                     className={`rounded-2xl bg-ivoryCard border p-5 flex flex-col justify-between gap-4 transition ${
-                      isCompared ? "border-emeraldDeep ring-2 ring-emeraldDeep/20" : "border-borderSubtle hover:border-emeraldMid"
+                      isCompared
+                        ? "border-emeraldDeep ring-2 ring-emeraldDeep/20"
+                        : "border-borderSubtle hover:border-emeraldMid"
                     }`}
                   >
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-2">
-                        <span
-                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                            listing.publisher_type === "PARTICULIER"
-                              ? "bg-amber-100 text-amber-900"
-                              : "bg-emeraldDeep/10 text-emeraldDeep"
-                          }`}
-                        >
-                          {listing.publisher_type === "PARTICULIER" ? (
-                            <UserCheck className="w-3 h-3" />
-                          ) : (
-                            <Building2 className="w-3 h-3" />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                              listing.publisher_type === "PARTICULIER"
+                                ? "bg-amber-100 text-amber-900"
+                                : "bg-emeraldDeep/10 text-emeraldDeep"
+                            }`}
+                          >
+                            {listing.publisher_type === "PARTICULIER" ? (
+                              <UserCheck className="w-3 h-3" />
+                            ) : (
+                              <Building2 className="w-3 h-3" />
+                            )}
+                            {listing.publisher_label}
+                          </span>
+                          {isSampleListing && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              Démo
+                            </span>
                           )}
-                          {listing.publisher_label}
-                        </span>
+                        </div>
                         <span
                           className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
                             hit.within_perimeter
@@ -734,9 +957,7 @@ export function MarketplaceAndPublishView({
                         <p className="text-xs font-semibold text-slateMuted">
                           {listing.city} • {listing.sector_label} ({listing.region_name})
                         </p>
-                        <h3 className="font-display text-lg font-bold text-obsidianInk mt-0.5">
-                          {listing.title}
-                        </h3>
+                        <h3 className="font-display text-lg font-bold text-obsidianInk mt-0.5">{listing.title}</h3>
                       </div>
 
                       <div className="flex items-baseline justify-between rounded-xl bg-ivoryWarm border border-borderSubtle px-3.5 py-2.5">
@@ -753,9 +974,7 @@ export function MarketplaceAndPublishView({
                         </span>
                       </div>
 
-                      <p className="text-xs text-slateMuted leading-relaxed line-clamp-3">
-                        {listing.description}
-                      </p>
+                      <p className="text-xs text-slateMuted leading-relaxed line-clamp-3">{listing.description}</p>
 
                       <div className="flex flex-wrap gap-1.5">
                         {listing.highlights.slice(0, 3).map((hl) => (
@@ -792,242 +1011,29 @@ export function MarketplaceAndPublishView({
               })}
             </div>
           )}
+
+          {/* Alertes sauvegardées + module "Je ne trouve pas mon bien, faites ma recherche" */}
+          <BuyerSearchTools
+            countryCode={countryCode}
+            originAddress={originAddress}
+            transportMode={transportMode}
+            maxMinutes={maxMinutes}
+            maxPrice={maxPrice}
+            showAlertDrawer={showAlertDrawer}
+            onCloseAlertDrawer={() => setShowAlertDrawer(false)}
+          />
         </div>
       ) : (
-        /* Onglet Publication Vendeur + Aide à la rédaction & Délai estimé */
-        <form onSubmit={handlePublishListing} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 rounded-2xl bg-ivoryCard border border-borderSubtle p-6 space-y-4">
-            <h3 className="font-display text-xl font-bold text-emeraldDeep flex items-center gap-2">
-              <Home className="w-5 h-5 text-goldAntique" />
-              Caractéristiques du bien ({countryCode === "FR" ? "France" : "Portugal"})
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Statut du vendeur</span>
-                <select
-                  value={pubType}
-                  onChange={(e) => setPubType(e.target.value as PublisherType)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                >
-                  <option value="PARTICULIER">Particulier vendeur</option>
-                  <option value="AGENCE">Agence partenaire</option>
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Nom public affiché (optionnel)</span>
-                <input
-                  type="text"
-                  value={pubLabel}
-                  onChange={(e) => setPubLabel(e.target.value)}
-                  placeholder={pubType === "PARTICULIER" ? "Particulier vérifié" : "Agence Monty Partenaire"}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Type de bien</span>
-                <select
-                  value={pubKind}
-                  onChange={(e) => setPubKind(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                >
-                  <option value="Appartement">Appartement</option>
-                  <option value="Maison">Maison</option>
-                  <option value="Studio">Studio</option>
-                  <option value="Loft">Loft</option>
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Ville</span>
-                <input
-                  type="text"
-                  required
-                  value={pubCity}
-                  onChange={(e) => setPubCity(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Quartier / Transports</span>
-                <input
-                  type="text"
-                  value={pubSector}
-                  onChange={(e) => setPubSector(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Prix demandé (€)</span>
-                <input
-                  type="number"
-                  min={10000}
-                  step={1000}
-                  value={pubPrice}
-                  onChange={(e) => setPubPrice(Number(e.target.value) || 0)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Surface (m²)</span>
-                <input
-                  type="number"
-                  min={9}
-                  value={pubSurface}
-                  onChange={(e) => setPubSurface(Number(e.target.value) || 0)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Pièces</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={25}
-                  value={pubRooms}
-                  onChange={(e) => setPubRooms(Number(e.target.value) || 1)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">
-                  {countryCode === "PT" ? "Certificado Energético (ADENE)" : "Classe DPE"}
-                </span>
-                <select
-                  value={pubDpe}
-                  onChange={(e) => setPubDpe(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                >
-                  {["A", "B", "C", "D", "E", "F", "G"].map((d) => (
-                    <option key={d} value={d}>
-                      Classe {d}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-bold text-slateMuted">Nombre de photos</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={30}
-                  value={pubPhotos}
-                  onChange={(e) => setPubPhotos(Number(e.target.value) || 0)}
-                  className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-                />
-              </label>
-            </div>
-
-            <label className="block text-sm">
-              <span className="text-xs font-bold text-slateMuted">
-                Points forts (séparés par des virgules)
-              </span>
-              <input
-                type="text"
-                value={pubHighlightsRaw}
-                onChange={(e) => setPubHighlightsRaw(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-              />
-            </label>
-
-            <div className="pt-1 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleGenerateCopy}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-goldAntique text-emeraldDeep font-bold text-xs hover:bg-goldChampagne transition"
-              >
-                <Sparkles className="w-4 h-4" />
-                Générer titre &amp; texte d&apos;annonce (sans PII)
-              </button>
-              {copyTip && <span className="text-xs text-emeraldDeep font-medium">{copyTip}</span>}
-            </div>
-
-            <label className="block text-sm">
-              <span className="text-xs font-bold text-slateMuted">Titre de l&apos;annonce</span>
-              <input
-                type="text"
-                value={pubTitle}
-                onChange={(e) => setPubTitle(e.target.value)}
-                placeholder="Cliquez sur « Générer titre & texte » ou rédigez votre titre..."
-                className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-              />
-            </label>
-
-            <label className="block text-sm">
-              <span className="text-xs font-bold text-slateMuted">Description complète</span>
-              <textarea
-                rows={4}
-                value={pubDescription}
-                onChange={(e) => setPubDescription(e.target.value)}
-                placeholder="Description détaillée du bien (e-mails/téléphones automatiquement masqués pour votre sécurité RGPD)..."
-                className="mt-1 w-full rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
-              />
-            </label>
-
-            <button
-              type="submit"
-              disabled={publishBusy}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emeraldDeep text-goldChampagne font-bold text-sm hover:bg-emeraldMid transition"
-            >
-              {publishBusy ? "Publication..." : "Publier sur Monty Immobilier"}
-            </button>
-          </div>
-
-          {/* Panneau latéral Estimation Délai + Sécurité RGPD */}
-          <aside className="lg:col-span-5 space-y-4">
-            <div className="rounded-2xl bg-emeraldDeep text-ivoryWarm p-6 border border-goldAntique/40 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-goldChampagne">
-                  Analyse avant mise en ligne
-                </span>
-                <Calculator className="w-5 h-5 text-goldChampagne" />
-              </div>
-              <div>
-                <p className="text-xs text-ivoryWarm/75">Prix au m² demandé</p>
-                <p className="text-2xl font-display font-bold text-goldChampagne">
-                  {pubSurface > 0
-                    ? `${Math.round(pubPrice / pubSurface).toLocaleString("fr-FR")} €/m²`
-                    : "—"}
-                </p>
-              </div>
-              <div className="rounded-xl bg-emeraldSurface border border-goldAntique/30 p-4 space-y-1">
-                <p className="text-xs text-ivoryWarm/80">Délai de vente indicatif estimé</p>
-                {previewTimeline.status === "READY" ? (
-                  <>
-                    <p className="text-xl font-bold text-ivoryWarm">
-                      ~{previewTimeline.likely_days} jours{" "}
-                      <span className="text-xs font-normal text-goldChampagne">
-                        ({previewTimeline.low_days} à {previewTimeline.high_days} j)
-                      </span>
-                    </p>
-                    <p className="text-[11px] text-ivoryWarm/70">{previewTimeline.confidence_label}</p>
-                  </>
-                ) : (
-                  <p className="text-xs text-amber-200">{previewTimeline.confidence_label}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-2 text-xs text-slateMuted">
-              <p className="font-bold text-emeraldDeep flex items-center gap-1.5 text-sm">
-                <ShieldCheck className="w-4 h-4 text-goldAntique" />
-                Protection Anti-Démarchage &amp; RGPD
-              </p>
-              <p className="leading-relaxed">
-                Les numéros de téléphone et adresses e-mail saisis par erreur dans les champs publics sont automatiquement
-                neutralisés avant publication afin d&apos;éviter le spam et la collecte sauvage observée sur les portails généralistes.
-              </p>
-            </div>
-          </aside>
-        </form>
+        <MarketplacePublishForm
+          countryCode={countryCode}
+          state={pubState}
+          onChange={patchPubState}
+          previewTimeline={previewTimeline}
+          copyTip={copyTip}
+          publishBusy={publishBusy}
+          onGenerateCopy={handleGenerateCopy}
+          onSubmit={handlePublishListing}
+        />
       )}
     </div>
   );

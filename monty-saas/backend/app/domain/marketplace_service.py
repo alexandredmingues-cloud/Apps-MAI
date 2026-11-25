@@ -215,7 +215,7 @@ class MarketplaceService:
                     latitude=lat,
                     longitude=lon,
                     sale_timeline=timeline,
-                    published_at="2026-04-14",
+                    published_at="2026-11-24",
                     moderation_status=ListingModerationStatus.PUBLIEE,
                     agency_id="agency-france-reseau",
                 )

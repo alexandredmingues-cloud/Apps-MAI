@@ -711,6 +711,39 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
             <p className="text-xs text-slateMuted">{pvRes.disclaimer}</p>
           </div>
         )}
+
+        {/* Hypothèses visibles, date des paramètres réglementaires & limites légales */}
+        <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 text-xs space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-bold text-emeraldDeep">
+              Hypothèses de calcul &amp; paramètres réglementaires (Novembre 2026)
+            </span>
+            <span className="px-2 py-0.5 rounded bg-emeraldDeep/10 text-emeraldDeep font-semibold">
+              Barèmes vérifiés : 25/11/2026
+            </span>
+          </div>
+          <p className="text-slateMuted leading-relaxed">
+            {tab === "monthly" &&
+              `Hypothèses : taux nominal ${ratePct} % + assurance ${insPct} % sur capital initial, frais d'acte estimés (${country === "PT" ? "4,5 %" : "7,8 %"}), charges courantes forfaitaires 180 €/mois. Hors frais de dossier ou de garantie bancaire.`}
+            {tab === "hcsf" &&
+              (country === "PT"
+                ? "Hypothèses Portugal : référence macroprudentielle Banco de Portugal (DSTI / LTV HPP 90 %), taux indicatif hors stress Euribor personnalisé."
+                : "Hypothèses France : plafond HCSF à 35 % des revenus nets assurance incluse, durée max 25 ans (27 ans VEFA). Les banques gardent une marge de flexibilité de 20 % des dossiers selon le reste à vivre.")}
+            {tab === "notary" &&
+              (country === "PT"
+                ? "Hypothèses Portugal : barèmes IMT 2026 (HPP / Secundária / IMT Jovem ≤ 35 ans jusqu'à 316 772 €), Imposto do Selo 0,8 % acquisition + 0,6 % crédit."
+                : "Hypothèses France : émoluments notariés TTC réglementés par tranches, débours forfaitaires 1 200 €, CSI 0,1 %, DMTO départementaux (5,81 % ou 6,32 % selon vote LF 2025). Hors exonérations primo-accédant locales spécifiques.")}
+            {tab === "yield" &&
+              "Hypothèses : vacance locative moyenne 0,5 mois/an, frais de gestion 6,5 %, taxe foncière 950 €/an, charges non récupérables 650 €/an, assurance PNO/GLI 390 €/an. Calcul avant fiscalité (LMNP / foncier) ; alerte réglementaire DPE G (interdit) et F (2028)."}
+            {tab === "estimation" &&
+              "Hypothèses : repères médians multi-villes et pondération par surface, DPE, état et extérieurs. Valeur indicative non opposable — une estimation fiable exige des comparables DVF géolocalisés à moins de 300 m et une visite du bien."}
+            {tab === "capital_gain" &&
+              "Hypothèses France (CGI Art. 150 U) : forfait acquisition 7,5 %, forfait travaux 15 % si détention > 5 ans, IR 19 % (exonéré à 22 ans), PS 17,2 % (exonéré à 30 ans) et surtaxe au-delà de 50 000 € de plus-value imposable."}
+          </p>
+          <p className="text-[11px] text-slateMuted/90">
+            Limite légale : résultats fournis à titre strictement indicatif et pédagogique ; ils ne constituent ni une offre de financement, ni un avis fiscal ou notarial contractuel.
+          </p>
+        </div>
       </div>
     </div>
   );

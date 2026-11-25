@@ -55,7 +55,7 @@ class NewsSource:
     base_url: str
     reliability_tier: str  # OFFICIELLE | INSTITUTIONNELLE | PROFESSIONNELLE
     is_active: bool = True
-    last_verified_at: str = "2026-04-15"
+    last_verified_at: str = "2026-11-25"
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ class NewsArticle:
     ai_dual_generated: bool = False
     legal_disclaimer: str = LEGAL_DISCLAIMER_BY_COUNTRY[CountryCode.FR]
     status: ArticleStatus = ArticleStatus.PUBLISHED
-    published_at: str = "2026-04-15"
+    published_at: str = "2026-11-25"
 
 
 @dataclass(frozen=True)
@@ -259,7 +259,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Exigez une attestation de financement récente avant de soumettre une offre d'achat au vendeur.",
             ),
             pro_key_metrics={"Taux 20 ans FR": "3,25 %", "Taux 25 ans FR": "3,35 %", "Plafond HCSF": "35 % / 25 ans"},
-            published_at="2026-04-14",
+            published_at="2026-11-24",
         ),
         NewsArticle(
             id="art-marche-france-metropoles",
@@ -297,7 +297,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Démontrez la corrélation prix juste / délai estimé pour défendre un mandat exclusif qualifié.",
             ),
             pro_key_metrics={"Délai médian au prix": "45–60 j", "Prime valeur verte": "+5 à +12 %", "Base": "Notaires / DVF"},
-            published_at="2026-04-13",
+            published_at="2026-11-22",
         ),
         NewsArticle(
             id="art-marche-montpellier-occitanie",
@@ -332,7 +332,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Utilisez les isochrones tram/TER pour élargir les recherches acquéreurs sur l'axe Castelnau / Baillargues / Lattes.",
             ),
             pro_key_metrics={"Tension 34": "Forte", "Délai cœur": "38–56 j", "DPE cible": "A à C"},
-            published_at="2026-04-12",
+            published_at="2026-11-21",
         ),
         NewsArticle(
             id="art-dpe-2026-coefficient",
@@ -370,7 +370,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Faites éditer l'attestation ADEME actualisée sur les studios tout-électrique avant diffusion.",
             ),
             pro_key_metrics={"Classe G": "Interdite (2025)", "Classe F": "Échéance 2028", "Audit vente": "E/F/G monoprop."},
-            published_at="2026-04-10",
+            published_at="2026-11-19",
         ),
         NewsArticle(
             id="art-loi-le-meur-fiscalite",
@@ -406,7 +406,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Proposez un comparatif arbitrage location longue durée vs cession avec simulation de plus-value CGI.",
             ),
             pro_key_metrics={"DPE meublé": "Obligatoire", "Plafond RP": "Jusqu'à 90 j/an", "Arbitrage": "LMNP réel / Vente"},
-            published_at="2026-04-08",
+            published_at="2026-11-17",
         ),
         NewsArticle(
             id="art-ptz-dmto-notaire",
@@ -441,7 +441,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Détaillez DMTO vs émoluments notariés en rendez-vous pour rassurer l'acquéreur sur la transparence des coûts.",
             ),
             pro_key_metrics={"Ancien FR": "~7,5–8,3 %", "Neuf / VEFA FR": "~2,2–3,0 %", "PTZ": "Élargi France"},
-            published_at="2026-04-05",
+            published_at="2026-11-14",
         ),
         NewsArticle(
             id="art-pro-mandat-exclusif-argumentaire",
@@ -471,7 +471,7 @@ def _seed_articles() -> list[NewsArticle]:
                 "Mettez en avant les acquéreurs financés immédiatement identifiés dans le CRM Monty.",
             ),
             pro_key_metrics={"Impact surcote +10 %": "+14 à +28 j", "Dossier complet": "-6 j", "Exclusivité": "-8 j"},
-            published_at="2026-04-02",
+            published_at="2026-11-12",
         ),
         NewsArticle(
             id="art-archive-bilan-2025",
@@ -536,7 +536,7 @@ def _seed_articles() -> list[NewsArticle]:
             ),
             pro_key_metrics={"LTV máx HPP": "90 %", "LTV Secundária": "80 %", "Prazos": "35–40 anos"},
             legal_disclaimer=LEGAL_DISCLAIMER_BY_COUNTRY[CountryCode.PT],
-            published_at="2026-04-14",
+            published_at="2026-11-24",
         ),
         NewsArticle(
             id="art-pt-imt-jovem-escritura",
@@ -573,7 +573,7 @@ def _seed_articles() -> list[NewsArticle]:
             ),
             pro_key_metrics={"Teto isenção 100 %": "316 772 €", "IS Aquisição": "0,8 % (isento)", "Regime": "HPP ≤ 35 anos"},
             legal_disclaimer=LEGAL_DISCLAIMER_BY_COUNTRY[CountryCode.PT],
-            published_at="2026-04-11",
+            published_at="2026-11-20",
         ),
         NewsArticle(
             id="art-pt-adene-certificado",
@@ -608,7 +608,7 @@ def _seed_articles() -> list[NewsArticle]:
             ),
             pro_key_metrics={"Escala PT": "A+ a F", "Obrigação": "Anúncio & Escritura", "Validade": "10 anos (hab.)"},
             legal_disclaimer=LEGAL_DISCLAIMER_BY_COUNTRY[CountryCode.PT],
-            published_at="2026-04-06",
+            published_at="2026-11-15",
         ),
     ]
 

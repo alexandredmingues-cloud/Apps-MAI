@@ -36,7 +36,7 @@ export function PreEtatDateWorkspace() {
   const [sellerUnpaid, setSellerUnpaid] = useState(0);
   const [alurBalance, setAlurBalance] = useState(980);
   const [quarterCalled, setQuarterCalled] = useState(744);
-  const [saleDate, setSaleDate] = useState("2026-06-15");
+  const [saleDate, setSaleDate] = useState("2026-11-25");
   const [customSyndicFee, setCustomSyndicFee] = useState(420);
 
   // Confiance extraction PDF (simulation réaliste modifiable)
@@ -77,8 +77,8 @@ export function PreEtatDateWorkspace() {
       works_fund_alur_balance_euro: alurBalance,
       current_quarter_called_euro: quarterCalled,
       sale_date: saleDate,
-      quarter_start_date: "2026-04-01",
-      quarter_end_date: "2026-06-30",
+      quarter_start_date: "2026-10-01",
+      quarter_end_date: "2026-12-31",
       custom_syndic_fee_euro: customSyndicFee,
       ...checklist,
       confidence_map: {

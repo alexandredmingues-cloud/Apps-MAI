@@ -73,6 +73,20 @@ export function resolveCityGeo(cityOrAddress: string, countryCode: CountryCode):
   return countryCode === "PT" ? CITY_GEO_MAP.lisboa : CITY_GEO_MAP.lyon;
 }
 
+export function findNearestCityName(lat: number, lon: number, countryCode: CountryCode): string {
+  let bestKey = countryCode === "PT" ? "lisboa" : "lyon";
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const [key, info] of Object.entries(CITY_GEO_MAP)) {
+    if (info.country !== countryCode) continue;
+    const d = haversineKm(lat, lon, info.lat, info.lon);
+    if (d < bestDist) {
+      bestDist = d;
+      bestKey = key;
+    }
+  }
+  return bestKey.charAt(0).toUpperCase() + bestKey.slice(1);
+}
+
 export function computeLocalSaleTimeline(params: {
   priceEuro: number;
   surfaceM2: number;
@@ -195,7 +209,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 45.774,
     longitude: 4.832,
     sale_timeline: { status: "READY", low_days: 26, likely_days: 38, high_days: 56, confidence_label: "Fiabilité bonne (repères DVF)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-fr-2",
@@ -219,7 +233,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 45.7605,
     longitude: 4.8592,
     sale_timeline: { status: "READY", low_days: 30, likely_days: 42, high_days: 60, confidence_label: "Fiabilité bonne (repères DVF)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-fr-3",
@@ -243,7 +257,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 48.8373,
     longitude: 2.2963,
     sale_timeline: { status: "READY", low_days: 28, likely_days: 40, high_days: 58, confidence_label: "Fiabilité bonne (repères DVF)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-fr-4",
@@ -267,7 +281,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 44.8235,
     longitude: -0.5734,
     sale_timeline: { status: "READY", low_days: 31, likely_days: 43, high_days: 61, confidence_label: "Fiabilité bonne (repères DVF)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-fr-5",
@@ -291,7 +305,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 43.6003,
     longitude: 3.9041,
     sale_timeline: { status: "READY", low_days: 24, likely_days: 36, high_days: 54, confidence_label: "Fiabilité bonne (repères DVF)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-fr-6",
@@ -315,7 +329,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 43.6606,
     longitude: 4.0132,
     sale_timeline: { status: "READY", low_days: 32, likely_days: 44, high_days: 62, confidence_label: "Fiabilité bonne (repères DVF)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-pt-1",
@@ -339,7 +353,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 38.7369,
     longitude: -9.1486,
     sale_timeline: { status: "READY", low_days: 28, likely_days: 40, high_days: 58, confidence_label: "Fiabilidade boa (referências PT)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "lst-pt-2",
@@ -363,7 +377,7 @@ export const INITIAL_LOCAL_LISTINGS: MarketplaceListing[] = [
     latitude: 41.1588,
     longitude: -8.6307,
     sale_timeline: { status: "READY", low_days: 30, likely_days: 42, high_days: 60, confidence_label: "Fiabilidade boa (referências PT)" },
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
 ];
 

@@ -46,8 +46,9 @@ export default function MontySaasCockpitPage() {
         setHealth(res);
         setApiError(null);
       })
-      .catch((err) => {
-        setApiError(err instanceof Error ? err.message : "Backend API hors ligne");
+      .catch(() => {
+        setHealth(null);
+        setApiError("API backend en veille ou non configurée : mode démonstration local sécurisé actif.");
       });
 
     const stored = loadPersistedSession();
@@ -249,11 +250,11 @@ export default function MontySaasCockpitPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-xl bg-emeraldSurface px-3 py-2 text-xs font-medium border border-goldAntique/30">
                     <Server className="w-3.5 h-3.5 text-goldChampagne" />
-                    API FastAPI : {health ? "En ligne" : "Non démarrée"}
+                    API FastAPI : {health ? "En ligne" : "Mode local / réveil"}
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-xl bg-emeraldSurface px-3 py-2 text-xs font-medium border border-goldAntique/30">
                     <Database className="w-3.5 h-3.5 text-goldChampagne" />
-                    Stockage : {health?.storage_mode === "postgresql_rls" ? "PostgreSQL RLS Actif" : "Mémoire locale (Dev)"}
+                    Stockage : {health?.storage_mode === "postgresql_rls" ? "PostgreSQL RLS Actif" : health ? "Mémoire locale (Dev)" : "Catalogue local"}
                   </span>
                 </div>
               </div>
@@ -376,7 +377,7 @@ export default function MontySaasCockpitPage() {
                   </button>
                 </form>
 
-                {health?.dev_auth_enabled !== false && (
+                {health?.dev_auth_enabled === true && (
                   <div className="space-y-3 text-sm">
                     <label className="block">
                       <span className="text-xs font-semibold text-slateMuted">Identifiant Agence (Dev Opt-In)</span>

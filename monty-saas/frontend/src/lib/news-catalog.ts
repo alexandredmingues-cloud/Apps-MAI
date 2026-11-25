@@ -19,7 +19,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "webstat.banque-france.fr",
     base_url: "https://www.banque-france.fr/fr/statistiques/taux-et-credits",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-notaires",
@@ -29,7 +29,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "www.notaires.fr",
     base_url: "https://www.notaires.fr/fr/immobilier-fiscalite/etudes-et-analyses-immobilieres",
     reliability_tier: "INSTITUTIONNELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-ademe",
@@ -39,7 +39,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "observatoire-dpe-audit.ademe.fr",
     base_url: "https://observatoire-dpe-audit.ademe.fr",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-legifrance",
@@ -49,7 +49,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "www.legifrance.gouv.fr",
     base_url: "https://www.legifrance.gouv.fr",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-service-public",
@@ -59,7 +59,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "www.service-public.fr",
     base_url: "https://www.service-public.fr/particuliers/vosdroits/N19808",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-pt-bdp",
@@ -69,7 +69,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "www.bportugal.pt",
     base_url: "https://www.bportugal.pt/area-cidadao/credito-habitacao",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-pt-dre",
@@ -79,7 +79,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "diariodarepublica.pt",
     base_url: "https://diariodarepublica.pt",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
   {
     id: "src-pt-adene",
@@ -89,7 +89,7 @@ export const SEEDED_SOURCES: NewsSource[] = [
     domain: "www.sce.pt",
     base_url: "https://www.sce.pt",
     reliability_tier: "OFFICIELLE",
-    last_verified_at: "2026-04-15",
+    last_verified_at: "2026-11-25",
   },
 ];
 
@@ -131,7 +131,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Information générale et synthèse analytique à titre indicatif (droit français) : ne constitue ni un conseil juridique, ni une consultation fiscale officielle.",
     status: "PUBLISHED",
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "art-marche-france-metropoles",
@@ -169,7 +169,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Information générale et synthèse analytique à titre indicatif (droit français) : ne constitue ni un conseil juridique, ni une consultation fiscale officielle.",
     status: "PUBLISHED",
-    published_at: "2026-04-13",
+    published_at: "2026-11-22",
   },
   {
     id: "art-dpe-2026-coefficient",
@@ -207,7 +207,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Information générale et synthèse analytique à titre indicatif (droit français) : ne constitue ni un conseil juridique, ni une consultation fiscale officielle.",
     status: "PUBLISHED",
-    published_at: "2026-04-10",
+    published_at: "2026-11-19",
   },
   {
     id: "art-loi-le-meur-fiscalite",
@@ -243,7 +243,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Information générale et synthèse analytique à titre indicatif (droit français) : ne constitue ni un conseil juridique, ni une consultation fiscale officielle.",
     status: "PUBLISHED",
-    published_at: "2026-04-08",
+    published_at: "2026-11-17",
   },
   {
     id: "art-ptz-dmto-notaire",
@@ -279,7 +279,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Information générale et synthèse analytique à titre indicatif (droit français) : ne constitue ni un conseil juridique, ni une consultation fiscale officielle.",
     status: "PUBLISHED",
-    published_at: "2026-04-05",
+    published_at: "2026-11-14",
   },
   {
     id: "art-pro-mandat-exclusif-argumentaire",
@@ -311,7 +311,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Information générale et synthèse analytique à titre indicatif (droit français) : ne constitue ni un conseil juridique, ni une consultation fiscale officielle.",
     status: "PUBLISHED",
-    published_at: "2026-04-02",
+    published_at: "2026-11-12",
   },
   {
     id: "art-archive-bilan-2025",
@@ -379,7 +379,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Informação geral e síntese indicativa (enquadramento jurídico português) : não constitui aconselhamento jurídico, fiscal ou financeiro oficial.",
     status: "PUBLISHED",
-    published_at: "2026-04-14",
+    published_at: "2026-11-24",
   },
   {
     id: "art-pt-imt-jovem-escritura",
@@ -415,7 +415,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Informação geral e síntese indicativa (enquadramento jurídico português) : não constitui aconselhamento jurídico, fiscal ou financeiro oficial.",
     status: "PUBLISHED",
-    published_at: "2026-04-11",
+    published_at: "2026-11-20",
   },
   {
     id: "art-pt-adene-certificado",
@@ -449,7 +449,7 @@ export const SEEDED_ARTICLES: ProNewsArticle[] = [
     legal_disclaimer:
       "Informação geral e síntese indicativa (enquadramento jurídico português) : não constitui aconselhamento jurídico, fiscal ou financeiro oficial.",
     status: "PUBLISHED",
-    published_at: "2026-04-06",
+    published_at: "2026-11-15",
   },
 ];
 

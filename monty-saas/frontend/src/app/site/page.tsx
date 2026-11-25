@@ -57,35 +57,40 @@ export default function MontyPublicWebsitePage() {
               Recherchez votre bien selon votre trajet réel, estimez la valeur et le délai de vente,
               simulez votre financement et suivez l&apos;actualité immobilière vérifiée.
             </p>
-            <div className="flex flex-wrap gap-3 pt-1">
-              <Link
-                href="/annonces"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-goldAntique text-emeraldDeep font-bold text-sm hover:bg-goldChampagne transition"
-              >
-                <Home className="w-4 h-4" />
-                Explorer les annonces par trajet
-              </Link>
-              <Link
-                href="/publier"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emeraldSurface text-ivoryWarm font-semibold text-sm border border-goldAntique/40 hover:bg-emeraldMid transition"
-              >
-                <Sparkles className="w-4 h-4 text-goldChampagne" />
-                Publier mon bien
-              </Link>
-              <Link
-                href="/simulateurs"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-transparent text-ivoryWarm font-semibold text-sm border border-ivoryWarm/30 hover:bg-emeraldSurface/50 transition"
-              >
-                <Calculator className="w-4 h-4 text-goldChampagne" />
-                6 Simulateurs
-              </Link>
-              <Link
-                href="/actualites"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-transparent text-goldChampagne font-semibold text-sm border border-goldChampagne/50 hover:bg-emeraldSurface/50 transition"
-              >
-                <Newspaper className="w-4 h-4" />
-                Actualités FR &amp; PT
-              </Link>
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <Link
+                  href="/annonces"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-goldAntique text-emeraldDeep font-bold text-sm hover:bg-goldChampagne transition text-center"
+                >
+                  <Home className="w-4 h-4 shrink-0" />
+                  Je cherche un bien
+                </Link>
+                <Link
+                  href="/publier"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-emeraldSurface text-ivoryWarm font-semibold text-sm border border-goldAntique/50 hover:bg-emeraldMid transition text-center"
+                >
+                  <Sparkles className="w-4 h-4 text-goldChampagne shrink-0" />
+                  Je vends mon bien
+                </Link>
+                <Link
+                  href="/"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-transparent text-ivoryWarm font-semibold text-sm border border-ivoryWarm/35 hover:bg-emeraldSurface/60 transition text-center"
+                >
+                  <Briefcase className="w-4 h-4 text-goldChampagne shrink-0" />
+                  Je suis professionnel
+                </Link>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-xs text-ivoryWarm/85 pt-0.5">
+                <Link href="/simulateurs" className="inline-flex items-center gap-1.5 hover:text-goldChampagne underline underline-offset-4">
+                  <Calculator className="w-3.5 h-3.5 text-goldChampagne" />
+                  Accéder aux 6 simulateurs gratuits
+                </Link>
+                <Link href="/actualites" className="inline-flex items-center gap-1.5 hover:text-goldChampagne underline underline-offset-4">
+                  <Newspaper className="w-3.5 h-3.5 text-goldChampagne" />
+                  Actualités immobilières FR &amp; PT
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -322,6 +327,47 @@ export default function MontyPublicWebsitePage() {
                   <p className="font-display font-bold text-sm text-obsidianInk">{art.title}</p>
                 </Link>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 4 bis. TRANSPARENCE DES SOURCES & MÉTHODOLOGIE */}
+        <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-goldAntique">
+                Crédibilité &amp; Données Vérifiées • Mise à jour Novembre 2026
+              </p>
+              <h2 className="font-display text-xl sm:text-2xl font-bold text-emeraldDeep">
+                Sources officielles et limites transparentes de nos outils
+              </h2>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-emeraldDeep/10 text-emeraldDeep">
+              <ShieldCheck className="w-4 h-4" />
+              Données publiques vs privées cloisonnées
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 space-y-1">
+              <p className="font-bold text-emeraldDeep">Référentiels France &amp; Géocodage</p>
+              <p className="text-slateMuted leading-relaxed">
+                Transactions notariées DVF (Etalab / DGFiP), Base Adresse Nationale (BAN), barèmes HCSF 35 %,
+                DMTO départementaux, CGI plus-values et Observatoire ADEME DPE.
+              </p>
+            </div>
+            <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 space-y-1">
+              <p className="font-bold text-emeraldDeep">Module Portugal Isolé</p>
+              <p className="text-slateMuted leading-relaxed">
+                Règles macroprudentielles Banco de Portugal (DSTI / LTV), barèmes IMT &amp; Imposto do Selo
+                (Portal das Finanças / IMT Jovem) et certificats ADENE (A+ à F).
+              </p>
+            </div>
+            <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 space-y-1">
+              <p className="font-bold text-emeraldDeep">Clarté de démonstration &amp; limites</p>
+              <p className="text-slateMuted leading-relaxed">
+                Les estimations et délais de vente sont indicatifs. Les annonces d&apos;exemple sont clairement
+                identifiées tant que le catalogue local d&apos;une zone est en cours d&apos;ouverture.
+              </p>
             </div>
           </div>
         </section>
