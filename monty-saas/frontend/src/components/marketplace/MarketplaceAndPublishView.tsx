@@ -132,6 +132,11 @@ export function MarketplaceAndPublishView({
   const [copyTip, setCopyTip] = useState<string | null>(null);
   const [publishNotice, setPublishNotice] = useState<string | null>(null);
   const [showPostPublishCta, setShowPostPublishCta] = useState<boolean>(false);
+  const [showValuationForm, setShowValuationForm] = useState<boolean>(false);
+  const [valuationEmail, setValuationEmail] = useState<string>("");
+  const [valuationRgpd, setValuationRgpd] = useState<boolean>(false);
+  const [valuationBusy, setValuationBusy] = useState<boolean>(false);
+  const [valuationError, setValuationError] = useState<string | null>(null);
   const [valuationRequested, setValuationRequested] = useState<boolean>(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [pendingModeration, setPendingModeration] = useState<MarketplaceListing[]>([]);
@@ -181,6 +186,8 @@ export function MarketplaceAndPublishView({
       country_code: countryCode,
       publisher_type: publisherFilter === "ALL" ? undefined : publisherFilter,
       origin_address: originAddress,
+      origin_lat: originCoords?.lat,
+      origin_lon: originCoords?.lon,
       search_mode: searchMode,
       transport_mode: transportMode,
       max_radius_km: maxRadiusKm,
@@ -350,6 +357,8 @@ export function MarketplaceAndPublishView({
     setPublishBusy(true);
     setPublishNotice(null);
     setShowPostPublishCta(false);
+    setShowValuationForm(false);
+    setValuationError(null);
     setValuationRequested(false);
     const hlList = pubState.pubHighlightsRaw
       .split(",")
@@ -531,32 +540,94 @@ export function MarketplaceAndPublishView({
             <span>{publishNotice}</span>
           </div>
           {showPostPublishCta && (
-            <div className="rounded-xl bg-white border border-emerald-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="space-y-1">
-                <p className="font-bold text-emeraldDeep text-sm flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-goldAntique" />
-                  Votre bien est publié. Souhaitez-vous obtenir une analyse plus précise de sa valeur et de son potentiel
-                  de vente ?
-                </p>
-                <p className="text-slateMuted">
-                  Affinez votre prix avec les références notariées DVF ou sollicitez un avis de valeur confidentiel.
-                </p>
+            <div className="rounded-xl bg-white border border-emerald-200 p-4 space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="font-bold text-emeraldDeep text-sm flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-goldAntique" />
+                    Votre bien est publié. Souhaitez-vous obtenir une analyse plus précise de sa valeur et de son potentiel
+                    de vente ?
+                  </p>
+                  <p className="text-slateMuted">
+                    Affinez votre prix avec les références notariées DVF ou sollicitez un avis de valeur confidentiel.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Link
+                    href="/simulateurs"
+                    className="px-3.5 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid"
+                  >
+                    Estimer ma valeur DVF
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setShowValuationForm((v) => !v)}
+                    className="px-3.5 py-2 rounded-xl border border-emeraldDeep text-emeraldDeep font-bold hover:bg-ivoryWarm"
+                  >
+                    {valuationRequested ? "Demande enregistrée ✓" : "Demander un avis conseiller"}
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <Link
-                  href="/simulateurs"
-                  className="px-3.5 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid"
-                >
-                  Estimer ma valeur DVF
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setValuationRequested(true)}
-                  className="px-3.5 py-2 rounded-xl border border-emeraldDeep text-emeraldDeep font-bold hover:bg-ivoryWarm"
-                >
-                  {valuationRequested ? "Demande enregistrée ✓" : "Demander un avis conseiller"}
-                </button>
-              </div>
+              {showValuationForm && !valuationRequested && (
+                <div className="pt-2 border-t border-emerald-100 flex flex-col sm:flex-row sm:items-center gap-2.5">
+                  <input
+                    type="email"
+                    value={valuationEmail}
+                    onChange={(e) => setValuationEmail(e.target.value)}
+                    placeholder="Votre e-mail pour recevoir l'avis confidentiel"
+                    className="flex-1 rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2 text-xs text-obsidianInk"
+                  />
+                  <label className="inline-flex items-center gap-1.5 text-slateMuted cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={valuationRgpd}
+                      onChange={(e) => setValuationRgpd(e.target.checked)}
+                    />
+                    <span>Accord RGPD conseiller Monty</span>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={valuationBusy}
+                    onClick={async () => {
+                      setValuationError(null);
+                      const clean = valuationEmail.trim();
+                      if (!clean.includes("@") || !clean.includes(".")) {
+                        setValuationError("Saisissez un e-mail valide.");
+                        return;
+                      }
+                      if (!valuationRgpd) {
+                        setValuationError("Cochez l'accord RGPD.");
+                        return;
+                      }
+                      setValuationBusy(true);
+                      try {
+                        await montyApi.submitPublicLead({
+                          lead_kind: "SELLER_VALUATION",
+                          country_code: countryCode,
+                          email: clean,
+                          city: pubState.pubCity,
+                          budget_euro: pubState.pubPrice,
+                          property_title:
+                            pubState.pubTitle.trim() ||
+                            `${pubState.pubKind} ${pubState.pubSurface} m² — ${pubState.pubCity}`,
+                          notes: `Avis conseiller demandé après publication (${pubState.pubSector}, DPE ${pubState.pubDpe})`,
+                          rgpd_consent_granted: true,
+                        });
+                      } catch {
+                        // Fallback gracieux si API endormie
+                      } finally {
+                        setValuationBusy(false);
+                        setValuationRequested(true);
+                        setShowValuationForm(false);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-60"
+                  >
+                    {valuationBusy ? "Envoi..." : "Envoyer au conseiller"}
+                  </button>
+                  {valuationError && <span className="text-rose-700 font-semibold">{valuationError}</span>}
+                </div>
+              )}
             </div>
           )}
         </div>

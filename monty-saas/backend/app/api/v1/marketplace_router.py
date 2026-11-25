@@ -11,7 +11,9 @@ from app.api.v1.deps import (
     get_db_session_factory,
     require_permission,
 )
+from app.api.v1.crm_router import _leads_service, _public_lead_dto
 from app.core.rbac import Permission, TenantContext
+from app.db.postgres_portfolio_leads_repository import PostgresPortfolioLeadsRepository
 from app.db.postgres_repositories import PostgresMarketplaceRepository
 from app.db.postgres_v2_ops_repository import PostgresV2OpsRepository
 from app.domain.authorized_feeds_service import AuthorizedListingFeedsService, FeedFormat
@@ -22,6 +24,7 @@ from app.domain.marketplace_service import (
     PublisherType,
     generate_listing_copy,
 )
+from app.domain.portfolio_and_leads_service import LeadKind
 from app.domain.real_estate_engines import SearchPerimeterMode, TransportMode
 
 marketplace_router = APIRouter(prefix="/marketplace", tags=["Phase 2 — Annonces & Mobilité"])
@@ -86,6 +89,8 @@ async def search_marketplace_listings(
     country_code: CountryCode = CountryCode.FR,
     publisher_type: PublisherType | None = None,
     origin_address: str = Query(default="Lyon", max_length=120),
+    origin_lat: float | None = Query(default=None, ge=-90.0, le=90.0),
+    origin_lon: float | None = Query(default=None, ge=-180.0, le=180.0),
     search_mode: SearchPerimeterMode = SearchPerimeterMode.TRAVEL_TIME,
     transport_mode: TransportMode = TransportMode.TRAM,
     max_radius_km: int = Query(default=20, ge=1, le=500),
@@ -95,19 +100,25 @@ async def search_marketplace_listings(
     only_within_perimeter: bool = True,
     sf=Depends(get_db_session_factory),
 ) -> dict:
-    origin_geo = await asyncio.to_thread(
-        geocode_french_address,
-        origin_address,
-        country_code=country_code,
-        fallback_city=origin_address,
-    )
+    if origin_lat is not None and origin_lon is not None:
+        resolved_lat = origin_lat
+        resolved_lon = origin_lon
+    else:
+        origin_geo = await asyncio.to_thread(
+            geocode_french_address,
+            origin_address,
+            country_code=country_code,
+            fallback_city=origin_address,
+        )
+        resolved_lat = origin_geo.latitude
+        resolved_lon = origin_geo.longitude
     if sf is not None:
         hits = await PostgresMarketplaceRepository(sf).search_listings(
             country_code=country_code,
             publisher_type=publisher_type,
             origin_address=origin_address,
-            origin_lat=origin_geo.latitude,
-            origin_lon=origin_geo.longitude,
+            origin_lat=resolved_lat,
+            origin_lon=resolved_lon,
             search_mode=search_mode,
             transport_mode=transport_mode,
             max_radius_km=max_radius_km,
@@ -121,8 +132,8 @@ async def search_marketplace_listings(
             country_code=country_code,
             publisher_type=publisher_type,
             origin_address=origin_address,
-            origin_lat=origin_geo.latitude,
-            origin_lon=origin_geo.longitude,
+            origin_lat=resolved_lat,
+            origin_lon=resolved_lon,
             search_mode=search_mode,
             transport_mode=transport_mode,
             max_radius_km=max_radius_km,
@@ -404,3 +415,69 @@ async def sync_authorized_feed(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return res.__dict__
+
+
+class PublicInboundLeadRequest(BaseModel):
+    agency_id: str | None = Field(default=None, max_length=128)
+    lead_kind: LeadKind
+    country_code: CountryCode = CountryCode.FR
+    full_name: str = Field(default="", max_length=140)
+    email: str = Field(min_length=5, max_length=160)
+    phone: str = Field(default="", max_length=40)
+    city: str = Field(default="", max_length=120)
+    budget_euro: int = Field(default=0, ge=0, le=50_000_000)
+    min_rooms: int = Field(default=1, ge=1, le=30)
+    search_transport_mode: str = Field(default="TRAM", max_length=24)
+    max_travel_minutes: int = Field(default=30, ge=5, le=240)
+    horizon: str = Field(default="", max_length=80)
+    property_title: str = Field(default="", max_length=180)
+    notes: str = Field(default="", max_length=1500)
+    rgpd_consent_granted: bool = False
+
+
+@marketplace_router.post("/public-leads", status_code=status.HTTP_201_CREATED)
+async def submit_public_inbound_lead(
+    body: PublicInboundLeadRequest,
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            lead = await PostgresPortfolioLeadsRepository(sf).submit_public_lead(
+                agency_id=body.agency_id,
+                lead_kind=body.lead_kind,
+                country_code=body.country_code,
+                full_name=body.full_name,
+                email=body.email,
+                phone=body.phone,
+                city=body.city,
+                budget_euro=body.budget_euro,
+                min_rooms=body.min_rooms,
+                search_transport_mode=body.search_transport_mode,
+                max_travel_minutes=body.max_travel_minutes,
+                horizon=body.horizon,
+                property_title=body.property_title,
+                notes=body.notes,
+                rgpd_consent_granted=body.rgpd_consent_granted,
+            )
+        else:
+            lead = _leads_service.submit_public_lead(
+                agency_id=body.agency_id,
+                lead_kind=body.lead_kind,
+                country_code=body.country_code,
+                full_name=body.full_name,
+                email=body.email,
+                phone=body.phone,
+                city=body.city,
+                budget_euro=body.budget_euro,
+                min_rooms=body.min_rooms,
+                search_transport_mode=body.search_transport_mode,
+                max_travel_minutes=body.max_travel_minutes,
+                horizon=body.horizon,
+                property_title=body.property_title,
+                notes=body.notes,
+                rgpd_consent_granted=body.rgpd_consent_granted,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _public_lead_dto(lead)
+

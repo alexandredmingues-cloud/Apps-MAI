@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Download,
   FileSpreadsheet,
+  Globe,
   Lock,
   MessageSquarePlus,
   Plus,
@@ -26,14 +27,16 @@ import type {
   CsvImportSummary,
   ExchangeChannel,
   FollowUpTask,
+  LeadStatus,
   MontyRole,
+  PublicInboundLead,
 } from "@/lib/types";
 
 interface CrmCockpitPanelProps {
   agencyId: string;
   role: MontyRole;
   initialRoleFilter?: ContactRole | "ALL";
-  initialTab?: "contacts" | "followups" | "csv_rgpd";
+  initialTab?: "contacts" | "followups" | "web_leads" | "csv_rgpd";
 }
 
 const SEED_LOCAL_CONTACTS: CrmContact[] = [
@@ -114,8 +117,9 @@ export function CrmCockpitPanel({
   initialRoleFilter = "ALL",
   initialTab = "contacts",
 }: CrmCockpitPanelProps) {
-  const [tab, setTab] = useState<"contacts" | "followups" | "csv_rgpd">(initialTab);
+  const [tab, setTab] = useState<"contacts" | "followups" | "web_leads" | "csv_rgpd">(initialTab);
   const [contacts, setContacts] = useState<CrmContact[]>(SEED_LOCAL_CONTACTS);
+  const [webLeads, setWebLeads] = useState<PublicInboundLead[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string>(SEED_LOCAL_CONTACTS[0].id);
   const [roleFilter, setRoleFilter] = useState<ContactRole | "ALL">(initialRoleFilter);
   const [countryFilter, setCountryFilter] = useState<"ALL" | CountryCode>("ALL");
@@ -219,9 +223,14 @@ export function CrmCockpitPanel({
   async function refreshCrmData() {
     setIsLoading(true);
     try {
-      const [cResp, tResp] = await Promise.all([montyApi.listCrmContacts(), montyApi.getAutoFollowups()]);
+      const [cResp, tResp, lResp] = await Promise.all([
+        montyApi.listCrmContacts(),
+        montyApi.getAutoFollowups(),
+        montyApi.listPublicLeads(),
+      ]);
       setContacts(cResp.contacts);
       setTasks(tResp.tasks);
+      setWebLeads(lResp.leads);
       setModeLabel("api");
       setApiWarning(null);
     } catch {
@@ -230,6 +239,17 @@ export function CrmCockpitPanel({
       setApiWarning("Session JWT non connectée ou API indisponible : affichage en mode local temporaire.");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleUpdateLeadStatus(leadId: string, nextStatus: LeadStatus) {
+    setWebLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: nextStatus } : l)));
+    try {
+      const updated = await montyApi.updatePublicLeadStatus(leadId, nextStatus);
+      setWebLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
+      setStatusMessage(`Statut de la demande mis à jour : ${nextStatus}.`);
+    } catch {
+      // Conserver état local si session expirée
     }
   }
 
@@ -557,6 +577,7 @@ export function CrmCockpitPanel({
             {[
               { id: "contacts", label: "Contacts & Notes Privées", Icon: Users },
               { id: "followups", label: `Relances Auto (${tasks.filter((t) => !t.completed).length})`, Icon: BellRing },
+              { id: "web_leads", label: `Demandes Web (${webLeads.filter((l) => l.status === "NEW").length})`, Icon: Globe },
               { id: "csv_rgpd", label: "Import CSV & RGPD", Icon: FileSpreadsheet },
             ].map(({ id, label, Icon }) => (
               <button
@@ -928,6 +949,76 @@ export function CrmCockpitPanel({
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {tab === "web_leads" && (
+        <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-display text-lg font-bold text-emeraldDeep flex items-center gap-2">
+                <Globe className="w-5 h-5 text-goldAntique" />
+                Demandes Entrantes Site Web Public (Consentement RGPD vérifié)
+              </h3>
+              <p className="text-xs text-slateMuted">
+                Alertes acquéreurs, recherches guidées « Je ne trouve pas mon bien » et avis de valeur vendeurs.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={refreshCrmData}
+              className="px-3 py-1.5 rounded-xl border border-borderSubtle text-xs font-semibold hover:border-emeraldDeep"
+            >
+              Actualiser
+            </button>
+          </div>
+          {webLeads.length === 0 ? (
+            <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 text-xs text-slateMuted">
+              Aucune demande web entrante enregistrée pour le moment sur cette agence.
+            </div>
+          ) : (
+            <div className="space-y-2.5 text-xs">
+              {webLeads.map((lead) => (
+                <div
+                  key={lead.id}
+                  className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-emeraldDeep text-goldChampagne font-bold text-[10px]">
+                        {lead.lead_kind}
+                      </span>
+                      <span className="font-bold text-sm text-obsidianInk">{lead.email}</span>
+                      <span className="text-slateMuted">({lead.country_code})</span>
+                    </div>
+                    <p className="text-slateMuted">
+                      Secteur : <strong>{lead.city || "Non précisé"}</strong> • Budget :{" "}
+                      <strong>{lead.budget_euro.toLocaleString("fr-FR")} €</strong>
+                      {lead.property_title ? ` • Bien : ${lead.property_title}` : ""}
+                      {lead.horizon ? ` • Horizon : ${lead.horizon}` : ""}
+                    </p>
+                    {lead.notes && <p className="text-obsidianInk/80">{lead.notes}</p>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    {(["NEW", "CONTACTED", "CONVERTED", "ARCHIVED"] as LeadStatus[]).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => handleUpdateLeadStatus(lead.id, st)}
+                        className={`px-2.5 py-1 rounded-lg font-bold ${
+                          lead.status === st
+                            ? "bg-emeraldDeep text-goldChampagne"
+                            : "bg-white border border-borderSubtle text-slateMuted hover:text-obsidianInk"
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

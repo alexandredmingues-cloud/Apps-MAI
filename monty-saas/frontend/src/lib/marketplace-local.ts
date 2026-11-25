@@ -387,6 +387,8 @@ export function searchLocalListings(
     country_code: CountryCode;
     publisher_type?: PublisherType;
     origin_address: string;
+    origin_lat?: number;
+    origin_lon?: number;
     search_mode: SearchPerimeterMode;
     transport_mode: TransportMode;
     max_radius_km: number;
@@ -396,7 +398,11 @@ export function searchLocalListings(
     only_within_perimeter: boolean;
   }
 ): MarketplaceSearchHit[] {
-  const origin = resolveCityGeo(params.origin_address, params.country_code);
+  const resolved = resolveCityGeo(params.origin_address, params.country_code);
+  const origin =
+    params.origin_lat !== undefined && params.origin_lon !== undefined
+      ? { lat: params.origin_lat, lon: params.origin_lon }
+      : resolved;
   const speed = TRANSPORT_SPEED_KMH[params.transport_mode] ?? 19;
 
   const hits: MarketplaceSearchHit[] = [];

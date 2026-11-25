@@ -619,3 +619,72 @@ export interface FeedSyncResult {
   synced_at: string;
 }
 
+export type LeadKind = "BUYER_CONCIERGE" | "SEARCH_ALERT" | "SELLER_VALUATION";
+export type LeadStatus = "NEW" | "CONTACTED" | "CONVERTED" | "ARCHIVED";
+
+export interface PublicInboundLead {
+  id: string;
+  agency_id: string | null;
+  crm_contact_id: string | null;
+  lead_kind: LeadKind;
+  country_code: CountryCode;
+  full_name: string;
+  email: string;
+  phone: string;
+  city: string;
+  budget_euro: number;
+  min_rooms: number;
+  search_transport_mode: string;
+  max_travel_minutes: number;
+  horizon: string;
+  property_title: string;
+  notes: string;
+  rgpd_consent_granted: boolean;
+  rgpd_consent_at: string;
+  status: LeadStatus;
+  created_at: string;
+}
+
+export type VisitStatus = "PLANIFIEE" | "REALISEE" | "ANNULEE";
+export type TransactionStage = "OFFRE" | "COMPROMIS" | "ACTE";
+
+export interface PortfolioProperty {
+  id: string;
+  agency_id?: string;
+  title: string;
+  sector: string;
+  property_type: string;
+  price: number;
+  surface: number;
+  bedrooms: number;
+  dpe: string;
+  mandate: "EXCLUSIF" | "SIMPLE";
+  docs_ratio: number;
+  created_at?: string;
+}
+
+export interface PortfolioVisit {
+  id: string;
+  agency_id?: string;
+  property_id: string;
+  property_title: string;
+  buyer_name: string;
+  date_label: string;
+  status: VisitStatus;
+  feedback: string;
+  created_at?: string;
+}
+
+export interface PortfolioTransaction {
+  id: string;
+  agency_id?: string;
+  property_id: string;
+  property_title: string;
+  buyer_name: string;
+  offer_euro: number;
+  stage: TransactionStage;
+  notary_target_date: string;
+  created_at?: string;
+}
+
+

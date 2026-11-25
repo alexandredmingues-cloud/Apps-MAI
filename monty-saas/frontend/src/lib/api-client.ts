@@ -24,6 +24,8 @@ import type {
   HcsfResult,
   IndicativeEstimationResult,
   KillSwitchResult,
+  LeadKind,
+  LeadStatus,
   MarketplaceListing,
   MarketplaceSearchHit,
   MatchingCalculationResult,
@@ -32,11 +34,15 @@ import type {
   NewsCategory,
   NewsSource,
   NotaryFeesResult,
+  PortfolioProperty,
+  PortfolioTransaction,
+  PortfolioVisit,
   PortugalAcquisitionCostResult,
   PreEtatDateComputeResult,
   PreEtatDateExportResult,
   PreEtatDatePayload,
   ProNewsArticle,
+  PublicInboundLead,
   PublicNewsArticle,
   PublisherType,
   RentalYieldResult,
@@ -47,8 +53,10 @@ import type {
   SessionInfo,
   TeamInviteResult,
   TeamMemberInfo,
+  TransactionStage,
   TransportMode,
   UserNewsPreferences,
+  VisitStatus,
 } from "./types";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
@@ -426,6 +434,8 @@ export const montyApi = {
     country_code: CountryCode;
     publisher_type?: PublisherType;
     origin_address?: string;
+    origin_lat?: number;
+    origin_lon?: number;
     search_mode?: SearchPerimeterMode;
     transport_mode?: TransportMode;
     max_radius_km?: number;
@@ -437,6 +447,8 @@ export const montyApi = {
     const q = new URLSearchParams({ country_code: params.country_code });
     if (params.publisher_type) q.set("publisher_type", params.publisher_type);
     if (params.origin_address) q.set("origin_address", params.origin_address);
+    if (params.origin_lat !== undefined) q.set("origin_lat", String(params.origin_lat));
+    if (params.origin_lon !== undefined) q.set("origin_lon", String(params.origin_lon));
     if (params.search_mode) q.set("search_mode", params.search_mode);
     if (params.transport_mode) q.set("transport_mode", params.transport_mode);
     if (params.max_radius_km !== undefined) q.set("max_radius_km", String(params.max_radius_km));
@@ -666,6 +678,103 @@ export const montyApi = {
       method: "POST",
       body: JSON.stringify(inlinePayload ? { inline_payload: inlinePayload } : {}),
     }),
+
+  // Captation Leads Publics RGPD -> CRM Pro
+  submitPublicLead: (payload: {
+    agency_id?: string;
+    lead_kind: LeadKind;
+    country_code: CountryCode;
+    full_name?: string;
+    email: string;
+    phone?: string;
+    city?: string;
+    budget_euro?: number;
+    min_rooms?: number;
+    search_transport_mode?: string;
+    max_travel_minutes?: number;
+    horizon?: string;
+    property_title?: string;
+    notes?: string;
+    rgpd_consent_granted: boolean;
+  }) =>
+    requestJson<PublicInboundLead>(
+      "/api/v1/marketplace/public-leads",
+      { method: "POST", body: JSON.stringify(payload) },
+      false
+    ),
+
+  listPublicLeads: (status?: LeadStatus) => {
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    return requestJson<{ count: number; leads: PublicInboundLead[] }>(`/api/v1/crm/public-leads${q}`);
+  },
+
+  updatePublicLeadStatus: (leadId: string, status: LeadStatus) =>
+    requestJson<PublicInboundLead>(`/api/v1/crm/public-leads/${leadId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  // Phase 3 — Portefeuille Pro (Biens, Visites & Transactions persistés PostgreSQL RLS)
+  listPortfolioProperties: () =>
+    requestJson<{ count: number; properties: PortfolioProperty[] }>("/api/v1/portfolio/properties"),
+
+  createPortfolioProperty: (payload: {
+    title: string;
+    sector: string;
+    property_type: string;
+    price: number;
+    surface: number;
+    bedrooms: number;
+    dpe: string;
+    mandate: "EXCLUSIF" | "SIMPLE";
+    docs_ratio?: number;
+  }) =>
+    requestJson<PortfolioProperty>("/api/v1/portfolio/properties", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listPortfolioVisits: () =>
+    requestJson<{ count: number; visits: PortfolioVisit[] }>("/api/v1/portfolio/visits"),
+
+  createPortfolioVisit: (payload: {
+    property_id: string;
+    buyer_name: string;
+    date_label: string;
+    feedback?: string;
+  }) =>
+    requestJson<PortfolioVisit>("/api/v1/portfolio/visits", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updatePortfolioVisitStatus: (visitId: string, payload: { status: VisitStatus; feedback?: string }) =>
+    requestJson<PortfolioVisit>(`/api/v1/portfolio/visits/${visitId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  listPortfolioTransactions: () =>
+    requestJson<{ count: number; transactions: PortfolioTransaction[] }>("/api/v1/portfolio/transactions"),
+
+  createPortfolioTransaction: (payload: {
+    property_id: string;
+    buyer_name: string;
+    offer_euro: number;
+    stage?: TransactionStage;
+    notary_target_date?: string;
+  }) =>
+    requestJson<PortfolioTransaction>("/api/v1/portfolio/transactions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updatePortfolioTransactionStage: (txId: string, stage: TransactionStage) =>
+    requestJson<PortfolioTransaction>(`/api/v1/portfolio/transactions/${txId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ stage }),
+    }),
 };
+
 
 

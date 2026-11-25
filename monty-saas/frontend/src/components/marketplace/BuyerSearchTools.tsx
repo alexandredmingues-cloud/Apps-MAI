@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, Calculator, CheckCircle2, SearchCheck, Send, Trash2 } from "lucide-react";
+import { montyApi } from "@/lib/api-client";
 import type { CountryCode, TransportMode } from "@/lib/types";
 
 export interface SavedSearchAlert {
@@ -40,6 +41,7 @@ export function BuyerSearchTools({
   const [savedAlerts, setSavedAlerts] = useState<SavedSearchAlert[]>([]);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertRgpd, setAlertRgpd] = useState(false);
+  const [alertBusy, setAlertBusy] = useState(false);
   const [alertFeedback, setAlertFeedback] = useState<string | null>(null);
 
   // Concierge lead capture : "Je ne trouve pas mon bien, faites ma recherche"
@@ -50,8 +52,10 @@ export function BuyerSearchTools({
   const [conciergeNotes, setConciergeNotes] = useState("");
   const [conciergeEmail, setConciergeEmail] = useState("");
   const [conciergeRgpd, setConciergeRgpd] = useState(false);
+  const [conciergeBusy, setConciergeBusy] = useState(false);
   const [conciergeError, setConciergeError] = useState<string | null>(null);
   const [conciergeSent, setConciergeSent] = useState(false);
+  const [conciergeSyncMode, setConciergeSyncMode] = useState<"api" | "local">("local");
 
   useEffect(() => {
     setConciergeCity(originAddress);
@@ -85,7 +89,7 @@ export function BuyerSearchTools({
     }
   }
 
-  function handleSaveAlert(e: React.FormEvent) {
+  async function handleSaveAlert(e: React.FormEvent) {
     e.preventDefault();
     const cleanEmail = alertEmail.trim();
     if (!cleanEmail.includes("@") || !cleanEmail.includes(".")) {
@@ -96,8 +100,31 @@ export function BuyerSearchTools({
       setAlertFeedback("Cochez la case de consentement RGPD pour activer l'alerte.");
       return;
     }
+    setAlertBusy(true);
+    let syncedRemote = false;
+    let leadId = `alt-${Date.now()}`;
+    try {
+      const lead = await montyApi.submitPublicLead({
+        lead_kind: "SEARCH_ALERT",
+        country_code: countryCode,
+        email: cleanEmail,
+        city: originAddress,
+        budget_euro: maxPrice,
+        search_transport_mode: transportMode,
+        max_travel_minutes: maxMinutes,
+        notes: `Alerte recherche : ${originAddress} • ≤ ${maxMinutes} min (${transportMode}) • ≤ ${maxPrice.toLocaleString("fr-FR")} €`,
+        rgpd_consent_granted: true,
+      });
+      leadId = lead.id;
+      syncedRemote = true;
+    } catch {
+      // Fallback local si API endormie
+    } finally {
+      setAlertBusy(false);
+    }
+
     const created: SavedSearchAlert = {
-      id: `alt-${Date.now()}`,
+      id: leadId,
       countryCode,
       originAddress,
       transportMode,
@@ -109,7 +136,9 @@ export function BuyerSearchTools({
     persistAlerts([created, ...savedAlerts].slice(0, 8));
     setAlertEmail("");
     setAlertFeedback(
-      `Alerte enregistrée : biens à ≤ ${maxMinutes} min (${transportMode}) de ${originAddress} jusqu'à ${maxPrice.toLocaleString("fr-FR")} €.`
+      syncedRemote
+        ? `Alerte enregistrée et transmise à votre conseiller Monty : ≤ ${maxMinutes} min (${transportMode}) de ${originAddress}.`
+        : `Alerte sauvegardée sur cet appareil : biens à ≤ ${maxMinutes} min (${transportMode}) de ${originAddress} jusqu'à ${maxPrice.toLocaleString("fr-FR")} €.`
     );
   }
 
@@ -117,7 +146,7 @@ export function BuyerSearchTools({
     persistAlerts(savedAlerts.filter((a) => a.id !== id));
   }
 
-  function handleSubmitConcierge(e: React.FormEvent) {
+  async function handleSubmitConcierge(e: React.FormEvent) {
     e.preventDefault();
     setConciergeError(null);
     if (!conciergeCity.trim() || conciergeBudget < 20_000) {
@@ -131,6 +160,27 @@ export function BuyerSearchTools({
     if (!conciergeRgpd) {
       setConciergeError("Le consentement explicite RGPD est requis pour transmettre votre recherche.");
       return;
+    }
+    setConciergeBusy(true);
+    try {
+      await montyApi.submitPublicLead({
+        lead_kind: "BUYER_CONCIERGE",
+        country_code: countryCode,
+        email: conciergeEmail.trim(),
+        city: conciergeCity.trim(),
+        budget_euro: conciergeBudget,
+        min_rooms: conciergeRooms,
+        search_transport_mode: transportMode,
+        max_travel_minutes: maxMinutes,
+        horizon: conciergeDelay,
+        notes: conciergeNotes.trim(),
+        rgpd_consent_granted: true,
+      });
+      setConciergeSyncMode("api");
+    } catch {
+      setConciergeSyncMode("local");
+    } finally {
+      setConciergeBusy(false);
     }
     setConciergeSent(true);
   }
@@ -174,9 +224,10 @@ export function BuyerSearchTools({
             </label>
             <button
               type="submit"
-              className="sm:col-span-2 px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid transition"
+              disabled={alertBusy}
+              className="sm:col-span-2 px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-60 transition"
             >
-              M&apos;alerter
+              {alertBusy ? "Envoi..." : "M'alerter"}
             </button>
           </form>
           {alertFeedback && (
@@ -245,7 +296,9 @@ export function BuyerSearchTools({
           <div className="rounded-xl bg-emeraldSurface border border-goldAntique/50 p-4 space-y-2 text-xs">
             <p className="font-bold text-goldChampagne flex items-center gap-1.5 text-sm">
               <CheckCircle2 className="w-4 h-4" />
-              Demande de recherche personnalisée enregistrée
+              {conciergeSyncMode === "api"
+                ? "Demande enregistrée et transmise au CRM Monty Pro"
+                : "Demande de recherche personnalisée enregistrée (mode local)"}
             </p>
             <p className="text-ivoryWarm/85">
               Critères transmis : <strong>{conciergeCity}</strong> • {conciergeRooms}+ pièces • budget max{" "}
@@ -345,10 +398,11 @@ export function BuyerSearchTools({
               </div>
               <button
                 type="submit"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-goldAntique text-emeraldDeep font-bold text-sm hover:bg-goldChampagne transition shrink-0"
+                disabled={conciergeBusy}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-goldAntique text-emeraldDeep font-bold text-sm hover:bg-goldChampagne disabled:opacity-60 transition shrink-0"
               >
                 <Send className="w-4 h-4" />
-                Lancer ma recherche guidée
+                {conciergeBusy ? "Transmission..." : "Lancer ma recherche guidée"}
               </button>
             </div>
           </form>

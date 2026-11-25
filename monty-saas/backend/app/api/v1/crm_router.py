@@ -10,6 +10,7 @@ from app.api.v1.deps import get_db_session_factory, require_permission
 from app.core.rbac import Permission, TenantContext
 from app.core.rgpd import LEGAL_BASIS_CONSENT
 from app.core.security import InputSanitizer
+from app.db.postgres_portfolio_leads_repository import PostgresPortfolioLeadsRepository
 from app.db.postgres_repositories import PostgresCrmRepository
 from app.domain.country_packs import CountryCode
 from app.domain.crm_service import (
@@ -21,9 +22,39 @@ from app.domain.csv_import_export import (
     export_contacts_to_csv,
     import_contacts_from_csv,
 )
+from app.domain.portfolio_and_leads_service import (
+    LeadStatus,
+    PortfolioAndLeadsService,
+)
 
 crm_router = APIRouter(prefix="/crm", tags=["Phase 2 — CRM & RGPD"])
 _crm = CrmService()
+_leads_service = PortfolioAndLeadsService(_crm)
+
+
+def _public_lead_dto(lead) -> dict:
+    return {
+        "id": lead.id,
+        "agency_id": lead.agency_id,
+        "crm_contact_id": lead.crm_contact_id,
+        "lead_kind": lead.lead_kind.value,
+        "country_code": lead.country_code.value,
+        "full_name": lead.full_name,
+        "email": lead.email,
+        "phone": lead.phone,
+        "city": lead.city,
+        "budget_euro": lead.budget_euro,
+        "min_rooms": lead.min_rooms,
+        "search_transport_mode": lead.search_transport_mode,
+        "max_travel_minutes": lead.max_travel_minutes,
+        "horizon": lead.horizon,
+        "property_title": lead.property_title,
+        "notes": lead.notes,
+        "rgpd_consent_granted": lead.rgpd_consent_granted,
+        "rgpd_consent_at": lead.rgpd_consent_at,
+        "status": lead.status.value,
+        "created_at": lead.created_at,
+    }
 
 
 def _contact_dto(c) -> dict:
@@ -315,3 +346,48 @@ async def rgpd_purge_expired(
     else:
         count = _crm.execute_rgpd_purge(ctx)
     return {"anonymized_count": count}
+
+
+@crm_router.get("/public-leads")
+async def list_public_inbound_leads(
+    lead_status: LeadStatus | None = Query(default=None, alias="status"),
+    ctx: TenantContext = Depends(require_permission(Permission.CRM_READ)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    if sf is not None:
+        items = await PostgresPortfolioLeadsRepository(sf).list_public_leads(ctx, status=lead_status)
+    else:
+        items = _leads_service.list_public_leads(ctx, status=lead_status)
+    return {"count": len(items), "leads": [_public_lead_dto(item) for item in items]}
+
+
+class UpdatePublicLeadStatusRequest(BaseModel):
+    status: LeadStatus
+
+
+@crm_router.patch("/public-leads/{lead_id}")
+async def update_public_inbound_lead(
+    lead_id: str,
+    body: UpdatePublicLeadStatusRequest,
+    ctx: TenantContext = Depends(require_permission(Permission.CRM_WRITE)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            updated = await PostgresPortfolioLeadsRepository(sf).update_public_lead_status(
+                ctx,
+                lead_id=lead_id,
+                status=body.status,
+            )
+        else:
+            updated = _leads_service.update_public_lead_status(
+                ctx,
+                lead_id=lead_id,
+                status=body.status,
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _public_lead_dto(updated)
+
