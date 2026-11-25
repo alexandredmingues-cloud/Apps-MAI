@@ -299,6 +299,9 @@ class MarketplaceService:
         highlights: list[str],
         description: str,
         photo_count: int = 3,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        region_name: str | None = None,
         ctx: TenantContext | None = None,
     ) -> MarketplaceListing:
         if ctx is not None:
@@ -308,7 +311,10 @@ class MarketplaceService:
                 raise PermissionError("Seul un membre d'agence autorisé peut publier au nom d'une agence.")
 
         get_country_pack(country_code)
-        lat, lon, region_name, ref_m2 = _resolve_city_geo(city, country_code)
+        fb_lat, fb_lon, fb_region, ref_m2 = _resolve_city_geo(city, country_code)
+        lat = latitude if latitude is not None else fb_lat
+        lon = longitude if longitude is not None else fb_lon
+        resolved_region = region_name or fb_region
         safe_title = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(title, 180))
         safe_desc = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(description, 2000))
         if not safe_title or price_euro < 10_000 or surface_m2 < 9:
@@ -345,7 +351,7 @@ class MarketplaceService:
             title=safe_title,
             property_kind=InputSanitizer.sanitize_text(property_kind, 40) or "Appartement",
             city=InputSanitizer.sanitize_text(city, 80),
-            region_name=region_name,
+            region_name=resolved_region,
             sector_label=InputSanitizer.sanitize_text(sector_label, 100) or city,
             price_euro=price_euro,
             surface_m2=surface_m2,

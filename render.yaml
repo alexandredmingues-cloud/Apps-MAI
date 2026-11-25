@@ -17,10 +17,10 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: https://monty-saas-web.onrender.com
+        value: https://apps-mai-1.onrender.com,https://monty-site.onrender.com
 
   - type: web
-    name: monty-saas-web
+    name: monty-site
     runtime: node
     rootDir: monty-saas/frontend
     plan: free

@@ -46,6 +46,8 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
   const [country, setCountry] = useState<CountryCode>(initialCountry);
   const [tab, setTab] = useState<SimTab>("monthly");
   const [sourceBadge, setSourceBadge] = useState<"API FastAPI" | "Moteur Déterministe Local">("Moteur Déterministe Local");
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // 1. Mensualités
   const [price, setPrice] = useState(310000);
@@ -171,6 +173,12 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
   );
 
   async function runMonthly() {
+    if (price < 10_000 || years < 5 || years > 30) {
+      setValidationError("Saisissez un prix ≥ 10 000 € et une durée entre 5 et 30 ans.");
+      return;
+    }
+    setValidationError(null);
+    setIsCalculating(true);
     const payload = {
       price,
       down_payment: downPayment,
@@ -189,6 +197,8 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
     } catch {
       setMonthlyRes(computeMonthlyPaymentLocal(payload));
       setSourceBadge("Moteur Déterministe Local");
+    } finally {
+      setIsCalculating(false);
     }
   }
 
@@ -273,6 +283,12 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
   }
 
   async function runEstimation() {
+    if (estSurface < 9 || estSurface > 2000) {
+      setValidationError("La surface habitable doit être comprise entre 9 et 2 000 m².");
+      return;
+    }
+    setValidationError(null);
+    setIsCalculating(true);
     const payload = {
       sector_name: estSector,
       property_kind: estKind,
@@ -289,6 +305,8 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
     } catch {
       setEstRes(computeIndicativeEstimationLocal(payload));
       setSourceBadge("Moteur Déterministe Local");
+    } finally {
+      setIsCalculating(false);
     }
   }
 
@@ -385,6 +403,14 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
 
       {/* Contenu du simulateur actif */}
       <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 sm:p-6 space-y-5">
+        {validationError && (
+          <div className="rounded-xl bg-red-50 border border-red-300 px-3.5 py-2.5 text-xs text-red-900">
+            {validationError}
+          </div>
+        )}
+        {isCalculating && (
+          <div className="text-xs font-medium text-emeraldDeep">Calcul en cours...</div>
+        )}
         {tab === "monthly" && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-bold text-emeraldDeep">
@@ -642,7 +668,10 @@ export function RealEstateSimulatorsSuite({ initialCountry = "FR" }: Props) {
               <div><p className="text-ivoryWarm/70">Fourchette haute</p><p className="text-base font-bold">{estRes.estimated_high_euro.toLocaleString("fr-FR")} €</p></div>
               <div><p className="text-ivoryWarm/70">Prix ajusté / m²</p><p className="text-base font-bold">{estRes.adjusted_price_m2.toLocaleString("fr-FR")} €/m²</p></div>
             </div>
-            <p className="text-xs text-slateMuted">{estRes.disclaimer}</p>
+            <p className="text-xs text-slateMuted">
+              Dernière mise à jour des repères marché / DVF :{" "}
+              <strong className="text-emeraldDeep">{estRes.data_date ?? "2026-11-25"}</strong> • {estRes.disclaimer}
+            </p>
           </div>
         )}
 

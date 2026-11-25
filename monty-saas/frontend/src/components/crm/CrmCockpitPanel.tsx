@@ -139,9 +139,12 @@ export function CrmCockpitPanel({
   const [newRole, setNewRole] = useState<ContactRole>("BUYER");
   const [newCountry, setNewCountry] = useState<CountryCode>("FR");
 
-  // Relances automatiques
+  // Relances automatiques & états UX
   const [tasks, setTasks] = useState<FollowUpTask[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Import CSV & Portabilité RGPD
   const [csvInput, setCsvInput] = useState(
@@ -214,14 +217,19 @@ export function CrmCockpitPanel({
   }
 
   async function refreshCrmData() {
+    setIsLoading(true);
     try {
       const [cResp, tResp] = await Promise.all([montyApi.listCrmContacts(), montyApi.getAutoFollowups()]);
       setContacts(cResp.contacts);
       setTasks(tResp.tasks);
       setModeLabel("api");
+      setApiWarning(null);
     } catch {
       setTasks((prev) => (prev.length > 0 ? prev : computeLocalFollowups(contacts)));
       setModeLabel("local");
+      setApiWarning("Session JWT non connectée ou API indisponible : affichage en mode local temporaire.");
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -260,7 +268,19 @@ export function CrmCockpitPanel({
 
   async function handleCreateContact(e: React.FormEvent) {
     e.preventDefault();
-    if (!newName.trim()) return;
+    setFormError(null);
+    if (newName.trim().length < 2) {
+      setFormError("Le nom complet doit contenir au moins 2 caractères.");
+      return;
+    }
+    if (newEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+      setFormError("L'adresse e-mail saisie est invalide.");
+      return;
+    }
+    if (newBudget < 0) {
+      setFormError("Le budget doit être positif ou nul.");
+      return;
+    }
     try {
       const created = await montyApi.createCrmContact({
         full_name: newName,
@@ -557,6 +577,19 @@ export function CrmCockpitPanel({
         </div>
       </section>
 
+      {isLoading && (
+        <div className="rounded-xl bg-ivoryCard border border-borderSubtle px-4 py-2.5 text-xs text-slateMuted">
+          Synchronisation CRM avec PostgreSQL en cours...
+        </div>
+      )}
+
+      {apiWarning && (
+        <div className="rounded-xl bg-amber-50 border border-amber-300 px-4 py-2.5 text-xs text-amber-900 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+          <span>{apiWarning}</span>
+        </div>
+      )}
+
       {statusMessage && (
         <div className="rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-3 text-xs text-emerald-950 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
@@ -621,8 +654,13 @@ export function CrmCockpitPanel({
             </div>
 
             {showCreateForm && (
-              <form onSubmit={handleCreateContact} className="rounded-xl bg-ivoryWarm border border-emeraldMid/40 p-3 space-y-2 text-xs">
+              <form onSubmit={handleCreateContact} noValidate className="rounded-xl bg-ivoryWarm border border-emeraldMid/40 p-3 space-y-2 text-xs">
                 <p className="font-bold text-emeraldDeep">Nouveau contact multi-pays (RGPD natif)</p>
+                {formError && (
+                  <p className="rounded-lg bg-red-50 border border-red-200 px-2.5 py-1.5 text-red-900">
+                    {formError}
+                  </p>
+                )}
                 <input
                   type="text"
                   required

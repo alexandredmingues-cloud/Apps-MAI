@@ -318,6 +318,7 @@ async def public_indicative_estimation(body: IndicativeEstimationRequest) -> dic
         "estimated_mid_euro": mid,
         "estimated_high_euro": high,
         "market_tension": tension,
+        "data_date": "2026-11-25",
         "disclaimer": (
             "Fourchette indicative basée sur les repères médians nationaux Monty. "
             "Pour un avis de valeur opposable, demandez une expertise locale avec comparables DVF exacts."

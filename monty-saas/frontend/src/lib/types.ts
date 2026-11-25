@@ -138,9 +138,11 @@ export interface UserNewsPreferences {
 
 export interface HealthStatus {
   status: string;
+  version?: string;
   service: string;
   environment: string;
   database_configured: boolean;
+  database_reachable?: boolean | null;
   storage_mode?: "postgresql_rls" | "in_memory_fallback";
   dev_auth_enabled?: boolean;
   redis_configured: boolean;
@@ -241,6 +243,7 @@ export interface IndicativeEstimationResult {
   estimated_mid_euro: number;
   estimated_high_euro: number;
   market_tension: string;
+  data_date?: string;
   disclaimer: string;
 }
 
@@ -382,5 +385,237 @@ export interface CopywritingResponse {
   suggested_title: string;
   suggested_description: string;
   photo_tip: string;
+}
+
+// V2 — Équipe, Abonnement, DVF Score Monty, Matching, Pré-État Daté L.721-2 & 11 Agents IA
+export interface TeamMemberInfo {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: MontyRole;
+  active: boolean;
+}
+
+export interface TeamInviteResult {
+  invite_id: string;
+  invite_code: string;
+  target_email: string;
+  role: MontyRole;
+  expires_at: string;
+}
+
+export interface AgencySubscriptionInfo {
+  agency_id: string;
+  plan_code: "INDIVIDUAL" | "AGENCY" | "NETWORK";
+  subscription_status: string;
+  seat_limit: number;
+}
+
+export interface DvfComparableInput {
+  mutation_id: string;
+  date_mutation: string;
+  year: number;
+  price_euro: number;
+  surface_m2: number;
+  property_type: string;
+  distance_meters: number;
+}
+
+export interface DvfValuationResult {
+  estimated_low_euro: number;
+  estimated_mid_euro: number;
+  estimated_high_euro: number;
+  raw_dvf_price_m2: number;
+  adjusted_price_m2: number;
+  total_adjustment_percent: number;
+  valuation_score: number;
+  score_label: string;
+  comparables_used_count: number;
+  outliers_removed_count: number;
+  expanded_to_neighbor_sector: boolean;
+  min_sample_required: number;
+  confidence_index: number;
+  confidence_label: string;
+  data_date: string;
+  disclaimer: string;
+  justifications: string[];
+}
+
+export interface MatchingCalculationResult {
+  score: number;
+  matched_criteria: string[];
+  incompatible_criteria: string[];
+}
+
+export interface CoproLotPayload {
+  lot_number: string;
+  nature: string;
+  tantiemes_generaux: number;
+  confidence: number;
+  validated: boolean;
+}
+
+export interface PreEtatDatePayload {
+  dossier_ref: string;
+  seller_name: string;
+  property_address: string;
+  syndic_name: string;
+  total_tantiemes_copro: number;
+  lots: CoproLotPayload[];
+  annual_budget_copro_euro: number;
+  charges_n_minus_1_lot_euro: number;
+  charges_n_minus_2_lot_euro: number;
+  non_budget_works_voted_euro: number;
+  seller_unpaid_charges_euro: number;
+  works_fund_alur_balance_euro: number;
+  current_quarter_called_euro: number;
+  sale_date: string;
+  quarter_start_date: string;
+  quarter_end_date: string;
+  custom_syndic_fee_euro: number;
+  has_fiche_synthetique: boolean;
+  has_reglement_copro_edd: boolean;
+  has_pv_ag_3_years: boolean;
+  has_carnet_entretien: boolean;
+  has_dtg_or_pppt: boolean;
+  has_financial_annex: boolean;
+  has_pending_procedures_statement: boolean;
+  has_alur_works_fund_statement: boolean;
+  confidence_map: Record<string, number>;
+  validated_fields: string[];
+}
+
+export interface ExtractedFieldCheck {
+  field_key: string;
+  label: string;
+  value_preview: string;
+  confidence: number;
+  is_doubtful: boolean;
+  validated: boolean;
+}
+
+export interface L7212ChecklistItem {
+  code: string;
+  label: string;
+  present: boolean;
+  mandatory: boolean;
+}
+
+export interface PreEtatDateComputeResult {
+  dossier_ref: string;
+  document_version: string;
+  generated_at_iso: string;
+  total_lot_tantiemes: number;
+  tantiemes_share_percent: number;
+  estimated_annual_lot_charges_euro: number;
+  estimated_quarterly_lot_charges_euro: number;
+  prorata_days_seller: number;
+  prorata_days_total_quarter: number;
+  seller_quarter_share_euro: number;
+  buyer_quarter_reimbursement_euro: number;
+  seller_net_balance_due_euro: number;
+  works_fund_alur_attached_euro: number;
+  estimated_syndic_savings_euro: number;
+  savings_source_note: string;
+  calculation_steps: string[];
+  extracted_fields: ExtractedFieldCheck[];
+  l721_2_checklist: L7212ChecklistItem[];
+  missing_mandatory_items: string[];
+  unvalidated_doubtful_fields: string[];
+  export_allowed: boolean;
+  blocking_reasons: string[];
+}
+
+export interface PreEtatDateExportResult {
+  dossier_ref: string;
+  document_version: string;
+  generated_at_iso: string;
+  filename: string;
+  html_content: string;
+}
+
+export interface AutonomousAgentInfo {
+  agent_id: string;
+  name: string;
+  category: string;
+  model_tier: "sonnet" | "haiku";
+  description: string;
+  estimated_cost_euro: number;
+}
+
+export interface AgentCatalogResponse {
+  agents: AutonomousAgentInfo[];
+  kill_switch_enabled: boolean;
+  kill_switch_reason: string;
+  daily_spend_euro: number;
+  daily_budget_euro: number;
+}
+
+export interface AgentExecutionLog {
+  id: string;
+  agency_id: string;
+  actor_user_id: string;
+  agent_id: string;
+  agent_name: string;
+  model_used: string;
+  sanitized_input: string;
+  output_summary: string;
+  duration_ms: number;
+  cost_euro: number;
+  cache_hit: boolean;
+  created_at: string;
+}
+
+export interface ScoutProposal {
+  id: string;
+  agency_id: string;
+  created_by_user_id: string;
+  target_contact_name: string;
+  channel: "WHATSAPP" | "EMAIL" | "SMS";
+  legal_basis: string;
+  rgpd_notice: string;
+  opt_out_keyword: string;
+  message_draft: string;
+  status: "A_VALIDER" | "VALIDEE" | "REJETEE";
+  reviewed_by_user_id: string | null;
+  created_at: string;
+  reviewed_at?: string | null;
+}
+
+export interface KillSwitchResult {
+  kill_switch_enabled: boolean;
+  reason: string;
+  updated_by: string;
+}
+
+export type FeedFormat = "JSON" | "XML" | "JSON_LD";
+
+export interface AuthorizedFeedSource {
+  id: string;
+  agency_id: string;
+  name: string;
+  country_code: CountryCode;
+  publisher_type: PublisherType;
+  feed_format: FeedFormat;
+  feed_url: string;
+  agreement_confirmed: boolean;
+  respect_robots_txt: boolean;
+  auto_publish_verified_agency: boolean;
+  last_synced_at: string | null;
+  last_status: string;
+  total_ingested: number;
+}
+
+export interface FeedSyncResult {
+  feed_id: string;
+  feed_name: string;
+  status: "SYNCED" | "ROBOTS_BLOCKED" | "FETCH_ERROR";
+  fetched_items: number;
+  accepted_count: number;
+  skipped_duplicates: number;
+  rejected_count: number;
+  created_listing_ids: string[];
+  warnings: string[];
+  synced_at: string;
 }
 

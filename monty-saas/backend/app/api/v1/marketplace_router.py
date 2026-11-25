@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -11,7 +13,10 @@ from app.api.v1.deps import (
 )
 from app.core.rbac import Permission, TenantContext
 from app.db.postgres_repositories import PostgresMarketplaceRepository
+from app.db.postgres_v2_ops_repository import PostgresV2OpsRepository
+from app.domain.authorized_feeds_service import AuthorizedListingFeedsService, FeedFormat
 from app.domain.country_packs import CountryCode
+from app.domain.geocoding_service import geocode_french_address
 from app.domain.marketplace_service import (
     MarketplaceService,
     PublisherType,
@@ -21,6 +26,7 @@ from app.domain.real_estate_engines import SearchPerimeterMode, TransportMode
 
 marketplace_router = APIRouter(prefix="/marketplace", tags=["Phase 2 — Annonces & Mobilité"])
 _market = MarketplaceService()
+_feeds_service = AuthorizedListingFeedsService(_market)
 
 
 def _listing_dto(item) -> dict:
@@ -57,6 +63,24 @@ def _listing_dto(item) -> dict:
     }
 
 
+def _feed_dto(f) -> dict:
+    return {
+        "id": f.id,
+        "agency_id": f.agency_id,
+        "name": f.name,
+        "country_code": f.country_code.value,
+        "publisher_type": f.publisher_type.value,
+        "feed_format": f.feed_format.value,
+        "feed_url": f.feed_url,
+        "agreement_confirmed": f.agreement_confirmed,
+        "respect_robots_txt": f.respect_robots_txt,
+        "auto_publish_verified_agency": f.auto_publish_verified_agency,
+        "last_synced_at": f.last_synced_at,
+        "last_status": f.last_status,
+        "total_ingested": f.total_ingested,
+    }
+
+
 @marketplace_router.get("/listings")
 async def search_marketplace_listings(
     country_code: CountryCode = CountryCode.FR,
@@ -71,11 +95,19 @@ async def search_marketplace_listings(
     only_within_perimeter: bool = True,
     sf=Depends(get_db_session_factory),
 ) -> dict:
+    origin_geo = await asyncio.to_thread(
+        geocode_french_address,
+        origin_address,
+        country_code=country_code,
+        fallback_city=origin_address,
+    )
     if sf is not None:
         hits = await PostgresMarketplaceRepository(sf).search_listings(
             country_code=country_code,
             publisher_type=publisher_type,
             origin_address=origin_address,
+            origin_lat=origin_geo.latitude,
+            origin_lon=origin_geo.longitude,
             search_mode=search_mode,
             transport_mode=transport_mode,
             max_radius_km=max_radius_km,
@@ -89,6 +121,8 @@ async def search_marketplace_listings(
             country_code=country_code,
             publisher_type=publisher_type,
             origin_address=origin_address,
+            origin_lat=origin_geo.latitude,
+            origin_lon=origin_geo.longitude,
             search_mode=search_mode,
             transport_mode=transport_mode,
             max_radius_km=max_radius_km,
@@ -178,6 +212,12 @@ async def publish_marketplace_listing(
     ctx: TenantContext = Depends(get_current_tenant),
     sf=Depends(get_db_session_factory),
 ) -> dict:
+    geo = await asyncio.to_thread(
+        geocode_french_address,
+        f"{body.sector_label} {body.city}".strip(),
+        country_code=body.country_code,
+        fallback_city=body.city,
+    )
     try:
         if sf is not None:
             created = await PostgresMarketplaceRepository(sf).publish_listing(
@@ -197,6 +237,9 @@ async def publish_marketplace_listing(
                 highlights=body.highlights,
                 description=body.description,
                 photo_count=body.photo_count,
+                latitude=geo.latitude,
+                longitude=geo.longitude,
+                region_name=geo.region_name,
             )
         else:
             created = _market.publish_listing(
@@ -216,6 +259,9 @@ async def publish_marketplace_listing(
                 highlights=body.highlights,
                 description=body.description,
                 photo_count=body.photo_count,
+                latitude=geo.latitude,
+                longitude=geo.longitude,
+                region_name=geo.region_name,
             )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -268,3 +314,93 @@ async def moderate_marketplace_listing(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _listing_dto(updated)
+
+
+@marketplace_router.get("/feeds")
+async def list_authorized_feeds(
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_READ)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    if sf is not None:
+        feeds = await PostgresV2OpsRepository(sf).list_feeds(ctx)
+    else:
+        feeds = _feeds_service.list_feeds(ctx)
+    return {"count": len(feeds), "feeds": [_feed_dto(f) for f in feeds]}
+
+
+class RegisterFeedRequest(BaseModel):
+    name: str = Field(min_length=3, max_length=120)
+    country_code: CountryCode = CountryCode.FR
+    publisher_type: PublisherType = PublisherType.AGENCE
+    feed_format: FeedFormat = FeedFormat.XML
+    feed_url: str = Field(min_length=8, max_length=600)
+    agreement_confirmed: bool = False
+    auto_publish_verified_agency: bool = False
+
+
+@marketplace_router.post("/feeds", status_code=status.HTTP_201_CREATED)
+async def register_authorized_feed(
+    body: RegisterFeedRequest,
+    ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            f = await PostgresV2OpsRepository(sf).register_feed(
+                ctx,
+                name=body.name,
+                country_code=body.country_code,
+                publisher_type=body.publisher_type,
+                feed_format=body.feed_format,
+                feed_url=body.feed_url,
+                agreement_confirmed=body.agreement_confirmed,
+                auto_publish_verified_agency=body.auto_publish_verified_agency,
+            )
+        else:
+            f = _feeds_service.register_feed(
+                ctx,
+                name=body.name,
+                country_code=body.country_code,
+                publisher_type=body.publisher_type,
+                feed_format=body.feed_format,
+                feed_url=body.feed_url,
+                agreement_confirmed=body.agreement_confirmed,
+                auto_publish_verified_agency=body.auto_publish_verified_agency,
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _feed_dto(f)
+
+
+class SyncFeedRequest(BaseModel):
+    inline_payload: str | None = Field(default=None, max_length=500_000)
+
+
+@marketplace_router.post("/feeds/{feed_id}/sync")
+async def sync_authorized_feed(
+    feed_id: str,
+    body: SyncFeedRequest = SyncFeedRequest(),
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_WRITE)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            res = await PostgresV2OpsRepository(sf).sync_feed_to_postgres(
+                ctx,
+                feed_id=feed_id,
+                inline_payload=body.inline_payload,
+            )
+        else:
+            res = await asyncio.to_thread(
+                _feeds_service.sync_feed,
+                ctx,
+                feed_id=feed_id,
+                inline_payload=body.inline_payload,
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return res.__dict__

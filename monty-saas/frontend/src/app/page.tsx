@@ -3,13 +3,20 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Calculator, CheckCircle2, Database, Globe2, Lock, Newspaper, Server, Shield } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
+import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
 import { RealEstateSimulatorsSuite } from "@/components/calculators/RealEstateSimulatorsSuite";
 import { CrmCockpitPanel } from "@/components/crm/CrmCockpitPanel";
 import { MontyShell } from "@/components/layout/MontyShell";
+import { PreEtatDateWorkspace } from "@/components/legal/PreEtatDateWorkspace";
 import { MarketplaceAndPublishView } from "@/components/marketplace/MarketplaceAndPublishView";
 import { NewsHubExperience } from "@/components/news/NewsHubExperience";
-import { montyApi, setInMemoryAccessToken } from "@/lib/api-client";
+import { PortfolioMatchingPipelinePanel } from "@/components/portfolio/PortfolioMatchingPipelinePanel";
+import { loadPersistedSession, montyApi, persistSession } from "@/lib/api-client";
 import type { HealthStatus, HcsfResult, MontyRole, NavSectionKey, SessionInfo } from "@/lib/types";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function MontySaasCockpitPage() {
   const [activeSection, setActiveSection] = useState<NavSectionKey>("dashboard");
@@ -24,6 +31,8 @@ export default function MontySaasCockpitPage() {
   const [durationYears, setDurationYears] = useState(25);
   const [hcsfResult, setHcsfResult] = useState<HcsfResult | null>(null);
   const [calcLoading, setCalcLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authFormError, setAuthFormError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -40,50 +49,100 @@ export default function MontySaasCockpitPage() {
       .catch((err) => {
         setApiError(err instanceof Error ? err.message : "Backend API hors ligne");
       });
+
+    const stored = loadPersistedSession();
+    if (stored) {
+      setSession(stored);
+      setAgencyId(stored.agency_id);
+      setRole(stored.role);
+      montyApi.getMe().catch(() => {
+        persistSession(null);
+        setSession(null);
+      });
+    }
   }, []);
 
   async function handleConnectDevSession(selectedRole: MontyRole) {
     setApiError(null);
+    setAuthFormError(null);
+    setAuthLoading(true);
     try {
       const issued = await montyApi.issueDevSession({
         user_id: `usr-${selectedRole.toLowerCase()}`,
         agency_id: agencyId,
         role: selectedRole,
       });
-      setInMemoryAccessToken(issued.access_token);
+      persistSession(issued);
       setSession(issued);
       setRole(issued.role);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Erreur de connexion API");
+    } finally {
+      setAuthLoading(false);
     }
   }
 
   async function handleRealAuthSubmit(e: React.FormEvent) {
     e.preventDefault();
     setApiError(null);
+    setAuthFormError(null);
+
+    const trimmedEmail = authEmail.trim();
+    if (!EMAIL_RE.test(trimmedEmail)) {
+      setAuthFormError("Veuillez saisir une adresse e-mail professionnelle valide.");
+      return;
+    }
+    if (authPassword.length < 8) {
+      setAuthFormError("Le mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    if (authMode === "register") {
+      if (authAgencyName.trim().length < 2) {
+        setAuthFormError("Le nom de l'agence doit contenir au moins 2 caractères.");
+        return;
+      }
+      if (authDisplayName.trim().length < 2) {
+        setAuthFormError("Votre nom complet doit contenir au moins 2 caractères.");
+        return;
+      }
+    }
+
+    setAuthLoading(true);
     try {
       const issued =
         authMode === "register"
           ? await montyApi.registerAgency({
-              agency_name: authAgencyName,
-              email: authEmail,
+              agency_name: authAgencyName.trim(),
+              email: trimmedEmail,
               password: authPassword,
-              display_name: authDisplayName,
+              display_name: authDisplayName.trim(),
             })
           : await montyApi.login({
-              email: authEmail,
+              email: trimmedEmail,
               password: authPassword,
             });
-      setInMemoryAccessToken(issued.access_token);
+      persistSession(issued);
       setSession(issued);
       setAgencyId(issued.agency_id);
       setRole(issued.role);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : "Échec d'authentification");
+      setAuthFormError(err instanceof Error ? err.message : "Échec d'authentification");
+    } finally {
+      setAuthLoading(false);
     }
   }
 
+  function handleLogout() {
+    persistSession(null);
+    setSession(null);
+    setAuthFormError(null);
+  }
+
   async function handleRunHcsf() {
+    if (income <= 0 || durationYears < 5 || durationYears > 30) {
+      setApiError("Vérifiez les revenus (> 0 €) et la durée du prêt (5 à 30 ans).");
+      return;
+    }
     setCalcLoading(true);
     setApiError(null);
     try {
@@ -143,26 +202,28 @@ export default function MontySaasCockpitPage() {
           </div>
         </div>
 
-        {activeSection === "actualites" || activeSection === "ai" ? (
+        {activeSection === "actualites" ? (
           <NewsHubExperience audience="pro" role={role} initialCountry="FR" />
+        ) : activeSection === "ai" ? (
+          <AgentsAndScoutPanel role={role} />
         ) : activeSection === "estimation" ? (
           <RealEstateSimulatorsSuite initialCountry="FR" />
-        ) : activeSection === "crm" || activeSection === "buyers" || activeSection === "sellers" || activeSection === "automations" || activeSection === "documents" || activeSection === "admin" ? (
+        ) : activeSection === "documents" ? (
+          <PreEtatDateWorkspace />
+        ) : activeSection === "admin" ? (
+          <AdminSaasConsole role={role} />
+        ) : activeSection === "crm" || activeSection === "buyers" || activeSection === "sellers" || activeSection === "automations" ? (
           <CrmCockpitPanel
             agencyId={agencyId}
             role={role}
             initialRoleFilter={
               activeSection === "buyers" ? "BUYER" : activeSection === "sellers" ? "SELLER" : "ALL"
             }
-            initialTab={
-              activeSection === "automations"
-                ? "followups"
-                : activeSection === "documents" || activeSection === "admin"
-                ? "csv_rgpd"
-                : "contacts"
-            }
+            initialTab={activeSection === "automations" ? "followups" : "contacts"}
           />
-        ) : activeSection === "marketplace" || activeSection === "properties" || activeSection === "matching" || activeSection === "visits" || activeSection === "transactions" ? (
+        ) : activeSection === "properties" || activeSection === "matching" || activeSection === "visits" || activeSection === "transactions" ? (
+          <PortfolioMatchingPipelinePanel initialTab={activeSection} />
+        ) : activeSection === "marketplace" ? (
           <MarketplaceAndPublishView
             initialTab="search"
             initialCountry="FR"
@@ -212,17 +273,37 @@ export default function MontySaasCockpitPage() {
                     <Shield className="w-5 h-5 text-goldAntique" />
                     Authentification Agence &amp; RBAC
                   </h3>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emeraldDeep/10 text-emeraldDeep">
-                    {session ? "Session JWT active (RAM)" : "Déconnecté"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emeraldDeep/10 text-emeraldDeep">
+                      {session ? "Session JWT active" : "Déconnecté"}
+                    </span>
+                    {session && (
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-borderSubtle text-xs font-semibold text-obsidianInk hover:border-red-400 hover:text-red-700"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        Déconnexion
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <form onSubmit={handleRealAuthSubmit} className="space-y-2.5 text-sm border-b border-borderSubtle pb-4">
+                <form onSubmit={handleRealAuthSubmit} noValidate className="space-y-2.5 text-sm border-b border-borderSubtle pb-4">
+                  {authFormError && (
+                    <div className="rounded-xl bg-red-50 border border-red-300 px-3 py-2 text-xs text-red-900">
+                      {authFormError}
+                    </div>
+                  )}
                   <div className="flex gap-2 text-xs">
                     <button
                       type="button"
-                      onClick={() => setAuthMode("login")}
-                      className={`px-3 py-1 rounded-lg font-semibold ${
+                      onClick={() => {
+                        setAuthMode("login");
+                        setAuthFormError(null);
+                      }}
+                      className={`px-3 py-2 rounded-lg font-semibold min-h-[40px] ${
                         authMode === "login" ? "bg-emeraldDeep text-goldChampagne" : "bg-ivoryWarm text-obsidianInk"
                       }`}
                     >
@@ -230,8 +311,11 @@ export default function MontySaasCockpitPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAuthMode("register")}
-                      className={`px-3 py-1 rounded-lg font-semibold ${
+                      onClick={() => {
+                        setAuthMode("register");
+                        setAuthFormError(null);
+                      }}
+                      className={`px-3 py-2 rounded-lg font-semibold min-h-[40px] ${
                         authMode === "register" ? "bg-emeraldDeep text-goldChampagne" : "bg-ivoryWarm text-obsidianInk"
                       }`}
                     >
@@ -247,7 +331,7 @@ export default function MontySaasCockpitPage() {
                         value={authAgencyName}
                         onChange={(e) => setAuthAgencyName(e.target.value)}
                         placeholder="Nom de l'agence"
-                        className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2 text-xs"
+                        className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5 text-xs"
                       />
                       <input
                         type="text"
@@ -255,7 +339,7 @@ export default function MontySaasCockpitPage() {
                         value={authDisplayName}
                         onChange={(e) => setAuthDisplayName(e.target.value)}
                         placeholder="Votre nom complet"
-                        className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2 text-xs"
+                        className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5 text-xs"
                       />
                     </div>
                   )}
@@ -267,7 +351,7 @@ export default function MontySaasCockpitPage() {
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
                       placeholder="E-mail professionnel"
-                      className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2 text-xs"
+                      className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5 text-xs"
                     />
                     <input
                       type="password"
@@ -276,14 +360,19 @@ export default function MontySaasCockpitPage() {
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
                       placeholder="Mot de passe (≥ 8 caractères)"
-                      className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2 text-xs"
+                      className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5 text-xs"
                     />
                   </div>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid"
+                    disabled={authLoading}
+                    className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid disabled:opacity-50"
                   >
-                    {authMode === "register" ? "Créer mon espace Agence (Directeur)" : "Se connecter"}
+                    {authLoading
+                      ? "Connexion en cours..."
+                      : authMode === "register"
+                      ? "Créer mon espace Agence (Directeur)"
+                      : "Se connecter"}
                   </button>
                 </form>
 

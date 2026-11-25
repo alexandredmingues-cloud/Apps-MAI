@@ -1,6 +1,10 @@
 import type {
   AdvisorPrivateNote,
+  AgencySubscriptionInfo,
+  AgentCatalogResponse,
+  AgentExecutionLog,
   AudienceScope,
+  AuthorizedFeedSource,
   CapitalGainResult,
   ContactExchange,
   ContactRole,
@@ -10,36 +14,80 @@ import type {
   CrmContact,
   CsvImportSummary,
   DualBriefingResponse,
+  DvfComparableInput,
+  DvfValuationResult,
   ExchangeChannel,
+  FeedFormat,
+  FeedSyncResult,
   FollowUpTask,
   HealthStatus,
   HcsfResult,
   IndicativeEstimationResult,
+  KillSwitchResult,
   MarketplaceListing,
   MarketplaceSearchHit,
+  MatchingCalculationResult,
   MonthlyPaymentResult,
   MontyRole,
   NewsCategory,
   NewsSource,
   NotaryFeesResult,
   PortugalAcquisitionCostResult,
+  PreEtatDateComputeResult,
+  PreEtatDateExportResult,
+  PreEtatDatePayload,
   ProNewsArticle,
   PublicNewsArticle,
   PublisherType,
   RentalYieldResult,
   SaasPlanInfo,
+  SaleTimelineEstimate,
+  ScoutProposal,
   SearchPerimeterMode,
   SessionInfo,
+  TeamInviteResult,
+  TeamMemberInfo,
   TransportMode,
   UserNewsPreferences,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
+const SESSION_STORAGE_KEY = "monty_saas_session_v2";
 
 let inMemoryToken: string | null = null;
 
 export function setInMemoryAccessToken(token: string | null): void {
   inMemoryToken = token;
+}
+
+export function persistSession(session: SessionInfo | null): void {
+  inMemoryToken = session?.access_token ?? null;
+  if (typeof window === "undefined") return;
+  try {
+    if (session) {
+      window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    } else {
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
+}
+
+export function loadPersistedSession(): SessionInfo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SessionInfo;
+    if (parsed?.access_token) {
+      inMemoryToken = parsed.access_token;
+      return parsed;
+    }
+  } catch {
+    // Ignore malformed storage entry
+  }
+  return null;
 }
 
 export function hasInMemoryAccessToken(): boolean {
@@ -62,6 +110,8 @@ async function requestJson<T>(path: string, init: RequestInit = {}, includeAuth 
 
 export const montyApi = {
   health: () => requestJson<HealthStatus>("/api/v1/health", {}, false),
+  getMe: () =>
+    requestJson<{ user_id: string; agency_id: string; role: MontyRole; permissions: string[] }>("/api/v1/auth/me"),
   issueDevSession: (payload: { user_id: string; agency_id: string; role: MontyRole }) =>
     requestJson<SessionInfo>(
       "/api/v1/auth/dev-session",
@@ -452,4 +502,170 @@ export const montyApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // V2 — Équipe, Abonnement, DVF Score Monty, Matching, Pré-État Daté L.721-2 & 11 Agents
+  listTeamMembers: () =>
+    requestJson<{ count: number; members: TeamMemberInfo[] }>("/api/v1/team/members"),
+
+  createTeamInvite: (payload: { target_email: string; target_name?: string; role: MontyRole }) =>
+    requestJson<TeamInviteResult>("/api/v1/team/invites", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getSubscription: () => requestJson<AgencySubscriptionInfo>("/api/v1/billing/subscription"),
+
+  createCheckoutSession: (payload: {
+    plan_code: "INDIVIDUAL" | "AGENCY" | "NETWORK";
+    success_url: string;
+    cancel_url: string;
+  }) =>
+    requestJson<{ checkout_session_id: string; checkout_url: string; plan_code: string }>(
+      "/api/v1/billing/checkout-session",
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+
+  calculateDvf: (payload: {
+    comparables: DvfComparableInput[];
+    property_kind: string;
+    surface_m2: number;
+    dpe: string;
+    condition_label: string;
+    provided_docs_ratio: number;
+    floor_and_elevator?: string;
+    view_and_exposure?: string;
+    exterior_type?: string;
+    parking_type?: string;
+    environment_calm?: string;
+  }) =>
+    requestJson<DvfValuationResult>("/api/v1/calculators/dvf", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  calculateSaleTimeline: (payload: {
+    sector_name: string;
+    property_kind: string;
+    asking_price_euro: number;
+    surface_m2: number;
+    dpe: string;
+    condition_label: string;
+    dvf_price_m2: number;
+    dvf_count: number;
+    photo_count: number;
+    provided_docs_ratio: number;
+    mandate_type?: string;
+  }) =>
+    requestJson<SaleTimelineEstimate & { warnings?: string[] }>("/api/v1/calculators/sale-timeline", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  calculateMatching: (payload: {
+    price: number;
+    estimated_works?: number;
+    sector: string;
+    property_type: string;
+    surface: number;
+    bedrooms: number;
+    dpe: string;
+    exterior?: string;
+    parking?: string;
+    environment?: string;
+    transports?: string;
+    floor?: string;
+    latitude?: number;
+    longitude?: number;
+    buyer_budget_max: number;
+    buyer_sectors: string[];
+    buyer_property_type: string;
+    buyer_min_surface: number;
+    buyer_min_rooms: number;
+    buyer_essential_criteria?: string[];
+    search_mode?: SearchPerimeterMode;
+    search_center_lat?: number;
+    search_center_lon?: number;
+    search_center_address?: string;
+    search_radius_km?: number;
+    search_max_travel_minutes?: number;
+    search_transport_mode?: TransportMode;
+  }) =>
+    requestJson<MatchingCalculationResult>("/api/v1/calculators/matching", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  computePreEtatDate: (payload: PreEtatDatePayload) =>
+    requestJson<PreEtatDateComputeResult>("/api/v1/pre-etat-date/compute", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  exportPreEtatDateHtml: (payload: PreEtatDatePayload) =>
+    requestJson<PreEtatDateExportResult>("/api/v1/pre-etat-date/export", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getAgentsCatalog: () => requestJson<AgentCatalogResponse>("/api/v1/agents/catalog"),
+
+  runAgent: (payload: { agent_id: string; prompt_text: string }) =>
+    requestJson<AgentExecutionLog>("/api/v1/agents/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getAgentLogs: () => requestJson<{ count: number; logs: AgentExecutionLog[] }>("/api/v1/agents/logs"),
+
+  setAgentsKillSwitch: (payload: { enabled: boolean; reason?: string }) =>
+    requestJson<KillSwitchResult>("/api/v1/agents/kill-switch", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listScoutProposals: () =>
+    requestJson<{ count: number; proposals: ScoutProposal[] }>("/api/v1/agents/scout/proposals"),
+
+  createScoutProposal: (payload: {
+    target_contact_name: string;
+    channel: "WHATSAPP" | "EMAIL" | "SMS";
+    legal_basis: string;
+    message_draft: string;
+  }) =>
+    requestJson<ScoutProposal>("/api/v1/agents/scout/proposals", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  decideScoutProposal: (proposalId: string, approve: boolean) =>
+    requestJson<ScoutProposal>(`/api/v1/agents/scout/proposals/${proposalId}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ approve }),
+    }),
+
+  // Flux partenaires autorisés (XML / JSON / JSON-LD)
+  listAuthorizedFeeds: () =>
+    requestJson<{ count: number; feeds: AuthorizedFeedSource[] }>("/api/v1/marketplace/feeds"),
+
+  registerAuthorizedFeed: (payload: {
+    name: string;
+    country_code: CountryCode;
+    publisher_type: PublisherType;
+    feed_format: FeedFormat;
+    feed_url: string;
+    agreement_confirmed: boolean;
+    auto_publish_verified_agency?: boolean;
+  }) =>
+    requestJson<AuthorizedFeedSource>("/api/v1/marketplace/feeds", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  syncAuthorizedFeed: (feedId: string, inlinePayload?: string) =>
+    requestJson<FeedSyncResult>(`/api/v1/marketplace/feeds/${feedId}/sync`, {
+      method: "POST",
+      body: JSON.stringify(inlinePayload ? { inline_payload: inlinePayload } : {}),
+    }),
 };
+
+

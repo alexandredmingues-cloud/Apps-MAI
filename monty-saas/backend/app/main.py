@@ -5,22 +5,26 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import router as v1_router
 from app.core.config import load_settings
+from app.core.observability import StructuredObservabilityMiddleware, configure_json_logging, init_sentry
 
 
 def create_app() -> FastAPI:
     settings = load_settings()
+    logger = configure_json_logging()
+    init_sentry(settings)
     app = FastAPI(
         title="Monty SaaS Immobilier API",
-        version="1.0.0",
+        version="2.0.0",
         docs_url=None if settings.is_production else "/docs",
         redoc_url=None if settings.is_production else "/redoc",
     )
+    app.add_middleware(StructuredObservabilityMiddleware, logger=logger)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
     app.include_router(v1_router)
     return app

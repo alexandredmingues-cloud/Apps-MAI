@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import text
 
 from app.api.v1.billing_router import billing_router
 from app.api.v1.crm_router import crm_router
@@ -11,6 +12,7 @@ from app.api.v1.deps import (
     get_settings,
     require_permission,
 )
+from app.api.v1.legal_agents_router import legal_agents_router
 from app.api.v1.marketplace_router import marketplace_router
 from app.api.v1.news_router import news_router
 from app.core.config import Settings
@@ -32,6 +34,7 @@ from app.domain.real_estate_engines import (
     compute_dvf_valuation_report,
     compute_hcsf_borrowing_capacity,
     estimate_sale_timeline,
+    validate_dvf_comparable,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -39,15 +42,18 @@ router.include_router(news_router)
 router.include_router(crm_router)
 router.include_router(marketplace_router)
 router.include_router(billing_router)
+router.include_router(legal_agents_router)
 
 _auth_service = AuthService()
 
 
 class HealthResponse(BaseModel):
     status: str
+    version: str = "2.0.0"
     service: str
     environment: str
     database_configured: bool
+    database_reachable: bool | None = None
     storage_mode: str
     dev_auth_enabled: bool
     redis_configured: bool
@@ -56,12 +62,27 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check(settings: Settings = Depends(get_settings)) -> HealthResponse:
+async def health_check(
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
+) -> HealthResponse:
+    db_reachable: bool | None = None
+    overall_status = "ok"
+    if sf is not None:
+        try:
+            async with sf() as session:
+                await session.execute(text("SELECT 1"))
+            db_reachable = True
+        except Exception:
+            db_reachable = False
+            overall_status = "degraded"
+
     return HealthResponse(
-        status="ok",
+        status=overall_status,
         service="monty-saas-api",
         environment=settings.environment,
         database_configured=bool(settings.database_url),
+        database_reachable=db_reachable,
         storage_mode="postgresql_rls" if settings.database_url else "in_memory_fallback",
         dev_auth_enabled=settings.can_issue_dev_session,
         redis_configured=bool(settings.redis_url),
@@ -442,13 +463,23 @@ async def calculate_matching(
 
 
 class DvfComparableIn(BaseModel):
-    mutation_id: str
-    date_mutation: str
-    year: int
-    price_euro: int = Field(ge=15000)
-    surface_m2: int = Field(ge=10)
-    property_type: str
-    distance_meters: int = Field(ge=0, le=300)
+    mutation_id: str = Field(min_length=1, max_length=80)
+    date_mutation: str = Field(min_length=8, max_length=20)
+    year: int = Field(ge=2014, le=2035)
+    price_euro: int = Field(ge=15000, le=50_000_000)
+    surface_m2: int = Field(ge=10, le=2500)
+    property_type: str = Field(min_length=2, max_length=40)
+    distance_meters: int = Field(ge=0, le=5000)
+
+    @model_validator(mode="after")
+    def _validate_coherent_price_per_m2(self) -> "DvfComparableIn":
+        validate_dvf_comparable(
+            mutation_id=self.mutation_id,
+            year=self.year,
+            price_euro=self.price_euro,
+            surface_m2=self.surface_m2,
+        )
+        return self
 
 
 class DvfEstimationRequest(BaseModel):
@@ -506,6 +537,11 @@ async def calculate_dvf(
         "valuation_score": report.valuation_score,
         "score_label": report.score_label,
         "comparables_used_count": report.comparables_used_count,
+        "outliers_removed_count": report.outliers_removed_count,
+        "expanded_to_neighbor_sector": report.expanded_to_neighbor_sector,
+        "min_sample_required": report.min_sample_required,
+        "confidence_index": report.confidence_index,
+        "confidence_label": report.confidence_label,
         "data_date": report.data_date,
         "disclaimer": report.disclaimer,
         "justifications": report.justifications,

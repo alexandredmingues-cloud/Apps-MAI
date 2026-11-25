@@ -11,6 +11,7 @@ import {
   Clock,
   Footprints,
   GitCompare,
+  Globe2,
   Home,
   MapPin,
   PlusCircle,
@@ -22,6 +23,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { hasInMemoryAccessToken, montyApi } from "@/lib/api-client";
+import { PartnerFeedsPanel } from "./PartnerFeedsPanel";
 import {
   buildLocalListingCopy,
   computeLocalSaleTimeline,
@@ -61,7 +63,7 @@ export function MarketplaceAndPublishView({
   showTabs = true,
   audienceLabel = "Particuliers & Agences",
 }: MarketplaceAndPublishViewProps) {
-  const [activeTab, setActiveTab] = useState<"search" | "publish">(initialTab);
+  const [activeTab, setActiveTab] = useState<"search" | "publish" | "feeds">(initialTab);
   const [countryCode, setCountryCode] = useState<CountryCode>(initialCountry);
 
   // Filtres recherche mobilité
@@ -348,6 +350,8 @@ export function MarketplaceAndPublishView({
             <h2 className="font-display text-2xl sm:text-3xl font-bold">
               {activeTab === "search"
                 ? "Recherche par temps de trajet & transparence DVF"
+                : activeTab === "feeds"
+                ? "Connecteur de flux partenaires autorisés (XML / JSON / JSON-LD)"
                 : "Publier un bien avec aide à la rédaction & délai estimé"}
             </h2>
             <p className="text-xs sm:text-sm text-ivoryWarm/80">
@@ -399,6 +403,20 @@ export function MarketplaceAndPublishView({
                   <PlusCircle className="w-3.5 h-3.5" />
                   Publier un bien
                 </button>
+                {isProView && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("feeds")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition ${
+                      activeTab === "feeds"
+                        ? "bg-ivoryWarm text-emeraldDeep"
+                        : "text-ivoryWarm/80 hover:text-ivoryWarm"
+                    }`}
+                  >
+                    <Globe2 className="w-3.5 h-3.5" />
+                    Flux Partenaires
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -456,7 +474,9 @@ export function MarketplaceAndPublishView({
         </section>
       )}
 
-      {activeTab === "search" ? (
+      {activeTab === "feeds" ? (
+        <PartnerFeedsPanel onSynced={() => handleSearch()} />
+      ) : activeTab === "search" ? (
         <div className="space-y-6">
           {/* Barre de critères mobilité 6 modes */}
           <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-4">

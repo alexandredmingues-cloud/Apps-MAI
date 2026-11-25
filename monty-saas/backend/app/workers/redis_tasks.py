@@ -163,5 +163,193 @@ async def run_rgpd_retention_sweep(
     }
 
 
+async def run_dvf_sync_job(
+    ctx: dict[str, Any],
+    *,
+    sector_codes: list[str] | None = None,
+) -> dict[str, Any]:
+    """Job planifié DVF : importe, valide et met en cache PostgreSQL + fallback si source indisponible."""
+    from app.domain.dvf_sync_service import DvfSyncService
+
+    settings = load_settings()
+    dvf_service: DvfSyncService = (
+        ctx.get("dvf_service") if isinstance(ctx, dict) and ctx.get("dvf_service") else DvfSyncService()
+    )
+    targets = sector_codes or ["69003", "34000", "33000", "75015"]
+    reports = []
+    for code in targets:
+        rep = dvf_service.sync_sector_from_remote(
+            sector_code=code,
+            source_url=settings.dvf_source_url,
+        )
+        if settings.database_url and rep.status == "synced_live":
+            from sqlalchemy import text
+            from app.db.session import get_session_factory
+
+            sf = get_session_factory(settings.database_url)
+            if sf is not None:
+                async with sf() as session:
+                    async with session.begin():
+                        for comp in dvf_service.get_cached_comparables(code):
+                            await session.execute(
+                                text(
+                                    """
+                                    INSERT INTO dvf_mutations_cache
+                                      (mutation_id, sector_code, date_mutation, year, price_euro, surface_m2, property_type, distance_meters, synced_at)
+                                    VALUES
+                                      (:mutation_id, :sector_code, :date_mutation::date, :year, :price_euro, :surface_m2, :property_type, :distance_meters, now())
+                                    ON CONFLICT (mutation_id) DO UPDATE SET
+                                      price_euro = EXCLUDED.price_euro,
+                                      surface_m2 = EXCLUDED.surface_m2,
+                                      synced_at = now()
+                                    """
+                                ),
+                                {
+                                    "mutation_id": comp.mutation_id,
+                                    "sector_code": code,
+                                    "date_mutation": comp.date_mutation,
+                                    "year": comp.year,
+                                    "price_euro": comp.price_euro,
+                                    "surface_m2": comp.surface_m2,
+                                    "property_type": comp.property_type,
+                                    "distance_meters": comp.distance_meters,
+                                },
+                            )
+        reports.append(rep.__dict__)
+
+    return {
+        "status": "dvf_sync_completed",
+        "sectors_processed": len(reports),
+        "reports": reports,
+    }
+
+
+async def run_authorized_feeds_sync_job(
+    ctx: dict[str, Any],
+    *,
+    agency_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Job planifié ARQ : synchronise les flux partenaires autorisés (XML/JSON/JSON-LD) avec respect robots.txt & déduplication."""
+    settings = load_settings()
+    feeds_service = ctx.get("feeds_service") if isinstance(ctx, dict) else None
+    fetcher = ctx.get("fetcher") if isinstance(ctx, dict) else None
+    robots_fetcher = ctx.get("robots_fetcher") if isinstance(ctx, dict) else None
+
+    if settings.database_url and feeds_service is None:
+        from sqlalchemy import text
+        from app.db.postgres_v2_ops_repository import PostgresV2OpsRepository
+        from app.db.session import get_session_factory
+
+        sf = get_session_factory(settings.database_url)
+        if sf is not None:
+            repo = PostgresV2OpsRepository(sf)
+            async with sf() as session:
+                async with session.begin():
+                    if agency_ids is None:
+                        target_agencies = [
+                            str(aid)
+                            for aid in (await session.execute(text("SELECT id::text FROM agencies"))).scalars().all()
+                        ]
+                    else:
+                        target_agencies = list(agency_ids)
+
+            reports: list[dict[str, Any]] = []
+            for aid in target_agencies:
+                async with sf() as session:
+                    async with session.begin():
+                        actor_row = (
+                            await session.execute(
+                                text(
+                                    """
+                                    SELECT user_id::text, role
+                                    FROM agency_memberships
+                                    WHERE agency_id = CAST(:aid AS uuid) AND status = 'ACTIVE'
+                                    ORDER BY CASE role
+                                      WHEN 'DIRECTOR' THEN 1
+                                      WHEN 'ADMIN' THEN 2
+                                      WHEN 'AGENT' THEN 3
+                                      ELSE 4
+                                    END
+                                    LIMIT 1
+                                    """
+                                ),
+                                {"aid": aid},
+                            )
+                        ).mappings().first()
+                if actor_row is None:
+                    continue
+                tenant = TenantContext(
+                    user_id=str(actor_row["user_id"]),
+                    agency_id=aid,
+                    role=MontyRole(str(actor_row["role"])),
+                )
+                feeds = await repo.list_feeds(tenant)
+                for feed in feeds:
+                    if not feed.agreement_confirmed or ".example/" in feed.feed_url:
+                        continue
+                    res = await repo.sync_feed_to_postgres(
+                        tenant,
+                        feed_id=feed.id,
+                        fetcher=fetcher,
+                        robots_fetcher=robots_fetcher,
+                    )
+                    reports.append(res.__dict__)
+            logger.info("PostgreSQL authorized feeds sync completed feeds_synced=%s", len(reports))
+            return {
+                "status": "authorized_feeds_sync_completed",
+                "storage_mode": "postgresql_rls",
+                "feeds_processed": len(reports),
+                "reports": reports,
+            }
+
+    if feeds_service is None:
+        from app.domain.authorized_feeds_service import AuthorizedListingFeedsService
+        from app.domain.marketplace_service import MarketplaceService
+
+        feeds_service = AuthorizedListingFeedsService(MarketplaceService())
+
+    target_agencies = agency_ids or sorted({f.agency_id for f in feeds_service._feeds.values()})
+    reports = []
+    for aid in target_agencies:
+        system_ctx = TenantContext(user_id="feeds-worker", agency_id=aid, role=MontyRole.DIRECTOR)
+        for feed in feeds_service.list_feeds(system_ctx):
+            if not feed.agreement_confirmed or ".example/" in feed.feed_url:
+                continue
+            res = feeds_service.sync_feed(
+                system_ctx,
+                feed_id=feed.id,
+                fetcher=fetcher,
+                robots_fetcher=robots_fetcher,
+            )
+            reports.append(res.__dict__)
+
+    logger.info("Authorized feeds sync completed feeds_synced=%s", len(reports))
+    return {
+        "status": "authorized_feeds_sync_completed",
+        "storage_mode": "in_memory_fallback",
+        "feeds_processed": len(reports),
+        "reports": reports,
+    }
+
+
+try:
+    from arq import cron as _arq_cron
+
+    _CRON_JOBS = [
+        _arq_cron(run_rgpd_retention_sweep, hour=2, minute=0),
+        _arq_cron(run_dvf_sync_job, hour=3, minute=0),
+        _arq_cron(run_authorized_feeds_sync_job, hour=4, minute=0),
+    ]
+except ImportError:
+    _CRON_JOBS = []
+
+
 class WorkerSettings:
-    functions = [run_csv_excel_import_job, run_rgpd_retention_sweep]
+    functions = [
+        run_csv_excel_import_job,
+        run_rgpd_retention_sweep,
+        run_dvf_sync_job,
+        run_authorized_feeds_sync_job,
+    ]
+    cron_jobs = _CRON_JOBS
+

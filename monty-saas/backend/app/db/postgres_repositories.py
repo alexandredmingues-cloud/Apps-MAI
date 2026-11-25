@@ -976,6 +976,8 @@ class PostgresMarketplaceRepository:
         country_code: CountryCode = CountryCode.FR,
         publisher_type: PublisherType | None = None,
         origin_address: str = "Lyon",
+        origin_lat: float | None = None,
+        origin_lon: float | None = None,
         search_mode: SearchPerimeterMode = SearchPerimeterMode.TRAVEL_TIME,
         transport_mode: TransportMode = TransportMode.TRAM,
         max_radius_km: int = 15,
@@ -984,7 +986,9 @@ class PostgresMarketplaceRepository:
         min_surface_m2: int = 0,
         only_within_perimeter: bool = True,
     ) -> list[MarketplaceSearchHit]:
-        resolved_lat, resolved_lon, _, _ = _resolve_city_geo(origin_address, country_code)
+        fb_lat, fb_lon, _, _ = _resolve_city_geo(origin_address, country_code)
+        resolved_lat = origin_lat if origin_lat is not None else fb_lat
+        resolved_lon = origin_lon if origin_lon is not None else fb_lon
         clauses = ["publication_status = 'PUBLIEE'", "country_code = :cc"]
         params: dict[str, object] = {"cc": country_code.value, "min_surf": min_surface_m2}
         clauses.append("surface_m2 >= :min_surf")
@@ -1063,6 +1067,9 @@ class PostgresMarketplaceRepository:
         highlights: list[str],
         description: str,
         photo_count: int = 3,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        region_name: str | None = None,
     ) -> MarketplaceListing:
         if not (ctx.has_permission(Permission.PROPERTY_WRITE) or ctx.has_permission(Permission.SELLER_PORTAL_SELF)):
             raise PermissionError("Permission refusée pour publier une annonce immobilière.")
@@ -1070,7 +1077,10 @@ class PostgresMarketplaceRepository:
             raise PermissionError("Seul un conseiller/directeur d'agence peut publier en mode AGENCE.")
 
         get_country_pack(country_code)
-        lat, lon, region_name, ref_m2 = _resolve_city_geo(city, country_code)
+        fb_lat, fb_lon, fb_region, ref_m2 = _resolve_city_geo(city, country_code)
+        lat = latitude if latitude is not None else fb_lat
+        lon = longitude if longitude is not None else fb_lon
+        region_name = region_name or fb_region
         safe_title = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(title, 180))
         safe_desc = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(description, 2000))
         if not safe_title or price_euro < 10_000 or surface_m2 < 9:

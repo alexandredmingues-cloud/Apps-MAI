@@ -507,6 +507,43 @@ class DvfValuationCriteria:
     has_major_works_pending: bool = False
 
 
+MIN_SECTOR_SAMPLE = 15
+
+
+def validate_dvf_comparable(*, mutation_id: str, year: int, price_euro: int, surface_m2: int) -> None:
+    if year < 2014 or year > 2035:
+        raise ValueError(f"Ligne DVF incohérente ({mutation_id}) : année hors plage ({year}).")
+    if price_euro < 15_000 or surface_m2 < 10:
+        raise ValueError(f"Ligne DVF incohérente ({mutation_id}) : prix ou surface invalide.")
+    ppm2 = price_euro / surface_m2
+    if ppm2 < 300 or ppm2 > 45_000:
+        raise ValueError(
+            f"Ligne DVF incohérente ({mutation_id}) : prix/m² hors bornes réalistes ({round(ppm2)} €/m²)."
+        )
+
+
+def _filter_iqr_outliers(comparables: list[DvfComparable]) -> tuple[list[DvfComparable], int]:
+    """Exclut les valeurs aberrantes (€/m²) via la méthode IQR (Q1 - 1.5*IQR .. Q3 + 1.5*IQR)."""
+    valid = [c for c in comparables if c.price_per_m2 > 0]
+    if len(valid) < 4:
+        return valid, len(comparables) - len(valid)
+
+    sorted_vals = sorted(c.price_per_m2 for c in valid)
+    n = len(sorted_vals)
+    q1 = sorted_vals[n // 4]
+    q3 = sorted_vals[(3 * n) // 4]
+    iqr = q3 - q1
+    if iqr <= 0:
+        return valid, len(comparables) - len(valid)
+
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    kept = [c for c in valid if lower <= c.price_per_m2 <= upper]
+    if len(kept) < 2:
+        return valid, len(comparables) - len(valid)
+    return kept, len(comparables) - len(kept)
+
+
 @dataclass(frozen=True)
 class DvfValuationReport:
     estimated_low_euro: int
@@ -521,6 +558,11 @@ class DvfValuationReport:
     data_date: str
     disclaimer: str
     justifications: list[str]
+    outliers_removed_count: int = 0
+    expanded_to_neighbor_sector: bool = False
+    min_sample_required: int = MIN_SECTOR_SAMPLE
+    confidence_index: int = 0
+    confidence_label: str = "Données DVF insuffisantes"
 
 
 def _lookup_delta(selected: str, table: dict[str, float]) -> float:
@@ -544,14 +586,16 @@ def compute_dvf_valuation_report(
 ) -> DvfValuationReport:
     ref_year = reference_year or datetime.now(timezone.utc).year
     matching_type = [c for c in comparables if c.property_type.lower() == property_kind.lower()]
-    pool = matching_type if len(matching_type) >= 2 else comparables
+    raw_pool = matching_type if len(matching_type) >= 2 else comparables
+    pool, outliers_removed = _filter_iqr_outliers(raw_pool)
+    expanded_to_neighbor = len(pool) < MIN_SECTOR_SAMPLE
 
     weighted_sum = 0.0
     total_weight = 0.0
     for c in pool:
         ring_w = 3.0 if c.distance_meters <= 50 else (2.0 if c.distance_meters <= 100 else 1.0)
         age = max(0, min(6, ref_year - c.year))
-        recency_w = 1.25 if age <= 1 else (1.0 if age == 2 else 0.75)
+        recency_w = 1.4 if age == 0 else (1.25 if age == 1 else (1.0 if age == 2 else 0.7))
         w = ring_w * recency_w
         weighted_sum += c.price_per_m2 * w
         total_weight += w
@@ -559,7 +603,6 @@ def compute_dvf_valuation_report(
     base_m2 = (weighted_sum / total_weight) if total_weight > 0.0 else 0.0
     raw_m2 = round(base_m2)
     safe_surface = max(1, surface_m2)
-    base_market_euro = round((raw_m2 * safe_surface) / 500.0) * 500 if raw_m2 > 0 else 0
 
     dpe_map = {"A": 0.05, "B": 0.05, "C": 0.02, "D": 0.0, "E": -0.04, "F": -0.09, "G": -0.14}
     dpe_delta = dpe_map.get(dpe.strip().upper(), 0.0)
@@ -626,6 +669,17 @@ def compute_dvf_valuation_report(
         "Indicatif — Visite requise" if total_score >= 40 else
         "Données DVF insuffisantes"
     )
+    sample_factor = min(1.0, len(pool) / float(MIN_SECTOR_SAMPLE))
+    confidence_index = max(0, min(100, round(total_score * (0.6 + 0.4 * sample_factor))))
+    confidence_label = (
+        "Confiance élevée (≥ 15 ventes secteur)"
+        if (not expanded_to_neighbor and confidence_index >= 75)
+        else (
+            f"Confiance modérée — Échantillon < {MIN_SECTOR_SAMPLE} ventes, élargissement secteur voisin recommandé"
+            if expanded_to_neighbor and confidence_index >= 45
+            else f"Confiance limitée ({len(pool)}/{MIN_SECTOR_SAMPLE} ventes)"
+        )
+    )
 
     spread = 0.05 if total_score >= 65 else 0.08
     low_euro = round((mid_euro * (1.0 - spread)) / 500.0) * 500 if mid_euro > 0 else 0
@@ -636,6 +690,12 @@ def compute_dvf_valuation_report(
         f"{name} : {'+' if delta >= 0 else ''}{delta * 100:.1f}%"
         for name, delta in drivers
     ]
+    if outliers_removed > 0:
+        justifications.append(f"Filtrage IQR : {outliers_removed} valeur(s) aberrante(s) exclue(s).")
+    if expanded_to_neighbor:
+        justifications.append(
+            f"Échantillon secteur < {MIN_SECTOR_SAMPLE} ventes ({len(pool)}) : élargissement au secteur voisin activé."
+        )
 
     return DvfValuationReport(
         estimated_low_euro=low_euro,
@@ -650,6 +710,11 @@ def compute_dvf_valuation_report(
         data_date=latest_date,
         disclaimer="Estimation algorithmique indicative basée sur les mutations DVF publiques. Ne constitue pas une expertise immobilière certifiée.",
         justifications=justifications,
+        outliers_removed_count=outliers_removed,
+        expanded_to_neighbor_sector=expanded_to_neighbor,
+        min_sample_required=MIN_SECTOR_SAMPLE,
+        confidence_index=confidence_index,
+        confidence_label=confidence_label,
     )
 
 
