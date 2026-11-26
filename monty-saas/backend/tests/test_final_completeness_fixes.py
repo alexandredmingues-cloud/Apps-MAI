@@ -346,5 +346,16 @@ class AutoMatchingCompletenessTests(unittest.TestCase):
         self.assertIn("BUYER_MATCH_FOUND", crm_router_src)
 
 
+class HealthEndpointTests(unittest.TestCase):
+    def test_health_endpoint_checks_postgres_and_redis_with_latencies(self) -> None:
+        router_src = (BACKEND_DIR / "app" / "api" / "v1" / "router.py").read_text(encoding="utf-8")
+        self.assertIn("redis_reachable: bool | None = None", router_src)
+        self.assertIn("database_latency_ms: float | None = None", router_src)
+        self.assertIn("redis_latency_ms: float | None = None", router_src)
+        self.assertIn("await redis_client.ping()", router_src)
+        self.assertIn('await session.execute(text("SELECT 1"))', router_src)
+        self.assertIn("await redis_client.aclose()", router_src)
+
+
 if __name__ == "__main__":
     unittest.main()

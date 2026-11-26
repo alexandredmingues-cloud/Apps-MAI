@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
@@ -60,11 +63,15 @@ class HealthResponse(BaseModel):
     environment: str
     database_configured: bool
     database_reachable: bool | None = None
+    database_latency_ms: float | None = None
     storage_mode: str
     dev_auth_enabled: bool
     redis_configured: bool
+    redis_reachable: bool | None = None
+    redis_latency_ms: float | None = None
     openai_configured: bool
     stripe_configured: bool
+    checked_at: str = ""
 
 
 @router.get("/health", response_model=HealthResponse, tags=["System"])
@@ -73,15 +80,49 @@ async def health_check(
     sf=Depends(get_db_session_factory),
 ) -> HealthResponse:
     db_reachable: bool | None = None
+    db_latency_ms: float | None = None
+    redis_reachable: bool | None = None
+    redis_latency_ms: float | None = None
     overall_status = "ok"
+
     if sf is not None:
+        t0 = time.perf_counter()
         try:
             async with sf() as session:
                 await session.execute(text("SELECT 1"))
             db_reachable = True
+            db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         except Exception:
             db_reachable = False
+            db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
             overall_status = "degraded"
+
+    if settings.redis_url:
+        t1 = time.perf_counter()
+        redis_client = None
+        try:
+            import redis.asyncio as aioredis
+
+            redis_client = aioredis.from_url(
+                settings.redis_url,
+                socket_connect_timeout=2.0,
+                socket_timeout=2.0,
+            )
+            pong = await redis_client.ping()
+            redis_reachable = bool(pong)
+            redis_latency_ms = round((time.perf_counter() - t1) * 1000, 2)
+            if not redis_reachable:
+                overall_status = "degraded"
+        except Exception:
+            redis_reachable = False
+            redis_latency_ms = round((time.perf_counter() - t1) * 1000, 2)
+            overall_status = "degraded"
+        finally:
+            if redis_client is not None:
+                try:
+                    await redis_client.aclose()
+                except Exception:
+                    pass
 
     return HealthResponse(
         status=overall_status,
@@ -89,11 +130,15 @@ async def health_check(
         environment=settings.environment,
         database_configured=bool(settings.database_url),
         database_reachable=db_reachable,
+        database_latency_ms=db_latency_ms,
         storage_mode="postgresql_rls" if settings.database_url else "in_memory_fallback",
         dev_auth_enabled=settings.can_issue_dev_session,
         redis_configured=bool(settings.redis_url),
+        redis_reachable=redis_reachable,
+        redis_latency_ms=redis_latency_ms,
         openai_configured=bool(settings.openai_api_key),
         stripe_configured=bool(settings.stripe_secret_key and settings.stripe_webhook_secret),
+        checked_at=datetime.now(timezone.utc).isoformat(),
     )
 
 

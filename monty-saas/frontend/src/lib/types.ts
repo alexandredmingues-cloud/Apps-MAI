@@ -143,11 +143,15 @@ export interface HealthStatus {
   environment: string;
   database_configured: boolean;
   database_reachable?: boolean | null;
+  database_latency_ms?: number | null;
   storage_mode?: "postgresql_rls" | "in_memory_fallback";
   dev_auth_enabled?: boolean;
   redis_configured: boolean;
+  redis_reachable?: boolean | null;
+  redis_latency_ms?: number | null;
   openai_configured: boolean;
   stripe_configured: boolean;
+  checked_at?: string;
 }
 
 export interface SessionInfo {

@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import {
   CreditCard,
-  Database,
   History,
   Power,
   Shield,
@@ -13,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
+import { HealthCheckDashboard } from "./HealthCheckDashboard";
 import type {
   AgencyFeatureFlags,
   AgencySubscriptionInfo,
@@ -196,6 +196,8 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
         </div>
       )}
 
+      <HealthCheckDashboard initialHealth={health} onHealthUpdate={setHealth} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Équipe & Invitations */}
         <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-4">
@@ -258,32 +260,14 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
           </div>
         </div>
 
-        {/* Santé Système + Kill Switch + Stripe */}
+        {/* Kill Switch Agents IA + Stripe */}
         <div className="space-y-5">
-          <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
-            <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
-              <Database className="w-4 h-4 text-goldAntique" />
-              Infrastructure &amp; Sécurité Production
-            </h3>
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3 rounded-xl bg-ivoryWarm border border-borderSubtle">
-                <p className="text-slateMuted">PostgreSQL RLS</p>
-                <p className="font-bold text-emeraldDeep">
-                  {health?.database_configured
-                    ? health.database_reachable
-                      ? "Connecté (SELECT 1 OK)"
-                      : "Configuré (hors ligne)"
-                    : "Mode Dev Mémoire"}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-ivoryWarm border border-borderSubtle">
-                <p className="text-slateMuted">Redis Workers</p>
-                <p className="font-bold text-emeraldDeep">
-                  {health?.redis_configured ? "Actif" : "Non configuré"}
-                </p>
-              </div>
-            </div>
-            {agentsCat && (
+          {agentsCat && (
+            <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
+              <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
+                <Shield className="w-4 h-4 text-goldAntique" />
+                Gouvernance &amp; Sécurité Agents IA
+              </h3>
               <div className="flex items-center justify-between p-3 rounded-xl bg-ivoryWarm border border-borderSubtle">
                 <span className="flex items-center gap-1.5 font-semibold text-emeraldDeep">
                   <Shield className="w-4 h-4" />
@@ -301,8 +285,8 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
                   Basculer
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
             <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
