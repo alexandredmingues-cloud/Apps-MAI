@@ -219,6 +219,60 @@ class AuthService:
             permissions=sorted(p.value for p in ROLE_PERMISSIONS[MontyRole.DIRECTOR]),
         )
 
+    def register_client_account(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str,
+        role: MontyRole = MontyRole.BUYER,
+        country_code: CountryCode = CountryCode.FR,
+        settings: Settings,
+    ) -> AuthSessionResult:
+        if role not in (MontyRole.BUYER, MontyRole.SELLER):
+            raise ValueError("Rôle particulier autorisé uniquement : BUYER ou SELLER.")
+        clean_email = InputSanitizer.sanitize_text(email, 160).lower()
+        clean_name = InputSanitizer.sanitize_text(display_name, 120)
+        if "@" not in clean_email or "." not in clean_email.split("@")[-1] or not clean_name:
+            raise ValueError("Nom complet et adresse e-mail valide obligatoires.")
+        if clean_email in self._user_ids_by_email:
+            raise ValueError("Un compte existe déjà pour cet e-mail.")
+
+        agency = next(
+            (a for a in self._agencies.values() if a.country_code == country_code),
+            next(iter(self._agencies.values())),
+        )
+        pw_hash = hash_password(password)
+        user_id = f"usr-{uuid.uuid4().hex[:12]}"
+        user = UserAccountRecord(
+            id=user_id,
+            email=clean_email,
+            password_hash=pw_hash,
+            display_name=clean_name,
+        )
+        membership = MembershipRecord(agency_id=agency.id, user_id=user_id, role=role)
+        self._users_by_id[user_id] = user
+        self._user_ids_by_email[clean_email] = user_id
+        self._memberships[(agency.id, user_id)] = membership
+
+        token = create_access_token(
+            subject_user_id=user_id,
+            agency_id=agency.id,
+            role=role.value,
+            secret=settings.effective_jwt_secret,
+            ttl_seconds=settings.jwt_ttl_minutes * 60,
+        )
+        return AuthSessionResult(
+            access_token=token,
+            user_id=user_id,
+            agency_id=agency.id,
+            agency_name=agency.name,
+            display_name=user.display_name,
+            email=user.email,
+            role=role,
+            permissions=sorted(p.value for p in ROLE_PERMISSIONS[role]),
+        )
+
     def login(self, *, email: str, password: str, settings: Settings) -> AuthSessionResult:
         clean_email = InputSanitizer.sanitize_text(email, 160).lower()
         uid = self._user_ids_by_email.get(clean_email)

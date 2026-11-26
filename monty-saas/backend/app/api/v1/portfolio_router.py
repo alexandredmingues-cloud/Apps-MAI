@@ -3,9 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.api.v1.crm_router import _crm
 from app.api.v1.deps import get_db_session_factory, require_permission
 from app.core.rbac import Permission, TenantContext
 from app.db.postgres_portfolio_leads_repository import PostgresPortfolioLeadsRepository
+from app.domain.interconnections_service import interconnections_service
 from app.domain.portfolio_and_leads_service import (
     PortfolioAndLeadsService,
     TransactionStage,
@@ -13,7 +15,7 @@ from app.domain.portfolio_and_leads_service import (
 )
 
 portfolio_router = APIRouter(prefix="/portfolio", tags=["Phase 3 — Portefeuille, Visites & Transactions"])
-_portfolio_service = PortfolioAndLeadsService()
+_portfolio_service = PortfolioAndLeadsService(_crm, interconnections_service)
 
 
 def _prop_dto(p) -> dict:

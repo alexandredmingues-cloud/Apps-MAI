@@ -12,9 +12,11 @@ from app.api.v1.deps import (
     get_settings,
     require_permission,
 )
+from app.api.v1.interconnect_router import interconnect_router
 from app.api.v1.legal_agents_router import legal_agents_router
 from app.api.v1.marketplace_router import marketplace_router
 from app.api.v1.news_router import news_router
+from app.api.v1.notaries_rnic_router import notaries_rnic_router
 from app.api.v1.portfolio_router import portfolio_router
 from app.core.config import Settings
 from app.core.rbac import ROLE_PERMISSIONS, MontyRole, Permission, TenantContext
@@ -45,6 +47,8 @@ router.include_router(marketplace_router)
 router.include_router(billing_router)
 router.include_router(legal_agents_router)
 router.include_router(portfolio_router)
+router.include_router(notaries_rnic_router)
+router.include_router(interconnect_router)
 
 _auth_service = AuthService()
 
@@ -177,6 +181,58 @@ async def register_agency_account(
                 password=body.password,
                 display_name=body.display_name,
                 city=body.city,
+                country_code=body.country_code,
+                settings=settings,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return SessionResponse(
+        access_token=res.access_token,
+        user_id=res.user_id,
+        agency_id=res.agency_id,
+        agency_name=res.agency_name,
+        display_name=res.display_name,
+        email=res.email,
+        role=res.role,
+        permissions=res.permissions,
+    )
+
+
+class RegisterClientRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=160)
+    password: str = Field(min_length=8, max_length=128)
+    display_name: str = Field(min_length=2, max_length=120)
+    role: MontyRole = MontyRole.BUYER
+    country_code: CountryCode = CountryCode.FR
+
+
+@router.post(
+    "/auth/register-client",
+    response_model=SessionResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Auth"],
+)
+async def register_client_account(
+    body: RegisterClientRequest,
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
+) -> SessionResponse:
+    try:
+        if sf is not None:
+            res = await PostgresAuthRepository(sf).register_client_account(
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name,
+                role=body.role,
+                country_code=body.country_code,
+                settings=settings,
+            )
+        else:
+            res = _auth_service.register_client_account(
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name,
+                role=body.role,
                 country_code=body.country_code,
                 settings=settings,
             )

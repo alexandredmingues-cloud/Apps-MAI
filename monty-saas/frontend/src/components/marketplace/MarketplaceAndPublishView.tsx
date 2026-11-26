@@ -7,13 +7,14 @@ import {
   Bike,
   Building2,
   Bus,
-  Calculator,
+  CalendarPlus,
   Car,
   CheckCircle2,
   Clock,
   Footprints,
   GitCompare,
   Globe2,
+  Heart,
   LocateFixed,
   MapPin,
   PlusCircle,
@@ -22,6 +23,7 @@ import {
   TrainFront,
   TramFront,
   UserCheck,
+  X,
 } from "lucide-react";
 import { hasInMemoryAccessToken, montyApi } from "@/lib/api-client";
 import {
@@ -141,7 +143,133 @@ export function MarketplaceAndPublishView({
   const [publishBusy, setPublishBusy] = useState(false);
   const [pendingModeration, setPendingModeration] = useState<MarketplaceListing[]>([]);
 
+  // Favoris & Demande de visite (VISIT_REQUEST RGPD -> CRM Pro)
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [visitTarget, setVisitTarget] = useState<MarketplaceListing | null>(null);
+  const [visitName, setVisitName] = useState("");
+  const [visitEmail, setVisitEmail] = useState("");
+  const [visitPhone, setVisitPhone] = useState("");
+  const [visitSlot, setVisitSlot] = useState("Samedi matin ou fin de journée en semaine");
+  const [visitRgpd, setVisitRgpd] = useState(false);
+  const [visitBusy, setVisitBusy] = useState(false);
+  const [visitFeedback, setVisitFeedback] = useState<string | null>(null);
+  const [visitError, setVisitError] = useState<string | null>(null);
+
   const isProView = audienceLabel.includes("Monty Pro");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("monty_favorites_v1");
+        if (raw) {
+          const parsed = JSON.parse(raw) as { listing_id: string }[];
+          if (Array.isArray(parsed)) {
+            setFavoriteIds(parsed.map((item) => item.listing_id));
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    if (hasInMemoryAccessToken()) {
+      montyApi
+        .listPortalFavorites()
+        .then((res) => setFavoriteIds(res.favorites.map((f) => f.listing_id)))
+        .catch(() => {
+          // Ignore
+        });
+    }
+  }, []);
+
+  async function toggleFavorite(listing: MarketplaceListing) {
+    const exists = favoriteIds.includes(listing.id);
+    const nextIds = exists ? favoriteIds.filter((id) => id !== listing.id) : [listing.id, ...favoriteIds];
+    setFavoriteIds(nextIds);
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("monty_favorites_v1");
+        const prev = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
+        const filtered = Array.isArray(prev) ? prev.filter((item) => item.listing_id !== listing.id) : [];
+        const nextSnapshots = exists
+          ? filtered
+          : [
+              {
+                listing_id: listing.id,
+                title: listing.title,
+                city: listing.city,
+                price_euro: listing.price_euro,
+                surface_m2: listing.surface_m2,
+                rooms: listing.rooms,
+              },
+              ...filtered,
+            ];
+        window.localStorage.setItem("monty_favorites_v1", JSON.stringify(nextSnapshots));
+      } catch {
+        // Ignore
+      }
+    }
+    if (hasInMemoryAccessToken()) {
+      try {
+        if (exists) {
+          await montyApi.removePortalFavorite(listing.id);
+        } else {
+          await montyApi.addPortalFavorite({
+            listing_id: listing.id,
+            listing_snapshot: {
+              title: listing.title,
+              city: listing.city,
+              price_euro: listing.price_euro,
+              surface_m2: listing.surface_m2,
+              rooms: listing.rooms,
+            },
+          });
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  async function handleSubmitVisitRequest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!visitTarget) return;
+    setVisitError(null);
+    const cleanEmail = visitEmail.trim();
+    if (!cleanEmail.includes("@") || !cleanEmail.includes(".")) {
+      setVisitError("Saisissez une adresse e-mail valide.");
+      return;
+    }
+    if (!visitRgpd) {
+      setVisitError("Cochez le consentement RGPD pour transmettre votre demande de visite.");
+      return;
+    }
+    setVisitBusy(true);
+    try {
+      await montyApi.submitPublicLead({
+        agency_id: visitTarget.agency_id || undefined,
+        lead_kind: "VISIT_REQUEST",
+        country_code: countryCode,
+        full_name: visitName.trim() || cleanEmail.split("@")[0],
+        email: cleanEmail,
+        phone: visitPhone.trim(),
+        city: visitTarget.city,
+        budget_euro: visitTarget.price_euro,
+        property_title: visitTarget.title,
+        notes: `Créneau souhaité : ${visitSlot.trim()} — Bien #${visitTarget.id}`,
+        rgpd_consent_granted: true,
+      });
+      setVisitFeedback(`Demande de visite envoyée pour « ${visitTarget.title} ». Le conseiller de l'agence vous recontacte.`);
+      setVisitTarget(null);
+      setVisitName("");
+      setVisitEmail("");
+      setVisitPhone("");
+      setVisitRgpd(false);
+    } catch (err) {
+      setVisitError(err instanceof Error ? err.message : "Envoi temporairement indisponible.");
+    } finally {
+      setVisitBusy(false);
+    }
+  }
 
   function patchPubState(patch: Partial<PublishFormState>) {
     setPubState((prev) => ({ ...prev, ...patch }));
@@ -1059,27 +1187,135 @@ export function MarketplaceAndPublishView({
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-borderSubtle flex items-center justify-between gap-2 text-xs">
+                    <div className="pt-2 border-t border-borderSubtle flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span className="inline-flex items-center gap-1 text-emeraldDeep font-semibold">
                         <Clock className="w-3.5 h-3.5 text-goldAntique" />
-                        Délai estimé : ~{listing.sale_timeline.likely_days} j
+                        ~{listing.sale_timeline.likely_days} j
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleCompare(listing.id)}
-                        className={`px-3 py-1.5 rounded-lg font-bold border transition inline-flex items-center gap-1 ${
-                          isCompared
-                            ? "bg-emeraldDeep text-goldChampagne border-emeraldDeep"
-                            : "bg-ivoryWarm text-emeraldDeep border-borderSubtle hover:border-emeraldDeep"
-                        }`}
-                      >
-                        <GitCompare className="w-3.5 h-3.5" />
-                        {isCompared ? "Comparé ✓" : "Comparer"}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite(listing)}
+                          title={favoriteIds.includes(listing.id) ? "Retirer des favoris" : "Ajouter aux favoris"}
+                          className={`px-2.5 py-1.5 rounded-lg font-bold border transition inline-flex items-center gap-1 ${
+                            favoriteIds.includes(listing.id)
+                              ? "bg-rose-50 text-rose-700 border-rose-300"
+                              : "bg-ivoryWarm text-slateMuted border-borderSubtle hover:text-rose-700"
+                          }`}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${favoriteIds.includes(listing.id) ? "fill-rose-600 text-rose-600" : ""}`} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVisitTarget(listing);
+                            setVisitError(null);
+                            setVisitFeedback(null);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg font-bold border border-goldAntique bg-goldChampagne/20 text-emeraldDeep hover:bg-goldChampagne/40 transition inline-flex items-center gap-1"
+                        >
+                          <CalendarPlus className="w-3.5 h-3.5" />
+                          Visiter
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleCompare(listing.id)}
+                          className={`px-2.5 py-1.5 rounded-lg font-bold border transition inline-flex items-center gap-1 ${
+                            isCompared
+                              ? "bg-emeraldDeep text-goldChampagne border-emeraldDeep"
+                              : "bg-ivoryWarm text-emeraldDeep border-borderSubtle hover:border-emeraldDeep"
+                          }`}
+                        >
+                          <GitCompare className="w-3.5 h-3.5" />
+                          {isCompared ? "Comparé ✓" : "Comparer"}
+                        </button>
+                      </div>
                     </div>
                   </article>
                 );
               })}
+            </div>
+          )}
+
+          {visitFeedback && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-3 text-xs text-emerald-950 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>{visitFeedback}</span>
+            </div>
+          )}
+
+          {visitTarget && (
+            <div className="rounded-2xl bg-emeraldDeep text-ivoryWarm p-5 border border-goldAntique/50 space-y-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] uppercase tracking-widest text-goldChampagne font-bold">
+                    Prise de Rendez-vous Directe (CRM Agence)
+                  </p>
+                  <h4 className="font-display text-lg font-bold">
+                    Demander une visite : {visitTarget.title} ({visitTarget.city})
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVisitTarget(null)}
+                  className="p-1.5 rounded-lg bg-emeraldSurface hover:bg-emeraldMid"
+                  aria-label="Fermer le formulaire de visite"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {visitError && (
+                <div className="rounded-lg bg-rose-900/60 border border-rose-300 px-3 py-2 text-rose-100">
+                  {visitError}
+                </div>
+              )}
+              <form onSubmit={handleSubmitVisitRequest} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <input
+                  type="text"
+                  value={visitName}
+                  onChange={(e) => setVisitName(e.target.value)}
+                  placeholder="Votre nom complet"
+                  className="rounded-xl bg-ivoryWarm text-obsidianInk px-3 py-2"
+                />
+                <input
+                  type="email"
+                  value={visitEmail}
+                  onChange={(e) => setVisitEmail(e.target.value)}
+                  placeholder="Votre e-mail *"
+                  className="rounded-xl bg-ivoryWarm text-obsidianInk px-3 py-2"
+                />
+                <input
+                  type="text"
+                  value={visitPhone}
+                  onChange={(e) => setVisitPhone(e.target.value)}
+                  placeholder="Téléphone"
+                  className="rounded-xl bg-ivoryWarm text-obsidianInk px-3 py-2"
+                />
+                <input
+                  type="text"
+                  value={visitSlot}
+                  onChange={(e) => setVisitSlot(e.target.value)}
+                  placeholder="Créneau souhaité"
+                  className="rounded-xl bg-ivoryWarm text-obsidianInk px-3 py-2"
+                />
+                <label className="sm:col-span-3 inline-flex items-center gap-2 text-ivoryWarm/90 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visitRgpd}
+                    onChange={(e) => setVisitRgpd(e.target.checked)}
+                  />
+                  <span>
+                    J&apos;accepte que mes coordonnées soient transmises à l&apos;agence en charge de ce bien pour organiser la visite (Art. 6.1.a RGPD).
+                  </span>
+                </label>
+                <button
+                  type="submit"
+                  disabled={visitBusy}
+                  className="px-4 py-2 rounded-xl bg-goldAntique text-emeraldDeep font-bold hover:bg-goldChampagne disabled:opacity-50"
+                >
+                  {visitBusy ? "Envoi..." : "Confirmer la demande"}
+                </button>
+              </form>
             </div>
           )}
 

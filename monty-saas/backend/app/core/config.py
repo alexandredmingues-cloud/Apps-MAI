@@ -45,6 +45,14 @@ class Settings:
     whatsapp_phone_number_id: str = ""
     whatsapp_access_token: str = ""
     dvf_source_url: str = "https://api.cquest.org/dvf"
+    rnic_resource_id: str = ""
+    rnic_particulier_price_euro: int = 19
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    resend_api_key: str = ""
 
     @property
     def effective_anthropic_keys(self) -> list[str]:
@@ -111,4 +119,12 @@ def load_settings() -> Settings:
         whatsapp_phone_number_id=os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "").strip(),
         whatsapp_access_token=os.environ.get("WHATSAPP_ACCESS_TOKEN", "").strip(),
         dvf_source_url=os.environ.get("DVF_SOURCE_URL", "https://api.cquest.org/dvf").strip(),
+        rnic_resource_id=os.environ.get("RNIC_DATA_GOUV_RESOURCE_ID", "").strip(),
+        rnic_particulier_price_euro=int(os.environ.get("RNIC_PARTICULIER_PRICE_EURO", "19")),
+        smtp_host=os.environ.get("SMTP_HOST", "").strip(),
+        smtp_port=int(os.environ.get("SMTP_PORT", "587")),
+        smtp_user=os.environ.get("SMTP_USER", "").strip(),
+        smtp_password=os.environ.get("SMTP_PASSWORD", "").strip(),
+        smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", "").strip(),
+        resend_api_key=os.environ.get("RESEND_API_KEY", "").strip(),
     )

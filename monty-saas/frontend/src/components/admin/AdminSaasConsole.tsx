@@ -4,16 +4,20 @@ import React, { useEffect, useState } from "react";
 import {
   CreditCard,
   Database,
+  History,
   Power,
   Shield,
+  Sliders,
   Trash2,
   UserPlus,
   Users,
 } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
 import type {
+  AgencyFeatureFlags,
   AgencySubscriptionInfo,
   AgentCatalogResponse,
+  AuditLogEntry,
   HealthStatus,
   MontyRole,
   SaasPlanInfo,
@@ -27,6 +31,9 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
   const [subscription, setSubscription] = useState<AgencySubscriptionInfo | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [agentsCat, setAgentsCat] = useState<AgentCatalogResponse | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<AgencyFeatureFlags | null>(null);
+  const [checkoutBusyPlan, setCheckoutBusyPlan] = useState<string | null>(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
@@ -42,14 +49,18 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
       setHealth(h);
       setPlans(p.plans);
 
-      const [m, sub, cat] = await Promise.all([
+      const [m, sub, cat, flags, logsRes] = await Promise.all([
         montyApi.listTeamMembers(),
         montyApi.getSubscription(),
         montyApi.getAgentsCatalog(),
+        montyApi.getFeatureFlags().catch(() => null),
+        montyApi.listAuditLogs(25).catch(() => ({ count: 0, logs: [] as AuditLogEntry[] })),
       ]);
       setMembers(m.members);
       setSubscription(sub);
       setAgentsCat(cat);
+      setFeatureFlags(flags);
+      setAuditLogs(logsRes.logs);
     } catch (err) {
       setErrorMsg(
         err instanceof Error
@@ -62,6 +73,46 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
   useEffect(() => {
     refreshAdminData();
   }, []);
+
+  async function handleToggleFlag(key: keyof Omit<AgencyFeatureFlags, "agency_id" | "updated_at">) {
+    if (!featureFlags) return;
+    setErrorMsg(null);
+    const updated = {
+      auto_matching_enabled: featureFlags.auto_matching_enabled,
+      ai_copywriting_enabled: featureFlags.ai_copywriting_enabled,
+      rnic_free_for_sellers: featureFlags.rnic_free_for_sellers,
+      public_appointment_booking: featureFlags.public_appointment_booking,
+      notary_auto_task_on_compromis: featureFlags.notary_auto_task_on_compromis,
+      [key]: !featureFlags[key],
+    };
+    try {
+      const saved = await montyApi.updateFeatureFlags(updated);
+      setFeatureFlags(saved);
+      setStatusMessage("Paramètre fonctionnel d'agence mis à jour.");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Permission AGENCY_MANAGE requise pour modifier les flags.");
+    }
+  }
+
+  async function handleSubscribeStripe(planCode: "SOLO" | "AGENCY" | "NETWORK") {
+    setErrorMsg(null);
+    setCheckoutBusyPlan(planCode);
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://monty-site.onrender.com";
+      const res = await montyApi.createCheckoutSession({
+        plan_code: planCode,
+        success_url: `${origin}/?billing=success`,
+        cancel_url: `${origin}/?billing=cancel`,
+      });
+      if (res.checkout_url && typeof window !== "undefined") {
+        window.location.href = res.checkout_url;
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Stripe Checkout non configuré sur le serveur.");
+    } finally {
+      setCheckoutBusyPlan(null);
+    }
+  }
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -260,14 +311,86 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {plans.map((p) => (
-                <div key={p.code} className="p-3 rounded-xl bg-ivoryWarm border border-borderSubtle space-y-1">
-                  <p className="font-bold text-emeraldDeep">{p.name}</p>
-                  <p className="text-sm font-bold text-goldAntique">{p.monthly_price_euro} €/mois</p>
-                  <p className="text-[11px] text-slateMuted">{p.seat_limit} siège(s)</p>
+                <div key={p.code} className="p-3 rounded-xl bg-ivoryWarm border border-borderSubtle space-y-2 flex flex-col justify-between">
+                  <div>
+                    <p className="font-bold text-emeraldDeep">{p.name}</p>
+                    <p className="text-sm font-bold text-goldAntique">{p.monthly_price_euro} €/mois</p>
+                    <p className="text-[11px] text-slateMuted">{p.seat_limit} siège(s)</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={checkoutBusyPlan === p.code}
+                    onClick={() => handleSubscribeStripe(p.code as "SOLO" | "AGENCY" | "NETWORK")}
+                    className="w-full py-1.5 rounded-lg bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-50"
+                  >
+                    {checkoutBusyPlan === p.code ? "Redirection..." : "Souscrire Stripe"}
+                  </button>
                 </div>
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Feature Flags Agence & Journal d'Audit Immuable */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
+          <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-goldAntique" />
+            Paramètres &amp; Automatisations d&apos;Agence (Feature Flags)
+          </h3>
+          {!featureFlags ? (
+            <p className="text-slateMuted">Connectez une session Agence pour gérer les modules actifs.</p>
+          ) : (
+            <div className="space-y-2">
+              {(
+                [
+                  ["auto_matching_enabled", "Matching automatique acquéreurs sur nouveau bien"],
+                  ["ai_copywriting_enabled", "Rédaction d'annonces assistée IA"],
+                  ["rnic_free_for_sellers", "Base Copropriétés RNIC gratuite pour les vendeurs vérifiés"],
+                  ["public_appointment_booking", "Prise de rendez-vous visite en ligne (Annonces)"],
+                  ["notary_auto_task_on_compromis", "Relance Notaire automatique au passage en Compromis / Acte"],
+                ] as const
+              ).map(([key, label]) => (
+                <label
+                  key={key}
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl bg-ivoryWarm border border-borderSubtle cursor-pointer"
+                >
+                  <span className="font-medium text-obsidianInk">{label}</span>
+                  <input
+                    type="checkbox"
+                    checked={featureFlags[key]}
+                    onChange={() => handleToggleFlag(key)}
+                    className="h-4 w-4 accent-emeraldDeep"
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
+          <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
+            <History className="w-4 h-4 text-goldAntique" />
+            Journal d&apos;Audit Immuable ({auditLogs.length})
+          </h3>
+          {auditLogs.length === 0 ? (
+            <p className="text-slateMuted">Aucun événement d&apos;audit récent (ou permission AUDIT_LOGS_READ requise).</p>
+          ) : (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {auditLogs.map((log) => (
+                <div key={log.id} className="p-2.5 rounded-xl bg-ivoryWarm border border-borderSubtle">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-emeraldDeep">{log.action_type}</span>
+                    <span className="text-[10px] font-mono text-slateMuted">{log.created_at.slice(0, 16)}</span>
+                  </div>
+                  <p className="text-slateMuted mt-0.5">
+                    {log.actor_role} • {log.detail}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

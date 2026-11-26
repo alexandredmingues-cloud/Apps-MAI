@@ -21,7 +21,6 @@ import {
   Sparkles,
   TrainFront,
   TramFront,
-  TrendingUp,
 } from "lucide-react";
 import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebHeader";
 import { getPublicArticlesCatalog } from "@/lib/news-catalog";

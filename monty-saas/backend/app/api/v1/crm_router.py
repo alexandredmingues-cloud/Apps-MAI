@@ -22,6 +22,7 @@ from app.domain.csv_import_export import (
     export_contacts_to_csv,
     import_contacts_from_csv,
 )
+from app.domain.interconnections_service import interconnections_service
 from app.domain.portfolio_and_leads_service import (
     LeadStatus,
     PortfolioAndLeadsService,
@@ -29,7 +30,7 @@ from app.domain.portfolio_and_leads_service import (
 
 crm_router = APIRouter(prefix="/crm", tags=["Phase 2 — CRM & RGPD"])
 _crm = CrmService()
-_leads_service = PortfolioAndLeadsService(_crm)
+_leads_service = PortfolioAndLeadsService(_crm, interconnections_service)
 
 
 def _public_lead_dto(lead) -> dict:

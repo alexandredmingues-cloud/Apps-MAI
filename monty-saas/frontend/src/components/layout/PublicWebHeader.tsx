@@ -1,9 +1,9 @@
 import React from "react";
 import Link from "next/link";
-import { Briefcase, Calculator, Globe2, Home, Newspaper, PlusCircle, ShieldCheck } from "lucide-react";
+import { Briefcase, Building2, Calculator, Globe2, Home, Newspaper, PlusCircle, ShieldCheck, UserCircle } from "lucide-react";
 
 interface PublicWebHeaderProps {
-  activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs";
+  activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs" | "coproprietes" | "mon-compte";
 }
 
 export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
@@ -24,65 +24,87 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
           </div>
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-1.5 text-sm font-medium">
+        <nav className="hidden xl:flex items-center gap-1 text-xs font-medium">
           <Link
             href="/site"
-            className={`px-3 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
               activePath === "site"
                 ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
                 : "text-ivoryWarm/85 hover:bg-emeraldMid"
             }`}
           >
-            <Globe2 className="w-4 h-4" />
+            <Globe2 className="w-3.5 h-3.5" />
             Accueil
           </Link>
           <Link
             href="/annonces"
-            className={`px-3 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
               activePath === "annonces"
                 ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
                 : "text-ivoryWarm/85 hover:bg-emeraldMid"
             }`}
           >
-            <Home className="w-4 h-4" />
-            Annonces &amp; Trajet
+            <Home className="w-3.5 h-3.5" />
+            Annonces
           </Link>
           <Link
             href="/publier"
-            className={`px-3 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
               activePath === "publier"
                 ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
                 : "text-ivoryWarm/85 hover:bg-emeraldMid"
             }`}
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-3.5 h-3.5" />
             Publier
           </Link>
           <Link
+            href="/coproprietes"
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+              activePath === "coproprietes"
+                ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
+                : "text-ivoryWarm/85 hover:bg-emeraldMid"
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Copropriétés
+          </Link>
+          <Link
             href="/actualites"
-            className={`px-3 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
               activePath === "actualites"
                 ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
                 : "text-ivoryWarm/85 hover:bg-emeraldMid"
             }`}
           >
-            <Newspaper className="w-4 h-4" />
+            <Newspaper className="w-3.5 h-3.5" />
             Actualités
           </Link>
           <Link
             href="/simulateurs"
-            className={`px-3 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
               activePath === "simulateurs"
                 ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
                 : "text-ivoryWarm/85 hover:bg-emeraldMid"
             }`}
           >
-            <Calculator className="w-4 h-4" />
+            <Calculator className="w-3.5 h-3.5" />
             Simulateurs
           </Link>
         </nav>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/mon-compte"
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition ${
+              activePath === "mon-compte"
+                ? "bg-emeraldSurface text-goldChampagne border-goldAntique"
+                : "border-goldAntique/40 text-ivoryWarm hover:bg-emeraldMid"
+            }`}
+          >
+            <UserCircle className="w-4 h-4" />
+            <span className="hidden sm:inline">Mon Espace</span>
+          </Link>
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-goldAntique text-emeraldDeep text-xs sm:text-sm font-bold hover:bg-goldChampagne transition"
@@ -94,7 +116,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
       </div>
 
       {/* Navigation mobile compacte */}
-      <div className="lg:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap">
+      <div className="xl:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap">
         <Link href="/site" className={`px-3 py-1.5 rounded-lg ${activePath === "site" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           Accueil
         </Link>
@@ -104,11 +126,17 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
         <Link href="/publier" className={`px-3 py-1.5 rounded-lg ${activePath === "publier" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           Publier
         </Link>
+        <Link href="/coproprietes" className={`px-3 py-1.5 rounded-lg ${activePath === "coproprietes" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
+          Copropriétés
+        </Link>
         <Link href="/actualites" className={`px-3 py-1.5 rounded-lg ${activePath === "actualites" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           Actualités
         </Link>
         <Link href="/simulateurs" className={`px-3 py-1.5 rounded-lg ${activePath === "simulateurs" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           Simulateurs
+        </Link>
+        <Link href="/mon-compte" className={`px-3 py-1.5 rounded-lg ${activePath === "mon-compte" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
+          Mon Espace
         </Link>
       </div>
     </header>
@@ -132,6 +160,8 @@ export function PublicWebFooter() {
             <li><Link href="/site" className="hover:text-goldChampagne">Accueil Site Web Public</Link></li>
             <li><Link href="/annonces" className="hover:text-goldChampagne">Annonces &amp; Recherche par Temps de Trajet</Link></li>
             <li><Link href="/publier" className="hover:text-goldChampagne">Publier un Bien (Particuliers &amp; Agences)</Link></li>
+            <li><Link href="/coproprietes" className="hover:text-goldChampagne">Base Nationale Copropriétés (RNIC) &amp; Notaires</Link></li>
+            <li><Link href="/mon-compte" className="hover:text-goldChampagne">Mon Espace Particulier / Vendeur</Link></li>
             <li><Link href="/actualites" className="hover:text-goldChampagne">Centre d&apos;Actualités Particuliers</Link></li>
             <li><Link href="/simulateurs" className="hover:text-goldChampagne">6 Simulateurs Immobiliers Gratuits</Link></li>
             <li><Link href="/" className="hover:text-goldChampagne">Cockpit Professionnel Agences (SaaS)</Link></li>

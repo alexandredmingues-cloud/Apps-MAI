@@ -1,11 +1,18 @@
 import type {
+  AdminOverview,
   AdvisorPrivateNote,
+  AgencyFeatureFlags,
+  AgencyNotaryContact,
+  AgencyNotification,
   AgencySubscriptionInfo,
   AgentCatalogResponse,
   AgentExecutionLog,
   AudienceScope,
+  AuditLogEntry,
   AuthorizedFeedSource,
   CapitalGainResult,
+  ClientDocument,
+  ClientFavorite,
   ContactExchange,
   ContactRole,
   CopywritingResponse,
@@ -34,6 +41,9 @@ import type {
   NewsCategory,
   NewsSource,
   NotaryFeesResult,
+  NotarySearchResponse,
+  NotaryTransmissionRecord,
+  NotaryTransmissionType,
   PortfolioProperty,
   PortfolioTransaction,
   PortfolioVisit,
@@ -46,15 +56,19 @@ import type {
   PublicNewsArticle,
   PublisherType,
   RentalYieldResult,
+  RnicAccessStatus,
+  RnicSearchResponse,
   SaasPlanInfo,
   SaleTimelineEstimate,
   ScoutProposal,
   SearchPerimeterMode,
+  SellerListingSummary,
   SessionInfo,
   TeamInviteResult,
   TeamMemberInfo,
   TransactionStage,
   TransportMode,
+  UnifiedAgendaItem,
   UserNewsPreferences,
   VisitStatus,
 } from "./types";
@@ -774,7 +788,213 @@ export const montyApi = {
       method: "PATCH",
       body: JSON.stringify({ stage }),
     }),
+
+  // Inscription Particulier (Acquéreur / Vendeur) sans créer d'agence
+  registerClient: (payload: {
+    email: string;
+    password: string;
+    display_name: string;
+    role: "BUYER" | "SELLER";
+    country_code?: CountryCode;
+  }) =>
+    requestJson<SessionInfo>(
+      "/api/v1/auth/register-client",
+      { method: "POST", body: JSON.stringify(payload) },
+      false
+    ),
+
+  // Annuaire Officiel des Notaires de France & Transmissions Dossiers Compromis
+  searchFrenchNotaries: (params: { query?: string; department_code?: string; postal_code?: string; per_page?: number }) => {
+    const q = new URLSearchParams();
+    if (params.query) q.set("query", params.query);
+    if (params.department_code) q.set("department_code", params.department_code);
+    if (params.postal_code) q.set("postal_code", params.postal_code);
+    if (params.per_page) q.set("per_page", String(params.per_page));
+    return requestJson<NotarySearchResponse>(`/api/v1/notaries/search?${q.toString()}`, {}, false);
+  },
+
+  listAgencyNotaries: () =>
+    requestJson<{ count: number; notaries: AgencyNotaryContact[] }>("/api/v1/notaries/book"),
+
+  saveAgencyNotary: (payload: {
+    siret?: string;
+    office_name: string;
+    notary_name?: string;
+    email?: string;
+    phone?: string;
+    street_address?: string;
+    postal_code?: string;
+    city?: string;
+    source?: string;
+    notes?: string;
+  }) =>
+    requestJson<AgencyNotaryContact>("/api/v1/notaries/book", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listNotaryTransmissions: () =>
+    requestJson<{ count: number; transmissions: NotaryTransmissionRecord[] }>("/api/v1/notaries/transmissions"),
+
+  createNotaryTransmission: (payload: {
+    notary_contact_id?: string | null;
+    transaction_id?: string | null;
+    property_id?: string | null;
+    dossier_ref: string;
+    transmission_type: NotaryTransmissionType;
+    recipient_email?: string;
+    recipient_office: string;
+    recipient_address?: string;
+    property_title: string;
+    property_address?: string;
+    seller_name?: string;
+    buyer_name?: string;
+    agreed_price_euro: number;
+    target_date?: string;
+    checklist_items?: string[];
+    notes?: string;
+    pre_etat_date_html?: string;
+    send_now?: boolean;
+  }) =>
+    requestJson<NotaryTransmissionRecord>("/api/v1/notaries/transmissions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  downloadNotaryTransmissionEml: async (transmissionId: string): Promise<{ filename: string; content: string }> => {
+    const headers = new Headers();
+    if (inMemoryToken) {
+      headers.set("Authorization", `Bearer ${inMemoryToken}`);
+    }
+    const res = await fetch(`${API_BASE}/api/v1/notaries/transmissions/${encodeURIComponent(transmissionId)}/eml`, {
+      method: "GET",
+      headers,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => res.statusText);
+      throw new Error(`API ${res.status}: ${detail}`);
+    }
+    const content = await res.text();
+    const disp = res.headers.get("Content-Disposition") ?? "";
+    const match = disp.match(/filename="?([^"]+)"?/i);
+    return {
+      filename: match?.[1] ?? `notaire-${transmissionId}.eml`,
+      content,
+    };
+  },
+
+  // Base Nationale des Copropriétés (RNIC ANAH — Gratuit Agences/Vendeurs, Payant Particuliers)
+  getRnicAccessStatus: (rnicPassToken?: string) => {
+    const q = rnicPassToken ? `?rnic_pass_token=${encodeURIComponent(rnicPassToken)}` : "";
+    return requestJson<RnicAccessStatus>(`/api/v1/rnic/access-status${q}`);
+  },
+
+  searchRnicCoproprietes: (params: {
+    postal_code?: string;
+    commune?: string;
+    immatriculation?: string;
+    address_query?: string;
+    page_size?: number;
+    rnic_pass_token?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (params.postal_code) q.set("postal_code", params.postal_code);
+    if (params.commune) q.set("commune", params.commune);
+    if (params.immatriculation) q.set("immatriculation", params.immatriculation);
+    if (params.address_query) q.set("address_query", params.address_query);
+    if (params.page_size) q.set("page_size", String(params.page_size));
+    if (params.rnic_pass_token) q.set("rnic_pass_token", params.rnic_pass_token);
+    return requestJson<RnicSearchResponse>(`/api/v1/rnic/search?${q.toString()}`);
+  },
+
+  createRnicCheckoutPass: (payload: { buyer_email: string; success_url: string; cancel_url: string }) =>
+    requestJson<{
+      checkout_session_id: string;
+      checkout_url: string;
+      pass_token: string;
+      amount_euro: number;
+    }>("/api/v1/billing/rnic-pass", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  verifyRnicPass: (params: { pass_token?: string; session_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params.pass_token) q.set("pass_token", params.pass_token);
+    if (params.session_id) q.set("session_id", params.session_id);
+    return requestJson<{ active: boolean; pass_token: string; expires_at?: string }>(
+      `/api/v1/billing/rnic-pass/verify?${q.toString()}`
+    );
+  },
+
+  // Notifications Agence, Agenda Unifié, Portail Particulier & Gouvernance Admin
+  listNotifications: (unreadOnly = false) =>
+    requestJson<{ count: number; unread_count: number; notifications: AgencyNotification[] }>(
+      `/api/v1/notifications${unreadOnly ? "?unread_only=true" : ""}`
+    ),
+
+  markNotificationRead: (notifId: string) =>
+    requestJson<AgencyNotification>(`/api/v1/notifications/${encodeURIComponent(notifId)}/read`, {
+      method: "POST",
+    }),
+
+  getUnifiedAgenda: () =>
+    requestJson<{ count: number; items: UnifiedAgendaItem[] }>("/api/v1/agenda"),
+
+  listPortalFavorites: () =>
+    requestJson<{ count: number; favorites: ClientFavorite[] }>("/api/v1/portal/favorites"),
+
+  addPortalFavorite: (payload: { listing_id: string; listing_snapshot?: Record<string, unknown> }) =>
+    requestJson<ClientFavorite>("/api/v1/portal/favorites", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  removePortalFavorite: (listingId: string) =>
+    requestJson<{ removed: boolean; listing_id: string }>(
+      `/api/v1/portal/favorites/${encodeURIComponent(listingId)}`,
+      { method: "DELETE" }
+    ),
+
+  listPortalDocuments: () =>
+    requestJson<{ count: number; documents: ClientDocument[] }>("/api/v1/portal/documents"),
+
+  addPortalDocument: (payload: {
+    title: string;
+    doc_category: string;
+    file_name: string;
+    mime_type?: string;
+    file_size_bytes?: number;
+    notes?: string;
+  }) =>
+    requestJson<ClientDocument>("/api/v1/portal/documents", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listSellerListings: () =>
+    requestJson<{ count: number; listings: SellerListingSummary[] }>("/api/v1/portal/seller-listings"),
+
+  getAdminOverview: () => requestJson<AdminOverview>("/api/v1/admin/overview"),
+
+  listAuditLogs: (limit = 40) =>
+    requestJson<{ count: number; logs: AuditLogEntry[] }>(`/api/v1/admin/audit-logs?limit=${limit}`),
+
+  getFeatureFlags: () => requestJson<AgencyFeatureFlags>("/api/v1/admin/feature-flags"),
+
+  updateFeatureFlags: (payload: {
+    auto_matching_enabled: boolean;
+    ai_copywriting_enabled: boolean;
+    rnic_free_for_sellers: boolean;
+    public_appointment_booking: boolean;
+    notary_auto_task_on_compromis: boolean;
+  }) =>
+    requestJson<AgencyFeatureFlags>("/api/v1/admin/feature-flags", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
 };
+
 
 
 

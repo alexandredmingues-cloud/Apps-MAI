@@ -337,6 +337,21 @@ export type PublisherType = "PARTICULIER" | "AGENCE";
 export type TransportMode = "VOITURE" | "TRAM" | "BUS" | "TRAIN" | "VELO" | "PIED";
 export type SearchPerimeterMode = "SECTOR_LIST" | "RADIUS_KM" | "TRAVEL_TIME";
 
+export interface SearchPerimeter {
+  country_code: CountryCode;
+  publisher_type?: PublisherType;
+  origin_address?: string;
+  origin_lat?: number;
+  origin_lon?: number;
+  search_mode?: SearchPerimeterMode;
+  transport_mode?: TransportMode;
+  max_radius_km?: number;
+  max_travel_minutes?: number;
+  max_price_euro?: number;
+  min_surface_m2?: number;
+  only_within_perimeter?: boolean;
+}
+
 export interface SaleTimelineEstimate {
   status: "READY" | "INSUFFICIENT_DATA";
   low_days: number;
@@ -619,7 +634,7 @@ export interface FeedSyncResult {
   synced_at: string;
 }
 
-export type LeadKind = "BUYER_CONCIERGE" | "SEARCH_ALERT" | "SELLER_VALUATION";
+export type LeadKind = "BUYER_CONCIERGE" | "SEARCH_ALERT" | "SELLER_VALUATION" | "VISIT_REQUEST";
 export type LeadStatus = "NEW" | "CONTACTED" | "CONVERTED" | "ARCHIVED";
 
 export interface PublicInboundLead {
@@ -686,5 +701,204 @@ export interface PortfolioTransaction {
   notary_target_date: string;
   created_at?: string;
 }
+
+export interface OfficialNotaryOffice {
+  siret: string;
+  siren: string;
+  office_name: string;
+  street_address: string;
+  postal_code: string;
+  city: string;
+  department_code: string;
+  latitude: number | null;
+  longitude: number | null;
+  csn_directory_url: string;
+  source: string;
+}
+
+export interface NotarySearchResponse {
+  status: string;
+  source: string;
+  email_notice: string;
+  count?: number;
+  status_code?: number;
+  error?: string;
+  offices: OfficialNotaryOffice[];
+}
+
+export interface AgencyNotaryContact {
+  id: string;
+  agency_id: string;
+  siret: string;
+  office_name: string;
+  notary_name: string;
+  email: string;
+  phone: string;
+  street_address: string;
+  postal_code: string;
+  city: string;
+  department_code: string;
+  source: string;
+  email_verified: boolean;
+  is_official_notaire_domain: boolean;
+  notes: string;
+  created_at: string;
+}
+
+export type NotaryTransmissionType = "OUVERTURE_DOSSIER" | "SIGNATURE_COMPROMIS" | "COMPLEMENT_ALUR";
+
+export interface NotaryTransmissionRecord {
+  id: string;
+  agency_id: string;
+  notary_contact_id: string | null;
+  transaction_id: string | null;
+  property_id: string | null;
+  dossier_ref: string;
+  transmission_type: NotaryTransmissionType | string;
+  recipient_email: string;
+  recipient_office: string;
+  recipient_address: string;
+  subject: string;
+  checklist_items: string[];
+  eml_content: string;
+  delivery_status: string;
+  delivery_provider_id: string;
+  created_at: string;
+}
+
+export interface RnicAccessStatus {
+  role: string;
+  free_tier_eligible: boolean;
+  has_paid_pass: boolean;
+  has_full_access: boolean;
+  particulier_price_euro: number;
+  pricing_policy: string;
+}
+
+export interface RnicCoproRecord {
+  numero_immatriculation: string;
+  nom_usage: string;
+  adresse_reference: string;
+  code_postal: string;
+  commune: string;
+  lot_count_band?: string;
+  nombre_total_lots: number | null;
+  nombre_lots_habitation: number | null;
+  nombre_lots_stationnement: number | null;
+  periode_construction: string;
+  type_syndic: string;
+  syndic_en_exercice: string;
+  copro_en_difficulte: boolean | null;
+  date_immatriculation: string;
+  locked: boolean;
+}
+
+export interface RnicSearchResponse {
+  status: string;
+  source: string;
+  resource_id?: string;
+  access_tier: "FULL" | "PAID_REQUIRED";
+  unlock_price_euro: number;
+  message?: string;
+  error?: string;
+  count: number;
+  records: RnicCoproRecord[];
+}
+
+export interface AgencyNotification {
+  id: string;
+  agency_id: string;
+  event_type: string;
+  title: string;
+  detail: string;
+  target_id: string;
+  link_section: NavSectionKey | string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface UnifiedAgendaItem {
+  id: string;
+  kind: "VISITE" | "RELANCE" | "NOTAIRE" | string;
+  title: string;
+  subtitle: string;
+  date_iso: string;
+  status: string;
+  priority: string;
+  link_section: NavSectionKey | string;
+}
+
+export interface ClientFavorite {
+  id: string;
+  user_id: string;
+  agency_id: string;
+  listing_id: string;
+  listing_snapshot: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ClientDocument {
+  id: string;
+  user_id: string;
+  agency_id: string;
+  title: string;
+  doc_category: string;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  notes: string;
+  created_at: string;
+}
+
+export interface SellerListingSummary {
+  id: string;
+  title: string;
+  city: string;
+  sector: string;
+  property_type: string;
+  price_euro: number;
+  surface_m2: number;
+  rooms: number;
+  dpe: string;
+  moderation_status: string;
+  moderation_note: string;
+  created_at: string;
+}
+
+export interface AdminOverview {
+  agency_id: string;
+  properties_count: number;
+  active_contacts_count: number;
+  scheduled_visits_count: number;
+  transactions_count: number;
+  pipeline_volume_euro: number;
+  open_followups_count: number;
+  new_public_leads_count: number;
+  unread_notifications_count: number;
+  ai_daily_spend_euro: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  agency_id: string;
+  actor_user_id: string;
+  actor_role: string;
+  action_type: string;
+  target_type: string;
+  target_id: string;
+  detail: string;
+  created_at: string;
+}
+
+export interface AgencyFeatureFlags {
+  agency_id: string;
+  auto_matching_enabled: boolean;
+  ai_copywriting_enabled: boolean;
+  rnic_free_for_sellers: boolean;
+  public_appointment_booking: boolean;
+  notary_auto_task_on_compromis: boolean;
+  updated_at?: string;
+}
+
 
 

@@ -234,7 +234,53 @@ class PostgresPortfolioLeadsRepository:
                     },
                 )
             ).mappings().one()
-            return self._row_to_property(row)
+            prop = self._row_to_property(row)
+            buyer_rows = (
+                await session.execute(
+                    self._text(
+                        """
+                        SELECT full_name, sector, budget_max
+                        FROM crm_contacts
+                        WHERE archived = false AND is_anonymized = false AND contact_type IN ('BUYER', 'Acquéreur')
+                        ORDER BY created_at DESC
+                        LIMIT 40
+                        """
+                    )
+                )
+            ).mappings().all()
+            matched_labels: list[str] = []
+            for br in buyer_rows:
+                b_budget = int(br.get("budget_max") or 0)
+                b_sector = str(br.get("sector") or "").lower()
+                if b_budget >= int(prop.price * 0.90) and (
+                    not b_sector or b_sector in prop.sector.lower() or prop.sector.lower() in b_sector
+                ):
+                    matched_labels.append(str(br["full_name"]))
+            await session.execute(
+                self._text(
+                    """
+                    INSERT INTO agency_notifications (
+                      agency_id, event_type, severity, title, detail, link_section, target_id
+                    ) VALUES (
+                      CAST(:aid AS uuid), :etype, :sev, :title, :detail, :lsec, :tid
+                    )
+                    """
+                ),
+                {
+                    "aid": ctx.agency_id,
+                    "etype": "BUYER_MATCH_FOUND" if matched_labels else "PROPERTY_CREATED",
+                    "sev": "SUCCESS" if matched_labels else "INFO",
+                    "title": f"Nouveau mandat : {prop.title}"[:200],
+                    "detail": (
+                        f"{prop.sector} • {prop.price:,} € • Acquéreurs compatibles : {', '.join(matched_labels[:3])}".replace(",", " ")
+                        if matched_labels
+                        else f"{prop.sector} • {prop.price:,} € • Prêt pour matching.".replace(",", " ")
+                    )[:300],
+                    "lsec": "matching" if matched_labels else "properties",
+                    "tid": prop.id,
+                },
+            )
+            return prop
 
     # --- VISITES ---
     async def list_visits(self, ctx: TenantContext) -> list[PortfolioVisit]:
@@ -449,7 +495,52 @@ class PostgresPortfolioLeadsRepository:
             ).mappings().first()
             if row is None:
                 raise ValueError("Transaction introuvable dans cette agence.")
-            return self._row_to_transaction(row)
+            tx = self._row_to_transaction(row)
+            if stage in (TransactionStage.COMPROMIS, TransactionStage.ACTE):
+                task_title = (
+                    f"Ouvrir dossier notaire & Pré-État Daté L.721-2 — {tx.property_title}"
+                    if stage == TransactionStage.COMPROMIS
+                    else f"Préparer acte définitif & remise des clés — {tx.property_title}"
+                )
+                await session.execute(
+                    self._text(
+                        """
+                        INSERT INTO follow_up_tasks (
+                          agency_id, created_by_user_id, assigned_to_user_id,
+                          title, contact_name, reason, channel, due_at, priority, status, auto_generated
+                        ) VALUES (
+                          CAST(:aid AS uuid), CAST(:uid AS uuid), CAST(:uid AS uuid),
+                          :title, :cname, :reason, 'EMAIL', now() + INTERVAL '1 day', 'HIGH', 'OPEN', true
+                        )
+                        """
+                    ),
+                    {
+                        "aid": ctx.agency_id,
+                        "uid": ctx.user_id,
+                        "title": task_title[:200],
+                        "cname": tx.buyer_name[:140],
+                        "reason": f"Passage au stade {stage.value} ({tx.offer_euro} €) — objectif notaire {tx.notary_target_date}."[:400],
+                    },
+                )
+                await session.execute(
+                    self._text(
+                        """
+                        INSERT INTO agency_notifications (
+                          agency_id, event_type, severity, title, detail, link_section, target_id
+                        ) VALUES (
+                          CAST(:aid AS uuid), :etype, 'HIGH', :title, :detail, 'documents', :tid
+                        )
+                        """
+                    ),
+                    {
+                        "aid": ctx.agency_id,
+                        "etype": f"TRANSACTION_{stage.value}",
+                        "title": task_title[:200],
+                        "detail": f"Acquéreur : {tx.buyer_name} • Objectif notaire : {tx.notary_target_date}."[:280],
+                        "tid": tx.id,
+                    },
+                )
+            return tx
 
     # --- LEADS PUBLICS ENTRANTS (RGPD + SECURITY DEFINER) ---
     async def submit_public_lead(

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Calculator, CheckCircle2, Database, Globe2, Lock, Newspaper, Server, Shield } from "lucide-react";
+import { Bell, Calculator, CalendarDays, CheckCircle2, Database, Globe2, Newspaper, Server, Shield, TrendingUp } from "lucide-react";
 import { LogOut } from "lucide-react";
 import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
 import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
@@ -14,7 +14,16 @@ import { MarketplaceAndPublishView } from "@/components/marketplace/MarketplaceA
 import { NewsHubExperience } from "@/components/news/NewsHubExperience";
 import { PortfolioMatchingPipelinePanel } from "@/components/portfolio/PortfolioMatchingPipelinePanel";
 import { loadPersistedSession, montyApi, persistSession } from "@/lib/api-client";
-import type { HealthStatus, HcsfResult, MontyRole, NavSectionKey, SessionInfo } from "@/lib/types";
+import type {
+  AdminOverview,
+  AgencyNotification,
+  HealthStatus,
+  HcsfResult,
+  MontyRole,
+  NavSectionKey,
+  SessionInfo,
+  UnifiedAgendaItem,
+} from "@/lib/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -38,6 +47,26 @@ export default function MontySaasCockpitPage() {
   const [authPassword, setAuthPassword] = useState("");
   const [authAgencyName, setAuthAgencyName] = useState("");
   const [authDisplayName, setAuthDisplayName] = useState("");
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [notifications, setNotifications] = useState<AgencyNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [agendaItems, setAgendaItems] = useState<UnifiedAgendaItem[]>([]);
+
+  async function refreshDashboardWidgets() {
+    try {
+      const [ov, notifRes, agRes] = await Promise.all([
+        montyApi.getAdminOverview(),
+        montyApi.listNotifications(),
+        montyApi.getUnifiedAgenda(),
+      ]);
+      setOverview(ov);
+      setNotifications(notifRes.notifications);
+      setUnreadCount(notifRes.unread_count);
+      setAgendaItems(agRes.items);
+    } catch {
+      // Hors ligne ou rôle sans accès Pro
+    }
+  }
 
   useEffect(() => {
     montyApi
@@ -56,10 +85,15 @@ export default function MontySaasCockpitPage() {
       setSession(stored);
       setAgencyId(stored.agency_id);
       setRole(stored.role);
-      montyApi.getMe().catch(() => {
-        persistSession(null);
-        setSession(null);
-      });
+      montyApi
+        .getMe()
+        .then(() => {
+          refreshDashboardWidgets();
+        })
+        .catch(() => {
+          persistSession(null);
+          setSession(null);
+        });
     }
   }, []);
 
@@ -76,6 +110,7 @@ export default function MontySaasCockpitPage() {
       persistSession(issued);
       setSession(issued);
       setRole(issued.role);
+      refreshDashboardWidgets();
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Erreur de connexion API");
     } finally {
@@ -126,6 +161,7 @@ export default function MontySaasCockpitPage() {
       setSession(issued);
       setAgencyId(issued.agency_id);
       setRole(issued.role);
+      refreshDashboardWidgets();
     } catch (err) {
       setAuthFormError(err instanceof Error ? err.message : "Échec d'authentification");
     } finally {
@@ -136,7 +172,21 @@ export default function MontySaasCockpitPage() {
   function handleLogout() {
     persistSession(null);
     setSession(null);
+    setOverview(null);
+    setNotifications([]);
+    setUnreadCount(0);
+    setAgendaItems([]);
     setAuthFormError(null);
+  }
+
+  async function handleMarkNotificationRead(notif: AgencyNotification) {
+    try {
+      const updated = await montyApi.markNotificationRead(notif.id);
+      setNotifications((prev) => prev.map((n) => (n.id === notif.id ? updated : n)));
+      setUnreadCount((c) => Math.max(0, c - (notif.is_read ? 0 : 1)));
+    } catch {
+      // Ignore
+    }
   }
 
   async function handleRunHcsf() {
@@ -495,15 +545,131 @@ export default function MontySaasCockpitPage() {
               </div>
             </section>
 
+            {/* KPI Temps Réel + Notifications Interconnectées + Agenda Unifié */}
+            {overview && (
+              <section className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                  <div className="rounded-xl bg-ivoryCard border border-borderSubtle p-3.5">
+                    <p className="text-slateMuted">Biens actifs</p>
+                    <p className="text-xl font-display font-bold text-emeraldDeep">{overview.properties_count}</p>
+                  </div>
+                  <div className="rounded-xl bg-ivoryCard border border-borderSubtle p-3.5">
+                    <p className="text-slateMuted">Contacts CRM</p>
+                    <p className="text-xl font-display font-bold text-emeraldDeep">{overview.active_contacts_count}</p>
+                  </div>
+                  <div className="rounded-xl bg-ivoryCard border border-borderSubtle p-3.5">
+                    <p className="text-slateMuted">Visites prévues</p>
+                    <p className="text-xl font-display font-bold text-emeraldDeep">{overview.scheduled_visits_count}</p>
+                  </div>
+                  <div className="rounded-xl bg-ivoryCard border border-borderSubtle p-3.5">
+                    <p className="text-slateMuted">Pipeline</p>
+                    <p className="text-lg font-display font-bold text-goldAntique">
+                      {overview.pipeline_volume_euro.toLocaleString("fr-FR")} €
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-ivoryCard border border-borderSubtle p-3.5">
+                    <p className="text-slateMuted">Relances ouvertes</p>
+                    <p className="text-xl font-display font-bold text-emeraldDeep">{overview.open_followups_count}</p>
+                  </div>
+                  <div className="rounded-xl bg-ivoryCard border border-borderSubtle p-3.5">
+                    <p className="text-slateMuted">Nouveaux leads web</p>
+                    <p className="text-xl font-display font-bold text-emeraldDeep">{overview.new_public_leads_count}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-goldAntique" />
+                        Notifications Agence ({unreadCount} non lue{unreadCount > 1 ? "s" : ""})
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={refreshDashboardWidgets}
+                        className="text-emeraldDeep font-semibold hover:underline"
+                      >
+                        Actualiser
+                      </button>
+                    </div>
+                    {notifications.length === 0 ? (
+                      <p className="text-slateMuted">Aucune alerte interne pour le moment.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {notifications.slice(0, 8).map((n) => (
+                          <div
+                            key={n.id}
+                            className={`rounded-xl p-3 border flex items-start justify-between gap-2 ${
+                              n.is_read ? "bg-ivoryWarm border-borderSubtle" : "bg-amber-50 border-amber-300"
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-emeraldDeep">{n.title}</p>
+                              <p className="text-slateMuted">{n.detail}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!n.is_read) handleMarkNotificationRead(n);
+                                  setActiveSection((n.link_section as NavSectionKey) || "dashboard");
+                                }}
+                                className="px-2 py-1 rounded-lg bg-emeraldDeep text-goldChampagne font-bold"
+                              >
+                                Ouvrir
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
+                    <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-goldAntique" />
+                      Agenda Unifié (Visites • Relances • Notaires)
+                    </h3>
+                    {agendaItems.length === 0 ? (
+                      <p className="text-slateMuted">Aucune échéance planifiée à venir.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {agendaItems.slice(0, 8).map((ag) => (
+                          <button
+                            key={ag.id}
+                            type="button"
+                            onClick={() => setActiveSection((ag.link_section as NavSectionKey) || "visits")}
+                            className="w-full text-left rounded-xl p-3 bg-ivoryWarm border border-borderSubtle hover:border-emeraldDeep transition flex items-center justify-between gap-2"
+                          >
+                            <div>
+                              <p className="font-bold text-obsidianInk">{ag.title}</p>
+                              <p className="text-slateMuted">{ag.subtitle}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="px-2 py-0.5 rounded bg-emeraldDeep/10 text-emeraldDeep font-bold text-[10px]">
+                                {ag.kind}
+                              </span>
+                              <p className="text-[11px] font-mono text-slateMuted mt-1">{ag.date_iso}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Statut transparent du plan de livraison */}
             <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5">
               <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-lg">
-                <Lock className="w-5 h-5 text-goldAntique" />
-                Plateforme Monty Phase 1 + Phase 2 prête au lancement ({activeSection.toUpperCase()})
+                <TrendingUp className="w-5 h-5 text-goldAntique" />
+                Plateforme Monty Complète — Particuliers, Pro, Notaires, RNIC &amp; IA ({activeSection.toUpperCase()})
               </div>
               <p className="mt-2 text-sm text-slateMuted">
-                Socle multi-pays FR/PT + Site Web Public (`/site`, `/annonces`, `/publier`), Centre d&apos;Actualités Double Public (`/actualites`, `/pro/actualites`),
-                6 Simulateurs (`/simulateurs`), CRM Multi-Agences avec notes privées isolées, relances automatiques, import/export CSV sécurisé et conformité RGPD complète.
+                Socle multi-pays FR/PT + Site Web Public (`/site`, `/annonces`, `/publier`, `/coproprietes`, `/mon-compte`),
+                Annuaire Notaires de France &amp; Envoi Compromis `.eml`, Base Copropriétés RNIC (Gratuit Agences/Vendeurs, Payant Particuliers),
+                CRM Multi-Agences, Pipeline Transactions, 11 Agents IA et Gouvernance RBAC + RGPD.
               </p>
             </section>
           </>

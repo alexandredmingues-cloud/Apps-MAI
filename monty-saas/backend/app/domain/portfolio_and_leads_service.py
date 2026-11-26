@@ -16,6 +16,7 @@ class LeadKind(str, Enum):
     BUYER_CONCIERGE = "BUYER_CONCIERGE"
     SEARCH_ALERT = "SEARCH_ALERT"
     SELLER_VALUATION = "SELLER_VALUATION"
+    VISIT_REQUEST = "VISIT_REQUEST"
 
 
 class LeadStatus(str, Enum):
@@ -109,8 +110,13 @@ class PortfolioAndLeadsService:
     le Portefeuille Pro (Biens, Visites, Transactions) et les Leads Publics RGPD.
     """
 
-    def __init__(self, crm_service: CrmService | None = None) -> None:
+    def __init__(
+        self,
+        crm_service: CrmService | None = None,
+        interconnections=None,
+    ) -> None:
         self._crm = crm_service
+        self._interconnections = interconnections
         self._properties: dict[str, PortfolioProperty] = {}
         self._visits: dict[str, PortfolioVisit] = {}
         self._transactions: dict[str, PortfolioTransaction] = {}
@@ -220,6 +226,53 @@ class PortfolioAndLeadsService:
             created_at=datetime.now(timezone.utc).isoformat(),
         )
         self._properties[prop.id] = prop
+        if self._interconnections is not None:
+            matched_buyers: list[str] = []
+            if self._crm is not None:
+                from app.domain.real_estate_engines import (
+                    BuyerMatchInput,
+                    PropertyMatchInput,
+                    compute_compatibility,
+                )
+
+                for c in self._crm.list_contacts(ctx, role=ContactRole.BUYER):
+                    if c.budget_euro <= 0:
+                        continue
+                    score_res = compute_compatibility(
+                        PropertyMatchInput(
+                            price=prop.price,
+                            estimated_works=0,
+                            sector=prop.sector,
+                            property_type=prop.property_type,
+                            surface=prop.surface,
+                            bedrooms=prop.bedrooms,
+                            dpe=prop.dpe,
+                        ),
+                        BuyerMatchInput(
+                            budget_max=c.budget_euro,
+                            sectors=[c.city] if c.city else [prop.sector],
+                            property_type=prop.property_type,
+                            min_surface=max(10, prop.surface - 15),
+                            min_rooms=max(1, prop.bedrooms),
+                            essential_criteria=[],
+                        ),
+                    )
+                    if score_res.score >= 65:
+                        matched_buyers.append(f"{c.full_name} ({score_res.score}%)")
+            detail_msg = (
+                f"{prop.sector} • {prop.price:,} € • Acquéreurs compatibles détectés : {', '.join(matched_buyers[:3])}.".replace(",", " ")
+                if matched_buyers
+                else f"{prop.sector} • {prop.price:,} € • Prêt pour diffusion et matching.".replace(",", " ")
+            )
+            self._interconnections.emit_notification(
+                agency_id=ctx.agency_id,
+                event_type="BUYER_MATCH_FOUND" if matched_buyers else "PROPERTY_CREATED",
+                severity="SUCCESS" if matched_buyers else "INFO",
+                title=f"Nouveau mandat : {prop.title}",
+                detail=detail_msg,
+                link_section="matching" if matched_buyers else "properties",
+                target_id=prop.id,
+            )
         return prop
 
     # --- VISITES ---
@@ -335,6 +388,29 @@ class PortfolioAndLeadsService:
             raise ValueError("Transaction introuvable.")
         ctx.assert_same_agency(tx.agency_id)
         tx.stage = stage
+        if self._interconnections is not None and stage in (TransactionStage.COMPROMIS, TransactionStage.ACTE):
+            task_title = (
+                f"Ouvrir dossier notaire & Pré-État Daté L.721-2 — {tx.property_title}"
+                if stage == TransactionStage.COMPROMIS
+                else f"Préparer remise des clés & acte définitif — {tx.property_title}"
+            )
+            self._interconnections.add_auto_task(
+                agency_id=ctx.agency_id,
+                title=task_title,
+                reason=f"Transaction {tx.buyer_name} ({tx.offer_euro:,} €) passée au stade {stage.value}.".replace(",", " "),
+                priority="HIGH",
+                due_date=tx.notary_target_date,
+                link_section="documents",
+            )
+            self._interconnections.emit_notification(
+                agency_id=ctx.agency_id,
+                event_type=f"TRANSACTION_{stage.value}",
+                severity="HIGH",
+                title=task_title,
+                detail=f"Acquéreur : {tx.buyer_name} • Objectif notaire : {tx.notary_target_date}.",
+                link_section="documents",
+                target_id=tx.id,
+            )
         return tx
 
     # --- LEADS PUBLICS ENTRANTS (RGPD) ---
@@ -416,6 +492,30 @@ class PortfolioAndLeadsService:
             created_at=now_iso,
         )
         self._leads[lead.id] = lead
+        if self._interconnections is not None and target_agency:
+            kind_labels = {
+                LeadKind.VISIT_REQUEST: "Demande RDV visite web",
+                LeadKind.SELLER_VALUATION: "Demande avis conseiller vendeur",
+                LeadKind.SEARCH_ALERT: "Nouvelle alerte acquéreur",
+                LeadKind.BUYER_CONCIERGE: "Recherche guidée acquéreur",
+            }
+            notif_title = f"{kind_labels.get(lead_kind, 'Contact web')} — {display_name}"
+            self._interconnections.emit_notification(
+                agency_id=target_agency,
+                event_type="PUBLIC_LEAD_RECEIVED",
+                severity="HIGH",
+                title=notif_title,
+                detail=f"{clean_city or 'France'} • {clean_prop_title or clean_notes or 'Nouveau lead RGPD'}",
+                link_section="crm",
+                target_id=crm_contact_id or lead.id,
+            )
+            self._interconnections.add_auto_task(
+                agency_id=target_agency,
+                title=notif_title,
+                reason=clean_notes or f"Rappeler {display_name} ({clean_email}).",
+                priority="HIGH",
+                link_section="crm",
+            )
         return lead
 
     def list_public_leads(

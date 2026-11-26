@@ -185,6 +185,69 @@ class PostgresAuthRepository:
             permissions=sorted(p.value for p in ROLE_PERMISSIONS[MontyRole.DIRECTOR]),
         )
 
+    async def register_client_account(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str,
+        role: MontyRole = MontyRole.BUYER,
+        country_code: CountryCode = CountryCode.FR,
+        settings: Settings,
+    ) -> AuthSessionResult:
+        if role not in (MontyRole.BUYER, MontyRole.SELLER):
+            raise ValueError("Rôle particulier autorisé uniquement : BUYER ou SELLER.")
+        clean_email = InputSanitizer.sanitize_text(email, 160).lower()
+        clean_name = InputSanitizer.sanitize_text(display_name, 120)
+        if "@" not in clean_email or "." not in clean_email.split("@")[-1] or not clean_name:
+            raise ValueError("Nom complet et adresse e-mail valide obligatoires.")
+        pw_hash = hash_password(password)
+
+        async with self._sf() as session:
+            async with session.begin():
+                existing = (
+                    await session.execute(text("SELECT 1 FROM users WHERE email = :email"), {"email": clean_email})
+                ).first()
+                if existing is not None:
+                    raise ValueError("Un compte existe déjà pour cet e-mail.")
+                row = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT user_id::text, agency_id::text, agency_name, role
+                            FROM monty_auth_register_client(
+                              :email, :password_hash, :display_name, :role, :country_code
+                            )
+                            """
+                        ),
+                        {
+                            "email": clean_email,
+                            "password_hash": pw_hash,
+                            "display_name": clean_name,
+                            "role": role.value,
+                            "country_code": country_code.value,
+                        },
+                    )
+                ).mappings().one()
+
+        token = create_access_token(
+            subject_user_id=row["user_id"],
+            agency_id=row["agency_id"],
+            role=role.value,
+            secret=settings.effective_jwt_secret,
+            ttl_seconds=settings.jwt_ttl_minutes * 60,
+        )
+        return AuthSessionResult(
+            access_token=token,
+            user_id=row["user_id"],
+            agency_id=row["agency_id"],
+            agency_name=row["agency_name"],
+            display_name=clean_name,
+            email=clean_email,
+            role=role,
+            permissions=sorted(p.value for p in ROLE_PERMISSIONS[role]),
+        )
+
     async def login(self, *, email: str, password: str, settings: Settings) -> AuthSessionResult:
         clean_email = InputSanitizer.sanitize_text(email, 160).lower()
         async with self._sf() as session:

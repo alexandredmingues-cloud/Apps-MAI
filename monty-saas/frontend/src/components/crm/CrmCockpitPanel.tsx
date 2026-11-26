@@ -986,7 +986,13 @@ export function CrmCockpitPanel({
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="px-2 py-0.5 rounded-full bg-emeraldDeep text-goldChampagne font-bold text-[10px]">
-                        {lead.lead_kind}
+                        {lead.lead_kind === "VISIT_REQUEST"
+                          ? "Demande de Visite"
+                          : lead.lead_kind === "SEARCH_ALERT"
+                          ? "Alerte Recherche"
+                          : lead.lead_kind === "SELLER_VALUATION"
+                          ? "Avis de Valeur Vendeur"
+                          : "Conciergerie Acquéreur"}
                       </span>
                       <span className="font-bold text-sm text-obsidianInk">{lead.email}</span>
                       <span className="text-slateMuted">({lead.country_code})</span>

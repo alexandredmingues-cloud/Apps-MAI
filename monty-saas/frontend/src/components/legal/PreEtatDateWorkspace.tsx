@@ -13,7 +13,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
-import type { CoproLotPayload, PreEtatDateComputeResult, PreEtatDatePayload } from "@/lib/types";
+import type { CoproLotPayload, PreEtatDateComputeResult, PreEtatDatePayload, RnicCoproRecord } from "@/lib/types";
+import { NotariesAndRnicPanel } from "./NotariesAndRnicPanel";
 
 const INITIAL_LOTS: CoproLotPayload[] = [
   { lot_number: "14", nature: "Appartement T3", tantiemes_generaux: 420, confidence: 0.96, validated: true },
@@ -60,6 +61,7 @@ export function PreEtatDateWorkspace() {
   const [exporting, setExporting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [lastExportHtml, setLastExportHtml] = useState<string>("");
 
   function buildPayload(): PreEtatDatePayload {
     return {
@@ -112,6 +114,7 @@ export function PreEtatDateWorkspace() {
     setExporting(true);
     try {
       const exported = await montyApi.exportPreEtatDateHtml(buildPayload());
+      setLastExportHtml(exported.html_content);
       if (printMode && typeof window !== "undefined") {
         const w = window.open("", "_blank");
         if (w) {
@@ -565,6 +568,30 @@ export function PreEtatDateWorkspace() {
           </div>
         </div>
       )}
+
+      {/* Annuaire Notaires de France + Base Copropriétés RNIC + Transmission .eml */}
+      <NotariesAndRnicPanel
+        mode="pro"
+        initialTab="notaries"
+        onPrefillPreEtat={(copro: RnicCoproRecord) => {
+          const fullAddr = [copro.adresse_reference, copro.code_postal, copro.commune].filter(Boolean).join(", ");
+          if (fullAddr) setPropertyAddress(fullAddr);
+          if (copro.syndic_en_exercice && !copro.locked) {
+            setSyndicName(copro.syndic_en_exercice);
+          }
+          setSuccessMsg(
+            `Données RNIC (${copro.numero_immatriculation || copro.commune}) pré-remplies dans le Pré-État Daté.`
+          );
+        }}
+        prefillDossier={{
+          dossierRef,
+          propertyTitle: `${dossierRef} — ${propertyAddress}`,
+          propertyAddress,
+          sellerName,
+          targetDate: saleDate,
+          preEtatHtml: lastExportHtml,
+        }}
+      />
     </div>
   );
 }

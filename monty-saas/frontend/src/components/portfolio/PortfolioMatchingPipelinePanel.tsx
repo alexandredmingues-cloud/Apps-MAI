@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   TrendingUp,
 } from "lucide-react";
+import { NotariesAndRnicPanel } from "@/components/legal/NotariesAndRnicPanel";
 import { hasInMemoryAccessToken, montyApi } from "@/lib/api-client";
 import type {
   DvfComparableInput,
@@ -21,6 +22,7 @@ import type {
   PortfolioVisit,
   SaleTimelineEstimate,
   TransactionStage,
+  UnifiedAgendaItem,
   VisitStatus,
 } from "@/lib/types";
 
@@ -128,6 +130,8 @@ export function PortfolioMatchingPipelinePanel({
   const [newTxBuyer, setNewTxBuyer] = useState("");
   const [newTxOffer, setNewTxOffer] = useState(390000);
   const [newTxDate, setNewTxDate] = useState("2026-12-28");
+  const [agendaItems, setAgendaItems] = useState<UnifiedAgendaItem[]>([]);
+  const [notaryTxTarget, setNotaryTxTarget] = useState<PortfolioTransaction | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -143,10 +147,11 @@ export function PortfolioMatchingPipelinePanel({
       return;
     }
     try {
-      const [pRes, vRes, tRes] = await Promise.all([
+      const [pRes, vRes, tRes, agRes] = await Promise.all([
         montyApi.listPortfolioProperties(),
         montyApi.listPortfolioVisits(),
         montyApi.listPortfolioTransactions(),
+        montyApi.getUnifiedAgenda().catch(() => ({ count: 0, items: [] as UnifiedAgendaItem[] })),
       ]);
       setProperties(pRes.properties);
       if (pRes.properties.length > 0 && !pRes.properties.some((p) => p.id === selectedPropId)) {
@@ -154,6 +159,7 @@ export function PortfolioMatchingPipelinePanel({
       }
       setVisits(vRes.visits);
       setTransactions(tRes.transactions);
+      setAgendaItems(agRes.items);
       setStorageMode("api");
     } catch {
       setStorageMode("local");
@@ -734,84 +740,131 @@ export function PortfolioMatchingPipelinePanel({
               </div>
             ))}
           </div>
+
+          {agendaItems.length > 0 && (
+            <div className="pt-4 border-t border-borderSubtle space-y-2 text-xs">
+              <p className="font-bold text-emeraldDeep">
+                Agenda Unifié Agence (Visites + Relances CRM + Échéances Notaire — {agendaItems.length})
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {agendaItems.slice(0, 8).map((ag) => (
+                  <div key={ag.id} className="rounded-xl bg-ivoryWarm border border-borderSubtle p-3 space-y-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 rounded bg-emeraldDeep text-goldChampagne text-[10px] font-bold">
+                        {ag.kind}
+                      </span>
+                      <span className="text-[11px] font-mono text-slateMuted">{ag.date_iso}</span>
+                    </div>
+                    <p className="font-bold text-obsidianInk pt-1">{ag.title}</p>
+                    <p className="text-slateMuted">{ag.subtitle}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {tab === "transactions" && (
-        <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-goldAntique" />
-              Suivi Offres, Compromis &amp; Actes Notariés ({transactions.length})
-            </h3>
-            {selectedProp && (
-              <button
-                type="button"
-                onClick={() => setShowAddTx((v) => !v)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold"
+        <div className="space-y-5">
+          <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-goldAntique" />
+                Suivi Offres, Compromis &amp; Actes Notariés ({transactions.length})
+              </h3>
+              {selectedProp && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddTx((v) => !v)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Nouvelle offre / transaction
+                </button>
+              )}
+            </div>
+            {showAddTx && selectedProp && (
+              <form
+                onSubmit={handleCreateTransaction}
+                className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs p-3 rounded-xl bg-ivoryWarm border border-borderSubtle"
               >
-                <Plus className="w-3.5 h-3.5" />
-                Nouvelle offre / transaction
-              </button>
+                <input
+                  type="text"
+                  value={newTxBuyer}
+                  onChange={(e) => setNewTxBuyer(e.target.value)}
+                  placeholder="Acquéreur (ex: Claire Moreau)"
+                  className="rounded-xl border border-borderSubtle bg-white px-3 py-2"
+                />
+                <input
+                  type="number"
+                  value={newTxOffer}
+                  onChange={(e) => setNewTxOffer(Number(e.target.value) || 0)}
+                  placeholder="Offre (€)"
+                  className="rounded-xl border border-borderSubtle bg-white px-3 py-2"
+                />
+                <input
+                  type="date"
+                  value={newTxDate}
+                  onChange={(e) => setNewTxDate(e.target.value)}
+                  className="rounded-xl border border-borderSubtle bg-white px-3 py-2"
+                />
+                <button type="submit" className="px-3 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold">
+                  Enregistrer l&apos;offre
+                </button>
+              </form>
             )}
-          </div>
-          {showAddTx && selectedProp && (
-            <form
-              onSubmit={handleCreateTransaction}
-              className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs p-3 rounded-xl bg-ivoryWarm border border-borderSubtle"
-            >
-              <input
-                type="text"
-                value={newTxBuyer}
-                onChange={(e) => setNewTxBuyer(e.target.value)}
-                placeholder="Acquéreur (ex: Claire Moreau)"
-                className="rounded-xl border border-borderSubtle bg-white px-3 py-2"
-              />
-              <input
-                type="number"
-                value={newTxOffer}
-                onChange={(e) => setNewTxOffer(Number(e.target.value) || 0)}
-                placeholder="Offre (€)"
-                className="rounded-xl border border-borderSubtle bg-white px-3 py-2"
-              />
-              <input
-                type="date"
-                value={newTxDate}
-                onChange={(e) => setNewTxDate(e.target.value)}
-                className="rounded-xl border border-borderSubtle bg-white px-3 py-2"
-              />
-              <button type="submit" className="px-3 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold">
-                Enregistrer l&apos;offre
-              </button>
-            </form>
-          )}
-          <div className="space-y-2.5 text-xs">
-            {transactions.map((t) => (
-              <div key={t.id} className="p-3.5 rounded-xl bg-ivoryWarm border border-borderSubtle flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-bold text-emeraldDeep">{t.property_title}</p>
-                  <p className="text-slateMuted">
-                    Acquéreur : {t.buyer_name} • Offre : <strong>{t.offer_euro.toLocaleString("fr-FR")} €</strong> • Objectif notaire : {t.notary_target_date || "À fixer"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(["OFFRE", "COMPROMIS", "ACTE"] as const).map((st) => (
+            <div className="space-y-2.5 text-xs">
+              {transactions.map((t) => (
+                <div key={t.id} className="p-3.5 rounded-xl bg-ivoryWarm border border-borderSubtle flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-emeraldDeep">{t.property_title}</p>
+                    <p className="text-slateMuted">
+                      Acquéreur : {t.buyer_name} • Offre : <strong>{t.offer_euro.toLocaleString("fr-FR")} €</strong> • Objectif notaire : {t.notary_target_date || "À fixer"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(["OFFRE", "COMPROMIS", "ACTE"] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => handleUpdateStage(t, st)}
+                        className={`px-2.5 py-1 rounded-lg font-bold ${
+                          t.stage === st ? "bg-emeraldDeep text-goldChampagne" : "bg-white border border-borderSubtle"
+                        }`}
+                      >
+                        {t.stage === st && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
+                        {st}
+                      </button>
+                    ))}
                     <button
-                      key={st}
                       type="button"
-                      onClick={() => handleUpdateStage(t, st)}
-                      className={`px-2.5 py-1 rounded-lg font-bold ${
-                        t.stage === st ? "bg-emeraldDeep text-goldChampagne" : "bg-white border border-borderSubtle"
-                      }`}
+                      onClick={() => setNotaryTxTarget((prev) => (prev?.id === t.id ? null : t))}
+                      className="px-2.5 py-1 rounded-lg border border-goldAntique text-emeraldDeep bg-goldChampagne/20 font-bold hover:bg-goldChampagne/40"
                     >
-                      {t.stage === st && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
-                      {st}
+                      {notaryTxTarget?.id === t.id ? "Masquer notaire" : "Transmettre au notaire"}
                     </button>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+
+          {notaryTxTarget && (
+            <NotariesAndRnicPanel
+              mode="pro"
+              initialTab="notaries"
+              prefillDossier={{
+                dossierRef: `COMP-${notaryTxTarget.id.toUpperCase()}`,
+                propertyTitle: notaryTxTarget.property_title,
+                buyerName: notaryTxTarget.buyer_name,
+                priceEuro: notaryTxTarget.offer_euro,
+                targetDate: notaryTxTarget.notary_target_date,
+                transactionId: notaryTxTarget.id,
+                propertyId: notaryTxTarget.property_id,
+              }}
+            />
+          )}
         </div>
       )}
     </div>
