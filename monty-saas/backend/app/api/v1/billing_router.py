@@ -41,8 +41,12 @@ async def list_saas_plans() -> dict:
 @billing_router.get("/subscription")
 async def get_agency_subscription(
     ctx: TenantContext = Depends(require_permission(Permission.BILLING_MANAGE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict:
-    state = _billing.get_agency_billing(ctx)
+    if sf is not None:
+        state = await PostgresBillingRepository(sf).get_agency_billing(ctx)
+    else:
+        state = _billing.get_agency_billing(ctx)
     return {
         "agency_id": state.agency_id,
         "plan_code": state.plan_code,

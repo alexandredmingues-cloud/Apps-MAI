@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function MontySaasCockpitPage() {
   const [activeSection, setActiveSection] = useState<NavSectionKey>("dashboard");
   const [agencyId, setAgencyId] = useState("agency-france-reseau");
-  const [role, setRole] = useState<MontyRole>("DIRECTOR");
+  const [role, setRole] = useState<MontyRole>("BUYER");
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -64,7 +64,8 @@ export default function MontySaasCockpitPage() {
       setUnreadCount(notifRes.unread_count);
       setAgendaItems(agRes.items);
     } catch {
-      // Hors ligne ou rôle sans accès Pro
+      // Rôle particulier ou API hors ligne : widgets Pro masqués
+      setOverview(null);
     }
   }
 
@@ -87,12 +88,24 @@ export default function MontySaasCockpitPage() {
       setRole(stored.role);
       montyApi
         .getMe()
-        .then(() => {
+        .then((me) => {
+          const verifiedSession: SessionInfo = {
+            ...stored,
+            user_id: me.user_id,
+            agency_id: me.agency_id,
+            role: me.role,
+            permissions: me.permissions,
+          };
+          persistSession(verifiedSession);
+          setSession(verifiedSession);
+          setAgencyId(me.agency_id);
+          setRole(me.role);
           refreshDashboardWidgets();
         })
         .catch(() => {
           persistSession(null);
           setSession(null);
+          setRole("BUYER");
         });
     }
   }, []);
@@ -172,11 +185,13 @@ export default function MontySaasCockpitPage() {
   function handleLogout() {
     persistSession(null);
     setSession(null);
+    setRole("BUYER");
     setOverview(null);
     setNotifications([]);
     setUnreadCount(0);
     setAgendaItems([]);
     setAuthFormError(null);
+    setActiveSection("dashboard");
   }
 
   async function handleMarkNotificationRead(notif: AgencyNotification) {
@@ -184,8 +199,8 @@ export default function MontySaasCockpitPage() {
       const updated = await montyApi.markNotificationRead(notif.id);
       setNotifications((prev) => prev.map((n) => (n.id === notif.id ? updated : n)));
       setUnreadCount((c) => Math.max(0, c - (notif.is_read ? 0 : 1)));
-    } catch {
-      // Ignore
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Impossible de marquer la notification comme lue.");
     }
   }
 
@@ -215,12 +230,30 @@ export default function MontySaasCockpitPage() {
     }
   }
 
+  const isProSession = Boolean(
+    session && ["SUPER_ADMIN", "DIRECTOR", "ADMIN", "AGENT", "ASSISTANT"].includes(session.role)
+  );
+  const proRestrictedSections: NavSectionKey[] = [
+    "crm",
+    "buyers",
+    "sellers",
+    "properties",
+    "matching",
+    "visits",
+    "transactions",
+    "ai",
+    "automations",
+    "documents",
+    "admin",
+  ];
+  const requiresProAuth = proRestrictedSections.includes(activeSection) && !isProSession;
+
   return (
     <MontyShell
       activeSection={activeSection}
       onSelectSection={setActiveSection}
-      agencyId={agencyId}
-      role={role}
+      agencyId={session ? session.agency_id : "Session non connectée"}
+      role={session ? session.role : "VISITEUR"}
     >
       <div className="space-y-6">
         {/* Barre d'accès rapide Site Web Public & Double Public */}
@@ -253,8 +286,35 @@ export default function MontySaasCockpitPage() {
           </div>
         </div>
 
-        {activeSection === "actualites" ? (
-          <NewsHubExperience audience="pro" role={role} initialCountry="FR" />
+        {requiresProAuth ? (
+          <section className="rounded-2xl bg-ivoryCard border border-amber-300 p-6 space-y-4">
+            <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-xl">
+              <Shield className="w-5 h-5 text-amber-700" />
+              Session Monty Pro requise pour le module « {activeSection.toUpperCase()} »
+            </div>
+            <p className="text-sm text-slateMuted">
+              {session
+                ? `Votre compte connecté (${session.role}) appartient à l'espace Particulier/Vendeur et n'a pas accès au CRM, Pipeline, Pré-État Daté ou Administration d'agence.`
+                : "Connectez un compte agence Monty Pro (Directeur, Admin, Agent ou Assistant) depuis le Dashboard pour accéder aux données cloisonnées par agence (PostgreSQL RLS)."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveSection("dashboard")}
+                className="px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid"
+              >
+                Aller à la connexion Agence (Dashboard)
+              </button>
+              <Link
+                href="/mon-compte"
+                className="px-4 py-2.5 rounded-xl border border-emeraldDeep text-emeraldDeep text-xs font-bold hover:bg-ivoryWarm"
+              >
+                Ouvrir mon Espace Particulier
+              </Link>
+            </div>
+          </section>
+        ) : activeSection === "actualites" ? (
+          <NewsHubExperience audience={isProSession ? "pro" : "public"} role={role} initialCountry="FR" />
         ) : activeSection === "ai" ? (
           <AgentsAndScoutPanel role={role} />
         ) : activeSection === "estimation" ? (

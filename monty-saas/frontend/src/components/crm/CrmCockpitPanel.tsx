@@ -17,7 +17,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { montyApi } from "@/lib/api-client";
+import { hasInMemoryAccessToken, montyApi } from "@/lib/api-client";
 import type {
   AdvisorPrivateNote,
   ContactExchange,
@@ -243,13 +243,21 @@ export function CrmCockpitPanel({
   }
 
   async function handleUpdateLeadStatus(leadId: string, nextStatus: LeadStatus) {
+    if (!hasInMemoryAccessToken()) {
+      setApiWarning("Session Pro requise pour qualifier une demande entrante en base.");
+      return;
+    }
+    const previous = webLeads.find((l) => l.id === leadId)?.status;
     setWebLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: nextStatus } : l)));
     try {
       const updated = await montyApi.updatePublicLeadStatus(leadId, nextStatus);
       setWebLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
       setStatusMessage(`Statut de la demande mis à jour : ${nextStatus}.`);
-    } catch {
-      // Conserver état local si session expirée
+    } catch (err) {
+      if (previous) {
+        setWebLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: previous } : l)));
+      }
+      setApiWarning(err instanceof Error ? err.message : "Échec de mise à jour du statut de la demande.");
     }
   }
 
@@ -301,6 +309,10 @@ export function CrmCockpitPanel({
       setFormError("Le budget doit être positif ou nul.");
       return;
     }
+    if (!hasInMemoryAccessToken()) {
+      setFormError("Session Agence requise pour créer et persister un contact CRM dans PostgreSQL RLS.");
+      return;
+    }
     try {
       const created = await montyApi.createCrmContact({
         full_name: newName,
@@ -313,38 +325,14 @@ export function CrmCockpitPanel({
       });
       setContacts((prev) => [created, ...prev]);
       setSelectedContactId(created.id);
-      setStatusMessage(`Contact « ${created.full_name} » enregistré via API FastAPI.`);
-    } catch {
-      const todayIso = new Date().toISOString().slice(0, 10);
-      const created: CrmContact = {
-        id: `cnt-${Date.now()}`,
-        agency_id: agencyId,
-        assigned_user_id: `usr-${role.toLowerCase()}`,
-        country_code: newCountry,
-        full_name: newName.trim(),
-        email: newEmail.trim().toLowerCase(),
-        phone: newPhone.trim(),
-        role: newRole,
-        city: newCity.trim(),
-        budget_euro: newBudget,
-        legal_basis: "CONSENTEMENT_EXPLICITE",
-        consent_granted: true,
-        retention_until: "2029-04-14",
-        created_at: todayIso,
-        last_contact_at: todayIso,
-        has_missing_docs: false,
-        pending_offer_days: 0,
-        last_visit_days_ago: null,
-        is_anonymized: false,
-      };
-      setContacts((prev) => [created, ...prev]);
-      setSelectedContactId(created.id);
-      setStatusMessage(`Contact « ${created.full_name} » créé en local (RGPD 36 mois appliqué).`);
+      setStatusMessage(`Contact « ${created.full_name} » enregistré en base via API FastAPI.`);
+      setNewName("");
+      setNewEmail("");
+      setNewPhone("");
+      setShowCreateForm(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Échec d'enregistrement du contact CRM.");
     }
-    setNewName("");
-    setNewEmail("");
-    setNewPhone("");
-    setShowCreateForm(false);
   }
 
   async function handleAddPrivateNote(e: React.FormEvent) {
@@ -354,33 +342,30 @@ export function CrmCockpitPanel({
       setStatusMessage("Accès refusé (RBAC) : les notes privées sont réservées aux conseillers.");
       return;
     }
+    if (!hasInMemoryAccessToken()) {
+      setApiWarning("Session Agence requise pour enregistrer une note privée cloisonnée.");
+      return;
+    }
     try {
       const note = await montyApi.addPrivateNote(selectedContact.id, newNoteText);
       setPrivateNotesByContact((prev) => ({
         ...prev,
         [selectedContact.id]: [...(prev[selectedContact.id] ?? []), note],
       }));
-    } catch {
-      const note: AdvisorPrivateNote = {
-        id: `note-${Date.now()}`,
-        agency_id: agencyId,
-        contact_id: selectedContact.id,
-        author_user_id: `usr-${role.toLowerCase()}`,
-        content: newNoteText.trim(),
-        created_at: new Date().toISOString(),
-      };
-      setPrivateNotesByContact((prev) => ({
-        ...prev,
-        [selectedContact.id]: [...(prev[selectedContact.id] ?? []), note],
-      }));
+      setNewNoteText("");
+      setStatusMessage("Note privée ajoutée (strictement isolée de l'export client RGPD).");
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Impossible d'ajouter la note privée.");
     }
-    setNewNoteText("");
-    setStatusMessage("Note privée ajoutée (strictement isolée de l'export client RGPD).");
   }
 
   async function handleAddExchange(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedContact || !newExchangeSummary.trim()) return;
+    if (!hasInMemoryAccessToken()) {
+      setApiWarning("Session Agence requise pour tracer un échange client en base.");
+      return;
+    }
     try {
       const ex = await montyApi.addExchange(selectedContact.id, {
         channel: newExchangeChannel,
@@ -390,98 +375,37 @@ export function CrmCockpitPanel({
         ...prev,
         [selectedContact.id]: [...(prev[selectedContact.id] ?? []), ex],
       }));
-    } catch {
-      const ex: ContactExchange = {
-        id: `exc-${Date.now()}`,
-        agency_id: agencyId,
-        contact_id: selectedContact.id,
-        author_user_id: `usr-${role.toLowerCase()}`,
-        channel: newExchangeChannel,
-        summary: newExchangeSummary.trim(),
-        created_at: new Date().toISOString(),
-      };
-      setExchangesByContact((prev) => ({
-        ...prev,
-        [selectedContact.id]: [...(prev[selectedContact.id] ?? []), ex],
-      }));
+      setNewExchangeSummary("");
+      setStatusMessage("Échange historisé sur la fiche contact.");
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Impossible d'enregistrer cet échange.");
     }
-    setNewExchangeSummary("");
   }
 
   async function handleCompleteTask(taskId: string) {
+    if (!hasInMemoryAccessToken()) {
+      setApiWarning("Session Agence requise pour clôturer une relance CRM.");
+      return;
+    }
     try {
       await montyApi.completeFollowup(taskId);
-    } catch {
-      // fallback local
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, completed: true } : t)));
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Impossible de clôturer la relance.");
     }
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, completed: true } : t)));
   }
 
   async function handleImportCsv() {
+    if (!hasInMemoryAccessToken()) {
+      setApiWarning("Session Agence requise pour exécuter l'import CSV dédupliqué en base.");
+      return;
+    }
     try {
       const summary = await montyApi.importCsv({ csv_text: csvInput, default_country: "FR" });
       setImportSummary(summary);
       await refreshCrmData();
-    } catch {
-      const lines = csvInput.trim().split(/\r?\n/);
-      if (lines.length < 2) return;
-      const sep = lines[0].includes(";") ? ";" : ",";
-      const existing = new Set(contacts.map((c) => c.email.toLowerCase()).filter(Boolean));
-      let imported = 0;
-      let skipped = 0;
-      let rejected = 0;
-      const newOnes: CrmContact[] = [];
-      const createdIds: string[] = [];
-      const todayIso = new Date().toISOString().slice(0, 10);
-
-      for (const line of lines.slice(1)) {
-        const cols = line.split(sep).map((s) => s.trim());
-        const [name, email = "", phone = "", city = "", rawBudget = "0", rawRole = "LEAD", rawCountry = "FR"] = cols;
-        if (!name) {
-          rejected += 1;
-          continue;
-        }
-        if (email && existing.has(email.toLowerCase())) {
-          skipped += 1;
-          continue;
-        }
-        const id = `cnt-csv-${Date.now()}-${imported}`;
-        const c: CrmContact = {
-          id,
-          agency_id: agencyId,
-          assigned_user_id: `usr-${role.toLowerCase()}`,
-          country_code: rawCountry.toUpperCase() === "PT" ? "PT" : "FR",
-          full_name: name,
-          email: email.toLowerCase(),
-          phone,
-          role: (["BUYER", "SELLER", "LEAD", "PROSPECT", "PARTNER"].includes(rawRole.toUpperCase())
-            ? rawRole.toUpperCase()
-            : "LEAD") as ContactRole,
-          city,
-          budget_euro: Number(rawBudget.replace(/\D/g, "")) || 0,
-          legal_basis: "CONSENTEMENT_EXPLICITE",
-          consent_granted: true,
-          retention_until: "2029-04-14",
-          created_at: todayIso,
-          last_contact_at: todayIso,
-          has_missing_docs: false,
-          pending_offer_days: 0,
-          last_visit_days_ago: null,
-          is_anonymized: false,
-        };
-        if (c.email) existing.add(c.email);
-        newOnes.push(c);
-        createdIds.push(id);
-        imported += 1;
-      }
-      setContacts((prev) => [...newOnes, ...prev]);
-      setImportSummary({
-        imported_count: imported,
-        skipped_duplicates: skipped,
-        rejected_rows: rejected,
-        warnings: [],
-        created_contact_ids: createdIds,
-      });
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Échec de l'import CSV.");
     }
   }
 
@@ -540,23 +464,16 @@ export function CrmCockpitPanel({
   }
 
   async function handlePurgeExpired() {
+    if (!hasInMemoryAccessToken()) {
+      setApiWarning("Session Directeur/Admin requise pour exécuter la purge RGPD sur PostgreSQL.");
+      return;
+    }
     try {
       const res = await montyApi.rgpdPurgeExpired();
-      setStatusMessage(`Purge RGPD exécutée : ${res.anonymized_count} contact(s) expiré(s) anonymisé(s).`);
+      setStatusMessage(`Purge RGPD exécutée en base : ${res.anonymized_count} contact(s) expiré(s) anonymisé(s).`);
       await refreshCrmData();
-    } catch {
-      const todayIso = new Date().toISOString().slice(0, 10);
-      let count = 0;
-      setContacts((prev) =>
-        prev.map((c) => {
-          if (!c.is_anonymized && c.retention_until < todayIso) {
-            count += 1;
-            return { ...c, full_name: "[Contact anonymisé RGPD]", email: "", phone: "", is_anonymized: true };
-          }
-          return c;
-        })
-      );
-      setStatusMessage(`Vérification RGPD effectuée : ${count} contact(s) expiré(s) anonymisé(s).`);
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Échec de la purge RGPD.");
     }
   }
 

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   Bell,
   Bike,
   Building2,
@@ -31,7 +32,6 @@ import {
   computeLocalSaleTimeline,
   findNearestCityName,
   INITIAL_LOCAL_LISTINGS,
-  redactPiiText,
   resolveCityGeo,
   searchLocalListings,
 } from "@/lib/marketplace-local";
@@ -133,6 +133,7 @@ export function MarketplaceAndPublishView({
   });
   const [copyTip, setCopyTip] = useState<string | null>(null);
   const [publishNotice, setPublishNotice] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [showPostPublishCta, setShowPostPublishCta] = useState<boolean>(false);
   const [showValuationForm, setShowValuationForm] = useState<boolean>(false);
   const [valuationEmail, setValuationEmail] = useState<string>("");
@@ -142,6 +143,7 @@ export function MarketplaceAndPublishView({
   const [valuationRequested, setValuationRequested] = useState<boolean>(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [pendingModeration, setPendingModeration] = useState<MarketplaceListing[]>([]);
+  const [moderationError, setModerationError] = useState<string | null>(null);
 
   // Favoris & Demande de visite (VISIT_REQUEST RGPD -> CRM Pro)
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
@@ -289,6 +291,11 @@ export function MarketplaceAndPublishView({
   }
 
   async function handleModerationDecision(listingId: string, approve: boolean) {
+    setModerationError(null);
+    if (!hasInMemoryAccessToken()) {
+      setModerationError("Session expirée : reconnectez-vous pour modérer les annonces.");
+      return;
+    }
     try {
       await montyApi.moderateListing(listingId, {
         approve,
@@ -296,8 +303,8 @@ export function MarketplaceAndPublishView({
       });
       await loadPendingModeration();
       await runSearch();
-    } catch {
-      // Ignorer silencieusement si session expirée
+    } catch (err) {
+      setModerationError(err instanceof Error ? err.message : "Impossible d'enregistrer la décision de modération.");
     }
   }
 
@@ -482,12 +489,17 @@ export function MarketplaceAndPublishView({
 
   async function handlePublishListing(e: React.FormEvent) {
     e.preventDefault();
-    setPublishBusy(true);
     setPublishNotice(null);
+    setPublishError(null);
     setShowPostPublishCta(false);
     setShowValuationForm(false);
     setValuationError(null);
     setValuationRequested(false);
+    if (!hasInMemoryAccessToken()) {
+      setPublishError("Connectez-vous via /mon-compte ou votre espace Monty Pro pour publier et sauvegarder une annonce.");
+      return;
+    }
+    setPublishBusy(true);
     const hlList = pubState.pubHighlightsRaw
       .split(",")
       .map((s) => s.trim())
@@ -531,44 +543,11 @@ export function MarketplaceAndPublishView({
           `Annonce « ${created.title} » publiée avec succès (délai estimé : ~${created.sale_timeline.likely_days} jours).`
         );
       }
-    } catch {
-      const geo = resolveCityGeo(pubState.pubCity, countryCode);
-      const needsAuthHint = !hasInMemoryAccessToken();
-      const localCreated: MarketplaceListing = {
-        id: `usr-pub-${countryCode.toLowerCase()}-${Date.now()}`,
-        country_code: countryCode,
-        publisher_type: pubState.pubType,
-        publisher_label:
-          pubState.pubLabel.trim() ||
-          (pubState.pubType === "PARTICULIER" ? "Particulier vérifié" : "Agence partenaire"),
-        title: redactPiiText(finalTitle),
-        property_kind: pubState.pubKind,
-        city: pubState.pubCity.trim() || "Lyon",
-        region_name: geo.region,
-        sector_label: pubState.pubSector.trim() || pubState.pubCity,
-        price_euro: pubState.pubPrice,
-        surface_m2: pubState.pubSurface,
-        rooms: pubState.pubRooms,
-        dpe: pubState.pubDpe,
-        condition_label: pubState.pubCondition,
-        highlights: hlList,
-        description: redactPiiText(finalDesc),
-        photo_count: pubState.pubPhotos,
-        latitude: geo.lat,
-        longitude: geo.lon,
-        moderation_status: pubState.pubType === "PARTICULIER" ? "A_VERIFIER" : "PUBLIEE",
-        sale_timeline: previewTimeline,
-        published_at: new Date().toISOString().slice(0, 10),
-      };
-      setLocalCatalog((prev) => [localCreated, ...prev]);
-      setOriginAddress(localCreated.city);
-      setShowPostPublishCta(true);
-      setPublishNotice(
-        needsAuthHint
-          ? `Annonce « ${localCreated.title} » ajoutée à l'aperçu interactif${
-              pubState.wantProAccompaniment ? " (demande d'accompagnement Monty Pro notée)" : ""
-            }.`
-          : `Annonce « ${localCreated.title} » enregistrée (masquage RGPD des PII appliqué).`
+    } catch (err) {
+      setPublishError(
+        err instanceof Error
+          ? err.message
+          : "Publication impossible : vérifiez votre connexion ou l'état du backend API."
       );
     } finally {
       setPublishBusy(false);
@@ -661,6 +640,13 @@ export function MarketplaceAndPublishView({
         </div>
       </section>
 
+      {publishError && (
+        <div className="rounded-2xl bg-rose-50 border border-rose-300 p-4 flex items-center gap-2 text-sm text-rose-900">
+          <AlertTriangle className="w-5 h-5 text-rose-700 shrink-0" />
+          <span>{publishError}</span>
+        </div>
+      )}
+
       {publishNotice && (
         <div className="rounded-2xl bg-emerald-50 border border-emerald-300 p-4 space-y-3 text-sm text-emerald-950">
           <div className="flex items-center gap-2 font-semibold">
@@ -741,12 +727,16 @@ export function MarketplaceAndPublishView({
                           notes: `Avis conseiller demandé après publication (${pubState.pubSector}, DPE ${pubState.pubDpe})`,
                           rgpd_consent_granted: true,
                         });
-                      } catch {
-                        // Fallback gracieux si API endormie
-                      } finally {
-                        setValuationBusy(false);
                         setValuationRequested(true);
                         setShowValuationForm(false);
+                      } catch (err) {
+                        setValuationError(
+                          err instanceof Error
+                            ? err.message
+                            : "Impossible d'envoyer la demande au conseiller pour le moment."
+                        );
+                      } finally {
+                        setValuationBusy(false);
                       }
                     }}
                     className="px-4 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-60"
@@ -769,6 +759,11 @@ export function MarketplaceAndPublishView({
             </h3>
             <span className="text-[11px] font-semibold text-amber-800">Contrôle RBAC PROPERTY_MODERATE</span>
           </div>
+          {moderationError && (
+            <div className="rounded-xl bg-rose-50 border border-rose-300 px-3 py-2 text-xs text-rose-900">
+              {moderationError}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingModeration.map((item) => (
               <div

@@ -94,7 +94,7 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
     }
   }
 
-  async function handleSubscribeStripe(planCode: "SOLO" | "AGENCY" | "NETWORK") {
+  async function handleSubscribeStripe(planCode: "INDIVIDUAL" | "AGENCY" | "NETWORK") {
     setErrorMsg(null);
     setCheckoutBusyPlan(planCode);
     try {
@@ -320,7 +320,7 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
                   <button
                     type="button"
                     disabled={checkoutBusyPlan === p.code}
-                    onClick={() => handleSubscribeStripe(p.code as "SOLO" | "AGENCY" | "NETWORK")}
+                    onClick={() => handleSubscribeStripe(p.code as "INDIVIDUAL" | "AGENCY" | "NETWORK")}
                     className="w-full py-1.5 rounded-lg bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-50"
                   >
                     {checkoutBusyPlan === p.code ? "Redirection..." : "Souscrire Stripe"}

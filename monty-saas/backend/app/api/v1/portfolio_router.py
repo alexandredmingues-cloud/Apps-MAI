@@ -125,6 +125,61 @@ async def create_portfolio_property(
     return _prop_dto(p)
 
 
+class UpdatePortfolioPropertyRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=3, max_length=160)
+    sector: str | None = Field(default=None, min_length=2, max_length=100)
+    property_type: str | None = Field(default=None, max_length=60)
+    price: int | None = Field(default=None, ge=10_000, le=50_000_000)
+    surface: int | None = Field(default=None, ge=5, le=5000)
+    bedrooms: int | None = Field(default=None, ge=0, le=30)
+    dpe: str | None = Field(default=None, max_length=4)
+    mandate: str | None = Field(default=None, max_length=20)
+    docs_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+@portfolio_router.patch("/properties/{property_id}")
+async def update_portfolio_property(
+    property_id: str,
+    body: UpdatePortfolioPropertyRequest,
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_WRITE)),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    try:
+        if sf is not None:
+            p = await PostgresPortfolioLeadsRepository(sf).update_property(
+                ctx,
+                property_id=property_id,
+                title=body.title,
+                sector=body.sector,
+                property_type=body.property_type,
+                price=body.price,
+                surface=body.surface,
+                bedrooms=body.bedrooms,
+                dpe=body.dpe,
+                mandate=body.mandate,
+                docs_ratio=body.docs_ratio,
+            )
+        else:
+            p = _portfolio_service.update_property(
+                ctx,
+                property_id=property_id,
+                title=body.title,
+                sector=body.sector,
+                property_type=body.property_type,
+                price=body.price,
+                surface=body.surface,
+                bedrooms=body.bedrooms,
+                dpe=body.dpe,
+                mandate=body.mandate,
+                docs_ratio=body.docs_ratio,
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _prop_dto(p)
+
+
 @portfolio_router.get("/visits")
 async def list_portfolio_visits(
     ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_READ)),

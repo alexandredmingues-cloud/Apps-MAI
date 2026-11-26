@@ -364,6 +364,7 @@ export type ListingModerationStatus = "A_VERIFIER" | "PUBLIEE" | "REJETEE";
 
 export interface MarketplaceListing {
   id: string;
+  agency_id?: string;
   country_code: CountryCode;
   publisher_type: PublisherType;
   publisher_label: string;

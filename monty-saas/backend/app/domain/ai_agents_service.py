@@ -211,6 +211,71 @@ class MontyAgentsGovernanceService:
 
         return None
 
+    def _call_openai(
+        self,
+        *,
+        agent: AgentDefinition,
+        clean_prompt: str,
+        settings: Settings,
+        transport: Callable[[str, dict[str, str], dict[str, Any], float], tuple[int, dict[str, Any]]] | None = None,
+    ) -> tuple[str, str] | None:
+        api_key = settings.openai_api_key.strip()
+        if not api_key:
+            return None
+
+        model = settings.openai_model_complex if agent.model_tier == "sonnet" else settings.openai_model_fast
+        payload: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max(128, min(4096, settings.anthropic_max_tokens)),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        f"Tu es l'agent immobilier Monty '{agent.name}' ({agent.category}). "
+                        "Réponds de manière factuelle, concise, conforme RGPD/Loi Hoguet/Loi ALUR, sans jamais inventer de PII."
+                    ),
+                },
+                {"role": "user", "content": clean_prompt},
+            ],
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            if transport is not None:
+                status_code, body = transport(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers,
+                    payload,
+                    settings.anthropic_timeout_seconds,
+                )
+            else:
+                req = urllib.request.Request(
+                    url="https://api.openai.com/v1/chat/completions",
+                    data=json.dumps(payload).encode("utf-8"),
+                    method="POST",
+                    headers=headers,
+                )
+                with urllib.request.urlopen(req, timeout=settings.anthropic_timeout_seconds) as resp:
+                    status_code = getattr(resp, "status", 200)
+                    body = json.loads(resp.read().decode("utf-8"))
+
+            if status_code in (401, 403, 429) or status_code >= 500:
+                return None
+
+            choices = body.get("choices", []) if isinstance(body, dict) else []
+            if choices and isinstance(choices[0], dict):
+                msg = choices[0].get("message", {})
+                raw_content = str(msg.get("content", "")).strip() if isinstance(msg, dict) else ""
+                merged = InputSanitizer.sanitize_text(raw_content, 2400)
+                if merged:
+                    return model, merged
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError, OSError):
+            return None
+
+        return None
+
     def run_agent(
         self,
         ctx: TenantContext,
@@ -220,6 +285,7 @@ class MontyAgentsGovernanceService:
         settings: Settings,
         max_calls_per_minute: int = 12,
         anthropic_transport: Callable[[str, dict[str, str], dict[str, Any], float], tuple[int, dict[str, Any]]] | None = None,
+        openai_transport: Callable[[str, dict[str, str], dict[str, Any], float], tuple[int, dict[str, Any]]] | None = None,
     ) -> AgentExecutionLog:
         t0 = time.perf_counter()
         if not (ctx.has_permission(Permission.AI_ASSISTANT_PRO) or ctx.has_permission(Permission.AI_ASSISTANT_CLIENT)):
@@ -277,14 +343,16 @@ class MontyAgentsGovernanceService:
             settings=settings,
             transport=anthropic_transport,
         )
+        if live_res is None:
+            live_res = self._call_openai(
+                agent=agent,
+                clean_prompt=clean_prompt,
+                settings=settings,
+                transport=openai_transport,
+            )
+
         if live_res is not None:
             model_used, output = live_res
-        elif settings.openai_api_key:
-            model_used = settings.openai_model_complex if agent.model_tier == "sonnet" else settings.openai_model_fast
-            output = (
-                f"[{agent.name} • {model_used}] Synthèse structurée pour le contexte : « {clean_prompt[:140]} ». "
-                "Points clés : vérification conformité RGPD/ALUR effectuée, prochaine action recommandée prête pour validation conseiller."
-            )
         else:
             model_used = "deterministic-fallback-safe"
             output = (

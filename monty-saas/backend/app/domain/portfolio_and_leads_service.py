@@ -191,6 +191,64 @@ class PortfolioAndLeadsService:
             reverse=True,
         )
 
+    def _emit_property_match_notification(
+        self,
+        ctx: TenantContext,
+        prop: PortfolioProperty,
+        *,
+        is_update: bool = False,
+    ) -> None:
+        if self._interconnections is None:
+            return
+        matched_buyers: list[str] = []
+        if self._crm is not None:
+            from app.domain.real_estate_engines import (
+                BuyerMatchInput,
+                PropertyMatchInput,
+                compute_compatibility,
+            )
+
+            for c in self._crm.list_contacts(ctx, role=ContactRole.BUYER):
+                if c.budget_euro <= 0:
+                    continue
+                score_res = compute_compatibility(
+                    PropertyMatchInput(
+                        price=prop.price,
+                        estimated_works=0,
+                        sector=prop.sector,
+                        property_type=prop.property_type,
+                        surface=prop.surface,
+                        bedrooms=prop.bedrooms,
+                        dpe=prop.dpe,
+                    ),
+                    BuyerMatchInput(
+                        budget_max=c.budget_euro,
+                        sectors=[c.city] if c.city else [prop.sector],
+                        property_type=prop.property_type,
+                        min_surface=max(10, prop.surface - 15),
+                        min_rooms=max(1, prop.bedrooms),
+                        essential_criteria=[],
+                    ),
+                )
+                if score_res.score >= 65:
+                    matched_buyers.append(f"{c.full_name} ({score_res.score}%)")
+        default_evt = "PROPERTY_UPDATED" if is_update else "PROPERTY_CREATED"
+        title_prefix = "Mandat mis à jour" if is_update else "Nouveau mandat"
+        detail_msg = (
+            f"{prop.sector} • {prop.price:,} € • Acquéreurs compatibles détectés : {', '.join(matched_buyers[:3])}.".replace(",", " ")
+            if matched_buyers
+            else f"{prop.sector} • {prop.price:,} € • Prêt pour diffusion et matching.".replace(",", " ")
+        )
+        self._interconnections.emit_notification(
+            agency_id=ctx.agency_id,
+            event_type="BUYER_MATCH_FOUND" if matched_buyers else default_evt,
+            severity="SUCCESS" if matched_buyers else "INFO",
+            title=f"{title_prefix} : {prop.title}",
+            detail=detail_msg,
+            link_section="matching" if matched_buyers else "properties",
+            target_id=prop.id,
+        )
+
     def create_property(
         self,
         ctx: TenantContext,
@@ -226,53 +284,60 @@ class PortfolioAndLeadsService:
             created_at=datetime.now(timezone.utc).isoformat(),
         )
         self._properties[prop.id] = prop
-        if self._interconnections is not None:
-            matched_buyers: list[str] = []
-            if self._crm is not None:
-                from app.domain.real_estate_engines import (
-                    BuyerMatchInput,
-                    PropertyMatchInput,
-                    compute_compatibility,
-                )
+        self._emit_property_match_notification(ctx, prop, is_update=False)
+        return prop
 
-                for c in self._crm.list_contacts(ctx, role=ContactRole.BUYER):
-                    if c.budget_euro <= 0:
-                        continue
-                    score_res = compute_compatibility(
-                        PropertyMatchInput(
-                            price=prop.price,
-                            estimated_works=0,
-                            sector=prop.sector,
-                            property_type=prop.property_type,
-                            surface=prop.surface,
-                            bedrooms=prop.bedrooms,
-                            dpe=prop.dpe,
-                        ),
-                        BuyerMatchInput(
-                            budget_max=c.budget_euro,
-                            sectors=[c.city] if c.city else [prop.sector],
-                            property_type=prop.property_type,
-                            min_surface=max(10, prop.surface - 15),
-                            min_rooms=max(1, prop.bedrooms),
-                            essential_criteria=[],
-                        ),
-                    )
-                    if score_res.score >= 65:
-                        matched_buyers.append(f"{c.full_name} ({score_res.score}%)")
-            detail_msg = (
-                f"{prop.sector} • {prop.price:,} € • Acquéreurs compatibles détectés : {', '.join(matched_buyers[:3])}.".replace(",", " ")
-                if matched_buyers
-                else f"{prop.sector} • {prop.price:,} € • Prêt pour diffusion et matching.".replace(",", " ")
-            )
-            self._interconnections.emit_notification(
-                agency_id=ctx.agency_id,
-                event_type="BUYER_MATCH_FOUND" if matched_buyers else "PROPERTY_CREATED",
-                severity="SUCCESS" if matched_buyers else "INFO",
-                title=f"Nouveau mandat : {prop.title}",
-                detail=detail_msg,
-                link_section="matching" if matched_buyers else "properties",
-                target_id=prop.id,
-            )
+    def update_property(
+        self,
+        ctx: TenantContext,
+        *,
+        property_id: str,
+        title: str | None = None,
+        sector: str | None = None,
+        property_type: str | None = None,
+        price: int | None = None,
+        surface: int | None = None,
+        bedrooms: int | None = None,
+        dpe: str | None = None,
+        mandate: str | None = None,
+        docs_ratio: float | None = None,
+    ) -> PortfolioProperty:
+        ctx.require_permission(Permission.PROPERTY_WRITE)
+        prop = self._properties.get(property_id)
+        if prop is None:
+            raise ValueError("Bien introuvable.")
+        ctx.assert_same_agency(prop.agency_id)
+
+        if title is not None:
+            clean_title = InputSanitizer.sanitize_text(title, 160)
+            if not clean_title:
+                raise ValueError("Le titre du bien ne peut pas être vide.")
+            prop.title = clean_title
+        if sector is not None:
+            clean_sector = InputSanitizer.sanitize_text(sector, 100)
+            if not clean_sector:
+                raise ValueError("Le secteur du bien ne peut pas être vide.")
+            prop.sector = clean_sector
+        if property_type is not None:
+            prop.property_type = InputSanitizer.sanitize_text(property_type, 60) or prop.property_type
+        if price is not None:
+            if price < 10_000:
+                raise ValueError("Prix minimum 10 000 €.")
+            prop.price = price
+        if surface is not None:
+            if surface < 5:
+                raise ValueError("Surface minimale 5 m².")
+            prop.surface = surface
+        if bedrooms is not None:
+            prop.bedrooms = max(0, min(30, bedrooms))
+        if dpe is not None and dpe.strip():
+            prop.dpe = dpe.strip().upper()[:2]
+        if mandate is not None and mandate.strip():
+            prop.mandate = "EXCLUSIF" if mandate.strip().upper().startswith("EXCLU") else "SIMPLE"
+        if docs_ratio is not None:
+            prop.docs_ratio = max(0.0, min(1.0, float(docs_ratio)))
+
+        self._emit_property_match_notification(ctx, prop, is_update=True)
         return prop
 
     # --- VISITES ---

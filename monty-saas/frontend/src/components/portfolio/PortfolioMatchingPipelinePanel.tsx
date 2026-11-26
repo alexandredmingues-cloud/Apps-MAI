@@ -183,28 +183,11 @@ export function PortfolioMatchingPipelinePanel({
     }
     setLoading(true);
     try {
-      if (hasInMemoryAccessToken()) {
-        const created = await montyApi.createPortfolioProperty({
-          title: newPropTitle.trim(),
-          sector: newPropSector.trim(),
-          property_type: newPropKind,
-          price: newPropPrice,
-          surface: newPropSurface,
-          bedrooms: newPropBedrooms,
-          dpe: newPropDpe,
-          mandate: newPropMandate,
-          docs_ratio: 0.75,
-        });
-        setProperties((prev) => [created, ...prev]);
-        setSelectedPropId(created.id);
-        setStorageMode("api");
-        setInfoMsg(`Bien « ${created.title} » enregistré en base PostgreSQL RLS.`);
-      } else {
-        throw new Error("no-token");
+      if (!hasInMemoryAccessToken()) {
+        setErrorMsg("Session Pro requise : connectez-vous depuis le Dashboard pour enregistrer ce mandat en base PostgreSQL RLS.");
+        return;
       }
-    } catch {
-      const localCreated: PortfolioProperty = {
-        id: `prop-${Date.now()}`,
+      const created = await montyApi.createPortfolioProperty({
         title: newPropTitle.trim(),
         sector: newPropSector.trim(),
         property_type: newPropKind,
@@ -214,14 +197,21 @@ export function PortfolioMatchingPipelinePanel({
         dpe: newPropDpe,
         mandate: newPropMandate,
         docs_ratio: 0.75,
-      };
-      setProperties((prev) => [localCreated, ...prev]);
-      setSelectedPropId(localCreated.id);
-      setInfoMsg(`Bien « ${localCreated.title} » ajouté en mode local temporaire.`);
-    } finally {
-      setLoading(false);
+      });
+      setProperties((prev) => [created, ...prev]);
+      setSelectedPropId(created.id);
+      setStorageMode("api");
+      setInfoMsg(`Bien « ${created.title} » enregistré en base PostgreSQL RLS.`);
       setNewPropTitle("");
       setShowAddProperty(false);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "Impossible d'enregistrer le bien sur l'API backend."
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -292,47 +282,42 @@ export function PortfolioMatchingPipelinePanel({
     if (!selectedProp || !newVisitBuyer.trim() || !newVisitDate.trim()) return;
     setErrorMsg(null);
     setInfoMsg(null);
-    try {
-      if (hasInMemoryAccessToken()) {
-        const created = await montyApi.createPortfolioVisit({
-          property_id: selectedProp.id,
-          buyer_name: newVisitBuyer.trim(),
-          date_label: newVisitDate.trim(),
-          feedback: "Créneau confirmé depuis le cockpit.",
-        });
-        setVisits((prev) => [created, ...prev]);
-        setStorageMode("api");
-        setInfoMsg(`Visite enregistrée pour ${created.buyer_name}.`);
-      } else {
-        throw new Error("no-token");
-      }
-    } catch {
-      setVisits((prev) => [
-        {
-          id: `vis-${Date.now()}`,
-          property_id: selectedProp.id,
-          property_title: selectedProp.title,
-          buyer_name: newVisitBuyer.trim(),
-          date_label: newVisitDate.trim(),
-          status: "PLANIFIEE",
-          feedback: "Créneau confirmé depuis le cockpit.",
-        },
-        ...prev,
-      ]);
+    if (!hasInMemoryAccessToken()) {
+      setErrorMsg("Session Pro requise pour planifier et persister une visite dans le pipeline agence.");
+      return;
     }
-    setNewVisitBuyer("");
-    setNewVisitDate("");
+    try {
+      const created = await montyApi.createPortfolioVisit({
+        property_id: selectedProp.id,
+        buyer_name: newVisitBuyer.trim(),
+        date_label: newVisitDate.trim(),
+        feedback: "Créneau confirmé depuis le cockpit.",
+      });
+      setVisits((prev) => [created, ...prev]);
+      setStorageMode("api");
+      setInfoMsg(`Visite enregistrée pour ${created.buyer_name}.`);
+      setNewVisitBuyer("");
+      setNewVisitDate("");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Erreur lors de l'enregistrement de la visite.");
+    }
   }
 
   async function handleToggleVisitStatus(visit: PortfolioVisit) {
+    if (!hasInMemoryAccessToken()) {
+      setErrorMsg("Session Pro requise pour modifier le statut d'une visite.");
+      return;
+    }
+    const previousStatus = visit.status;
     const nextStatus: VisitStatus = visit.status === "PLANIFIEE" ? "REALISEE" : "PLANIFIEE";
+    setErrorMsg(null);
     setVisits((prev) => prev.map((v) => (v.id === visit.id ? { ...v, status: nextStatus } : v)));
-    if (!hasInMemoryAccessToken()) return;
     try {
       const updated = await montyApi.updatePortfolioVisitStatus(visit.id, { status: nextStatus });
       setVisits((prev) => prev.map((v) => (v.id === visit.id ? updated : v)));
-    } catch {
-      // Conserver l'état optimiste local si offline
+    } catch (err) {
+      setVisits((prev) => prev.map((v) => (v.id === visit.id ? { ...v, status: previousStatus } : v)));
+      setErrorMsg(err instanceof Error ? err.message : "Impossible de mettre à jour le statut de la visite.");
     }
   }
 
@@ -341,47 +326,42 @@ export function PortfolioMatchingPipelinePanel({
     if (!selectedProp || !newTxBuyer.trim() || newTxOffer < 10_000) return;
     setErrorMsg(null);
     setInfoMsg(null);
-    try {
-      if (hasInMemoryAccessToken()) {
-        const created = await montyApi.createPortfolioTransaction({
-          property_id: selectedProp.id,
-          buyer_name: newTxBuyer.trim(),
-          offer_euro: newTxOffer,
-          stage: "OFFRE",
-          notary_target_date: newTxDate,
-        });
-        setTransactions((prev) => [created, ...prev]);
-        setStorageMode("api");
-        setInfoMsg(`Transaction créée sur « ${created.property_title} ».`);
-      } else {
-        throw new Error("no-token");
-      }
-    } catch {
-      setTransactions((prev) => [
-        {
-          id: `tx-${Date.now()}`,
-          property_id: selectedProp.id,
-          property_title: selectedProp.title,
-          buyer_name: newTxBuyer.trim(),
-          offer_euro: newTxOffer,
-          stage: "OFFRE",
-          notary_target_date: newTxDate,
-        },
-        ...prev,
-      ]);
+    if (!hasInMemoryAccessToken()) {
+      setErrorMsg("Session Pro requise pour ouvrir une offre / transaction en base.");
+      return;
     }
-    setNewTxBuyer("");
-    setShowAddTx(false);
+    try {
+      const created = await montyApi.createPortfolioTransaction({
+        property_id: selectedProp.id,
+        buyer_name: newTxBuyer.trim(),
+        offer_euro: newTxOffer,
+        stage: "OFFRE",
+        notary_target_date: newTxDate,
+      });
+      setTransactions((prev) => [created, ...prev]);
+      setStorageMode("api");
+      setInfoMsg(`Transaction créée sur « ${created.property_title} ».`);
+      setNewTxBuyer("");
+      setShowAddTx(false);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Impossible de créer la transaction.");
+    }
   }
 
   async function handleUpdateStage(tx: PortfolioTransaction, stage: TransactionStage) {
+    if (!hasInMemoryAccessToken()) {
+      setErrorMsg("Session Pro requise pour faire évoluer l'étape d'une transaction.");
+      return;
+    }
+    const previousStage = tx.stage;
+    setErrorMsg(null);
     setTransactions((prev) => prev.map((item) => (item.id === tx.id ? { ...item, stage } : item)));
-    if (!hasInMemoryAccessToken()) return;
     try {
       const updated = await montyApi.updatePortfolioTransactionStage(tx.id, stage);
       setTransactions((prev) => prev.map((item) => (item.id === tx.id ? updated : item)));
-    } catch {
-      // Conserver état local si API non joignable
+    } catch (err) {
+      setTransactions((prev) => prev.map((item) => (item.id === tx.id ? { ...item, stage: previousStage } : item)));
+      setErrorMsg(err instanceof Error ? err.message : "Impossible de mettre à jour l'étape de transaction.");
     }
   }
 

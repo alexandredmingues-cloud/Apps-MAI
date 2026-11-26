@@ -333,15 +333,19 @@ async def run_authorized_feeds_sync_job(
 
 
 try:
+    import os as _os
     from arq import cron as _arq_cron
+    from arq.connections import RedisSettings as _ArqRedisSettings
 
     _CRON_JOBS = [
         _arq_cron(run_rgpd_retention_sweep, hour=2, minute=0),
         _arq_cron(run_dvf_sync_job, hour=3, minute=0),
         _arq_cron(run_authorized_feeds_sync_job, hour=4, minute=0),
     ]
+    _REDIS_SETTINGS = _ArqRedisSettings.from_dsn(_os.environ.get("REDIS_URL") or "redis://localhost:6379/0")
 except ImportError:
     _CRON_JOBS = []
+    _REDIS_SETTINGS = None
 
 
 class WorkerSettings:
@@ -352,4 +356,6 @@ class WorkerSettings:
         run_authorized_feeds_sync_job,
     ]
     cron_jobs = _CRON_JOBS
+    if _REDIS_SETTINGS is not None:
+        redis_settings = _REDIS_SETTINGS
 

@@ -282,6 +282,128 @@ class PostgresPortfolioLeadsRepository:
             )
             return prop
 
+    async def update_property(
+        self,
+        ctx: TenantContext,
+        *,
+        property_id: str,
+        title: str | None = None,
+        sector: str | None = None,
+        property_type: str | None = None,
+        price: int | None = None,
+        surface: int | None = None,
+        bedrooms: int | None = None,
+        dpe: str | None = None,
+        mandate: str | None = None,
+        docs_ratio: float | None = None,
+    ) -> PortfolioProperty:
+        ctx.require_permission(Permission.PROPERTY_WRITE)
+        clean_title = InputSanitizer.sanitize_text(title, 160) if title is not None else None
+        if title is not None and not clean_title:
+            raise ValueError("Le titre du bien ne peut pas être vide.")
+        clean_sector = InputSanitizer.sanitize_text(sector, 100) if sector is not None else None
+        if sector is not None and not clean_sector:
+            raise ValueError("Le secteur du bien ne peut pas être vide.")
+        if price is not None and price < 10_000:
+            raise ValueError("Prix minimum 10 000 €.")
+        if surface is not None and surface < 5:
+            raise ValueError("Surface minimale 5 m².")
+        clean_type = InputSanitizer.sanitize_text(property_type, 60) if property_type is not None else None
+        clean_bedrooms = max(0, min(30, bedrooms)) if bedrooms is not None else None
+        clean_dpe = (dpe.strip().upper()[:2] or None) if dpe is not None else None
+        clean_mandate = (
+            ("EXCLUSIF" if mandate.strip().upper().startswith("EXCLU") else "SIMPLE")
+            if mandate is not None and mandate.strip()
+            else None
+        )
+        clean_ratio = max(0.0, min(1.0, float(docs_ratio))) if docs_ratio is not None else None
+
+        async with self._open_tenant_session(ctx) as session:
+            row = (
+                await session.execute(
+                    self._text(
+                        """
+                        UPDATE properties
+                        SET title = COALESCE(:title, title),
+                            sector = COALESCE(:sector, sector),
+                            property_type = COALESCE(:kind, property_type),
+                            price_euro = COALESCE(:price, price_euro),
+                            surface_m2 = COALESCE(:surface, surface_m2),
+                            bedrooms = COALESCE(:bedrooms, bedrooms),
+                            dpe = COALESCE(:dpe, dpe),
+                            mandate_type = COALESCE(:mandate, mandate_type),
+                            docs_ratio = COALESCE(:docs_ratio, docs_ratio),
+                            updated_at = now()
+                        WHERE id = CAST(:pid AS uuid)
+                        RETURNING id, agency_id, title, sector, property_type, price_euro,
+                                  surface_m2, bedrooms, dpe, mandate_type, docs_ratio, created_at
+                        """
+                    ),
+                    {
+                        "pid": property_id,
+                        "title": clean_title,
+                        "sector": clean_sector,
+                        "kind": clean_type,
+                        "price": price,
+                        "surface": surface,
+                        "bedrooms": clean_bedrooms,
+                        "dpe": clean_dpe,
+                        "mandate": clean_mandate,
+                        "docs_ratio": clean_ratio,
+                    },
+                )
+            ).mappings().first()
+            if row is None:
+                raise ValueError("Bien introuvable dans cette agence.")
+            prop = self._row_to_property(row)
+
+            buyer_rows = (
+                await session.execute(
+                    self._text(
+                        """
+                        SELECT full_name, sector, budget_max
+                        FROM crm_contacts
+                        WHERE archived = false AND is_anonymized = false AND contact_type IN ('BUYER', 'Acquéreur')
+                        ORDER BY created_at DESC
+                        LIMIT 40
+                        """
+                    )
+                )
+            ).mappings().all()
+            matched_labels: list[str] = []
+            for br in buyer_rows:
+                b_budget = int(br.get("budget_max") or 0)
+                b_sector = str(br.get("sector") or "").lower()
+                if b_budget >= int(prop.price * 0.90) and (
+                    not b_sector or b_sector in prop.sector.lower() or prop.sector.lower() in b_sector
+                ):
+                    matched_labels.append(str(br["full_name"]))
+            await session.execute(
+                self._text(
+                    """
+                    INSERT INTO agency_notifications (
+                      agency_id, event_type, severity, title, detail, link_section, target_id
+                    ) VALUES (
+                      CAST(:aid AS uuid), :etype, :sev, :title, :detail, :lsec, :tid
+                    )
+                    """
+                ),
+                {
+                    "aid": ctx.agency_id,
+                    "etype": "BUYER_MATCH_FOUND" if matched_labels else "PROPERTY_UPDATED",
+                    "sev": "SUCCESS" if matched_labels else "INFO",
+                    "title": f"Mandat mis à jour : {prop.title}"[:200],
+                    "detail": (
+                        f"{prop.sector} • {prop.price:,} € • Acquéreurs compatibles : {', '.join(matched_labels[:3])}".replace(",", " ")
+                        if matched_labels
+                        else f"{prop.sector} • {prop.price:,} € • Critères actualisés.".replace(",", " ")
+                    )[:300],
+                    "lsec": "matching" if matched_labels else "properties",
+                    "tid": prop.id,
+                },
+            )
+            return prop
+
     # --- VISITES ---
     async def list_visits(self, ctx: TenantContext) -> list[PortfolioVisit]:
         ctx.require_permission(Permission.PROPERTY_READ)

@@ -54,7 +54,7 @@ interface MontyShellProps {
   activeSection: NavSectionKey;
   onSelectSection: (key: NavSectionKey) => void;
   agencyId: string;
-  role: MontyRole;
+  role: MontyRole | "VISITEUR";
   children: React.ReactNode;
 }
 

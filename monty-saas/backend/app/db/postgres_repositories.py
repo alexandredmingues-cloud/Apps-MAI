@@ -25,7 +25,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import tenant_db_session
-from app.domain.auth_and_billing import AuthSessionResult, InviteRecord, SAAS_PLANS
+from app.domain.auth_and_billing import AgencyBillingState, AuthSessionResult, InviteRecord, SAAS_PLANS
 from app.domain.country_packs import CountryCode, get_country_pack
 from app.domain.crm_service import (
     AdvisorPrivateNote,
@@ -581,7 +581,50 @@ class PostgresCrmRepository:
                 target_id=str(row["id"]),
                 detail=f"Création contact {safe_name} ({pack.country_code.value})",
             )
-            return self._row_to_contact(row)
+            contact = self._row_to_contact(row)
+            if contact.role == ContactRole.BUYER and contact.budget_euro > 0:
+                prop_rows = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT id::text, title, sector, price_euro
+                            FROM properties
+                            WHERE price_euro <= :max_p
+                            ORDER BY created_at DESC
+                            LIMIT 40
+                            """
+                        ),
+                        {"max_p": int(contact.budget_euro * 1.12)},
+                    )
+                ).mappings().all()
+                matched_titles: list[str] = []
+                buyer_city = contact.city.lower()
+                for pr in prop_rows:
+                    p_sector = str(pr.get("sector") or "").lower()
+                    if not buyer_city or buyer_city in p_sector or p_sector in buyer_city:
+                        matched_titles.append(str(pr["title"]))
+                if matched_titles:
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO agency_notifications (
+                              agency_id, event_type, severity, title, detail, link_section, target_id
+                            ) VALUES (
+                              CAST(:aid AS uuid), 'BUYER_MATCH_FOUND', 'SUCCESS', :title, :detail, 'matching', :tid
+                            )
+                            """
+                        ),
+                        {
+                            "aid": ctx.agency_id,
+                            "title": f"Acquéreur compatible : {contact.full_name}"[:200],
+                            "detail": (
+                                f"Budget {contact.budget_euro:,} € ({contact.city or 'multi-secteurs'}) • Biens compatibles : {', '.join(matched_titles[:3])}"
+                                .replace(",", " ")
+                            )[:300],
+                            "tid": contact.id,
+                        },
+                    )
+            return contact
 
     async def list_private_notes(self, ctx: TenantContext, *, contact_id: str) -> list[AdvisorPrivateNote]:
         ctx.require_permission(Permission.PRIVATE_NOTES_READ)
@@ -1305,10 +1348,45 @@ class PostgresMarketplaceRepository:
 
 
 class PostgresBillingRepository:
-    """Persistance PostgreSQL des webhooks Stripe (idempotence atomique + mise à jour abonnement agence)."""
+    """Persistance PostgreSQL des webhooks Stripe (idempotence atomique + mise à jour & lecture abonnement agence)."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
+
+    async def get_agency_billing(self, ctx: TenantContext) -> AgencyBillingState:
+        async with tenant_db_session(self._sf, ctx) as session:
+            row = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT id::text AS agency_id,
+                               plan_code,
+                               subscription_status,
+                               seat_limit,
+                               COALESCE(stripe_customer_id, '') AS stripe_customer_id,
+                               COALESCE(stripe_subscription_id, '') AS stripe_subscription_id
+                        FROM agencies
+                        WHERE id = CAST(:aid AS uuid)
+                        """
+                    ),
+                    {"aid": ctx.agency_id},
+                )
+            ).mappings().first()
+            if row is None:
+                return AgencyBillingState(
+                    agency_id=ctx.agency_id,
+                    plan_code="INDIVIDUAL",
+                    subscription_status="TRIAL",
+                    seat_limit=1,
+                )
+            return AgencyBillingState(
+                agency_id=str(row["agency_id"]),
+                plan_code=str(row["plan_code"]),
+                subscription_status=str(row["subscription_status"]),
+                seat_limit=int(row["seat_limit"]),
+                stripe_customer_id=str(row["stripe_customer_id"]),
+                stripe_subscription_id=str(row["stripe_subscription_id"]),
+            )
 
     async def record_webhook_and_update_agency(
         self,

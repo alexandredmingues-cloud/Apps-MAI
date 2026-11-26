@@ -142,6 +142,47 @@ async def create_crm_contact(
                 legal_basis=body.legal_basis,
                 consent_granted=body.consent_granted,
             )
+            if c.role == ContactRole.BUYER and c.budget_euro > 0:
+                from app.api.v1.portfolio_router import _portfolio_service
+                from app.domain.real_estate_engines import (
+                    BuyerMatchInput,
+                    PropertyMatchInput,
+                    compute_compatibility,
+                )
+
+                matched_props: list[str] = []
+                for p in _portfolio_service.list_properties(ctx):
+                    res = compute_compatibility(
+                        PropertyMatchInput(
+                            price=p.price,
+                            estimated_works=0,
+                            sector=p.sector,
+                            property_type=p.property_type,
+                            surface=p.surface,
+                            bedrooms=p.bedrooms,
+                            dpe=p.dpe,
+                        ),
+                        BuyerMatchInput(
+                            budget_max=c.budget_euro,
+                            sectors=[c.city] if c.city else [p.sector],
+                            property_type=p.property_type,
+                            min_surface=max(10, p.surface - 15),
+                            min_rooms=max(1, p.bedrooms),
+                            essential_criteria=[],
+                        ),
+                    )
+                    if res.score >= 65:
+                        matched_props.append(f"{p.title} ({res.score}%)")
+                if matched_props:
+                    interconnections_service.emit_notification(
+                        agency_id=ctx.agency_id,
+                        event_type="BUYER_MATCH_FOUND",
+                        severity="SUCCESS",
+                        title=f"Acquéreur compatible : {c.full_name}",
+                        detail=f"Budget {c.budget_euro:,} € • Biens compatibles : {', '.join(matched_props[:3])}.".replace(",", " "),
+                        link_section="matching",
+                        target_id=c.id,
+                    )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _contact_dto(c)
