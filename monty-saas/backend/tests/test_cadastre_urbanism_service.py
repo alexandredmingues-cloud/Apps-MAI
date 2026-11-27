@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import unittest
-from urllib.parse import urlparse, parse_qs
+from pathlib import Path
+import sys
+from urllib.parse import urlparse
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from app.domain.cadastre_urbanism_service import CadastreUrbanismService
 
