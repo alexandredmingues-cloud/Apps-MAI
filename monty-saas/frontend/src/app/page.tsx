@@ -8,6 +8,7 @@ import { LogOut } from "lucide-react";
 import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
 import { SponsoredBrandSlot } from "@/components/ads/SponsoredBrandSlot";
 import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
+import { MonAgentAssistantWidget } from "@/components/ai/MonAgentAssistantWidget";
 import { RealEstateSimulatorsSuite } from "@/components/calculators/RealEstateSimulatorsSuite";
 import { CrmCockpitPanel } from "@/components/crm/CrmCockpitPanel";
 import { MontyShell } from "@/components/layout/MontyShell";
@@ -789,6 +790,7 @@ export default function MontySaasCockpitPage() {
           </>
         )}
       </div>
+      {session && <MonAgentAssistantWidget />}
     </MontyShell>
   );
 }
