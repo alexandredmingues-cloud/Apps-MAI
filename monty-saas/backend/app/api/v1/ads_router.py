@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
@@ -126,24 +126,26 @@ async def list_public_ads(
     return {"ads": [{**ad, "id": str(ad["id"]), "sponsored": True} for ad in ads]}
 
 
-@ads_router.post("/public/{ad_id}/impression", status_code=204)
-async def record_ad_impression(ad_id: UUID, sf=Depends(get_db_session_factory)) -> None:
+@ads_router.post("/public/{ad_id}/impression", status_code=204, response_class=Response, response_model=None)
+async def record_ad_impression(ad_id: UUID, sf=Depends(get_db_session_factory)) -> Response:
     factory = await _session(sf)
     async with factory() as session:
         async with session.begin():
             await session.execute(text("""UPDATE brand_ad_campaigns SET impressions = impressions + 1
                 WHERE id = :id AND status = 'APPROVED' AND (starts_at IS NULL OR starts_at <= now())
                 AND (ends_at IS NULL OR ends_at >= now())"""), {"id": ad_id})
+    return Response(status_code=204)
 
 
-@ads_router.post("/public/{ad_id}/click", status_code=204)
-async def record_ad_click(ad_id: UUID, sf=Depends(get_db_session_factory)) -> None:
+@ads_router.post("/public/{ad_id}/click", status_code=204, response_class=Response, response_model=None)
+async def record_ad_click(ad_id: UUID, sf=Depends(get_db_session_factory)) -> Response:
     factory = await _session(sf)
     async with factory() as session:
         async with session.begin():
             await session.execute(text("""UPDATE brand_ad_campaigns SET clicks = clicks + 1
                 WHERE id = :id AND status = 'APPROVED' AND (starts_at IS NULL OR starts_at <= now())
                 AND (ends_at IS NULL OR ends_at >= now())"""), {"id": ad_id})
+    return Response(status_code=204)
 
 
 @ads_router.get("/admin/requests")
