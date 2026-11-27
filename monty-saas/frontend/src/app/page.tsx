@@ -392,7 +392,7 @@ export default function MontySaasCockpitPage() {
                     MON-AGENT • Cockpit Web Pro
                   </h2>
                   <p className="mt-1 text-sm text-ivoryWarm/80">
-                    « L&apos;humain avant tout. La technologie au service du conseiller immobilier. »
+                    « L&apos;humain avant tout. La technologie au service de l&apos;immobilier. »
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
