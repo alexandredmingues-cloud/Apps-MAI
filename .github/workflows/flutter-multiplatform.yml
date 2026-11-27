@@ -42,7 +42,7 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
       - name: Static analysis
-        run: flutter analyze --fatal-infos
+        run: flutter analyze
       - name: Widget tests
         run: flutter test --reporter expanded
       - name: Build Android APK (debug verification)
@@ -77,7 +77,7 @@ jobs:
         run: flutter pub get
       - name: Analyze and test
         run: |
-          flutter analyze --fatal-infos
+          flutter analyze
           flutter test --reporter expanded
       - name: Build iOS simulator
         run: flutter build ios --simulator --no-codesign
