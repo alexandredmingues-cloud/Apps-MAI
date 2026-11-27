@@ -82,5 +82,10 @@ jobs:
           if [ ! -f debug.keystore ]; then
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
-      - name: Compile Android & run JVM unit tests
-        run: gradle :app:assembleDebug :app:testDebugUnitTest
+          keytool -genkeypair -v -keystore ci-release.keystore -storepass ci-release-store -alias upload -keypass ci-release-key -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=MON-AGENT CI,O=MON-AGENT,C=FR"
+      - name: Compile Android debug, unit tests and minified release APK
+        run: gradle :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/ci-release.keystore
+          STORE_PASSWORD: ci-release-store
+          KEY_PASSWORD: ci-release-key
