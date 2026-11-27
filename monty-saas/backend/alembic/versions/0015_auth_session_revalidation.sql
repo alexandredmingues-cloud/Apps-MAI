@@ -86,8 +86,14 @@ BEGIN
   JOIN agency_memberships AS m ON m.user_id = u.id
   JOIN agencies AS a ON a.id = m.agency_id
   WHERE u.id = v_user_id
-    AND m.agency_id = p_agency_id
-    AND m.status = 'ACTIVE';
+    AND m.status = 'ACTIVE'
+    AND (
+      m.agency_id = p_agency_id
+      OR (p_agency_id IS NULL AND (
+        SELECT count(*) FROM agency_memberships AS active_m
+        WHERE active_m.user_id = u.id AND active_m.status = 'ACTIVE'
+      ) = 1)
+    );
 END;
 $$ LANGUAGE plpgsql
 SECURITY DEFINER
