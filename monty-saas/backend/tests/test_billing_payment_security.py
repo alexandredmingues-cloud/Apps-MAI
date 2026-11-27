@@ -36,7 +36,3 @@ def test_accepts_only_exact_paid_eur_one_time_checkout() -> None:
 )
 def test_rejects_unpaid_wrong_mode_currency_or_amount(session, expected_amount) -> None:
     assert not _is_paid_eur_checkout_session(session, expected_amount)
-
-
-def test_rejects_malformed_session_payload() -> None:
-    assert not _is_paid_eur_checkout_session(None, 29) if False else True
