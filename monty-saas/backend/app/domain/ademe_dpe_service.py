@@ -12,7 +12,7 @@ from app.core.security import InputSanitizer
 
 
 ADEME_DPE_DATASET_URL = (
-    "https://data.ademe.fr/data-fair/api/v1/datasets/dpe-v2-logements-existants/lines"
+    "https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines"
 )
 
 
@@ -66,19 +66,19 @@ class AdemeDpeService:
 
         qs_parts: list[str] = []
         if clean_num:
-            qs_parts.append(f'N°DPE:"{clean_num}"')
+            qs_parts.append(f'numero_dpe:"{clean_num}"')
         if clean_cp:
-            qs_parts.append(f'Code_postal_(BAN):"{clean_cp}"')
+            qs_parts.append(f'code_postal_ban:"{clean_cp}"')
         if clean_city:
-            qs_parts.append(f'Nom__commune_(BAN):"{clean_city}"')
+            qs_parts.append(f'nom_commune_ban:"{clean_city}"')
         params = urllib.parse.urlencode(
             {
                 "qs": " AND ".join(qs_parts),
                 "size": max(1, min(15, int(limit))),
                 "select": (
-                    "N°DPE,Etiquette_DPE,Etiquette_GES,Conso_5_usages_par_m²_é_primaire,"
-                    "Emission_GES_5_usages_par_m²,Nom__commune_(BAN),Code_postal_(BAN),"
-                    "Surface_habitable_logement,Année_construction,Date_établissement_DPE"
+                    "numero_dpe,etiquette_dpe,etiquette_ges,conso_5_usages_par_m2_ep,"
+                    "emission_ges_5_usages_par_m2,nom_commune_ban,code_postal_ban,"
+                    "surface_habitable_logement,annee_construction,date_etablissement_dpe"
                 ),
             }
         )
@@ -98,32 +98,32 @@ class AdemeDpeService:
             rows = payload.get("results") or []
             records = [
                 AdemeDpeRecord(
-                    dpe_number=str(row.get("N°DPE") or ""),
-                    dpe_label=str(row.get("Etiquette_DPE") or "N/C")[:1].upper(),
-                    ges_label=str(row.get("Etiquette_GES") or "N/C")[:1].upper(),
+                    dpe_number=str(row.get("numero_dpe") or ""),
+                    dpe_label=str(row.get("etiquette_dpe") or "N/C")[:1].upper(),
+                    ges_label=str(row.get("etiquette_ges") or "N/C")[:1].upper(),
                     conso_kwh_m2_an=(
-                        float(row["Conso_5_usages_par_m²_é_primaire"])
-                        if row.get("Conso_5_usages_par_m²_é_primaire") is not None
+                        float(row["conso_5_usages_par_m2_ep"])
+                        if row.get("conso_5_usages_par_m2_ep") is not None
                         else None
                     ),
                     emission_ges_kg_m2_an=(
-                        float(row["Emission_GES_5_usages_par_m²"])
-                        if row.get("Emission_GES_5_usages_par_m²") is not None
+                        float(row["emission_ges_5_usages_par_m2"])
+                        if row.get("emission_ges_5_usages_par_m2") is not None
                         else None
                     ),
-                    city=str(row.get("Nom__commune_(BAN)") or clean_city),
-                    postal_code=str(row.get("Code_postal_(BAN)") or clean_cp),
+                    city=str(row.get("nom_commune_ban") or clean_city),
+                    postal_code=str(row.get("code_postal_ban") or clean_cp),
                     surface_m2=(
-                        float(row["Surface_habitable_logement"])
-                        if row.get("Surface_habitable_logement") is not None
+                        float(row["surface_habitable_logement"])
+                        if row.get("surface_habitable_logement") is not None
                         else None
                     ),
                     construction_year=(
-                        int(row["Année_construction"])
-                        if row.get("Année_construction") is not None
+                        int(row["annee_construction"])
+                        if row.get("annee_construction") is not None
                         else None
                     ),
-                    issued_date=str(row.get("Date_établissement_DPE") or ""),
+                    issued_date=str(row.get("date_etablissement_dpe") or ""),
                 )
                 for row in rows
                 if isinstance(row, dict)
