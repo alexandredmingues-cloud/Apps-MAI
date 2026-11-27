@@ -16,6 +16,10 @@ Construire un radar immobilier continu, multi-sources et multi-agences, qui coll
 - Vérification de `robots.txt` en mode fermé en cas d'incertitude réseau.
 - Service ADEME raccordé au jeu officiel `dpe03existant` (logements existants depuis juillet 2021), avec cache mémoire et extraction des champs énergie/GES.
 - Nouvelle route authentifiée `GET /api/v1/marketplace/dpe/lookup`, paramètres : `postal_code`, `city`, `dpe_number`, `limit`.
+- Service IGN API Carto raccordé pour les parcelles cadastrales (référence, section, numéro, commune, contenance et géométrie).
+- Couches Géoportail de l'Urbanisme : zonage PLU/PLUi, prescriptions surfaciques/linéaires/ponctuelles, servitudes d'utilité publique et documents d'urbanisme.
+- Couche Géorisques interrogée par coordonnées GPS.
+- Nouvelle route authentifiée `GET /api/v1/marketplace/cadastre/lookup?latitude=...&longitude=...` avec état de disponibilité par couche, avertissements et réserve juridique.
 
 ### Pas encore activé / non démontré
 
@@ -23,6 +27,8 @@ Construire un radar immobilier continu, multi-sources et multi-agences, qui coll
 - Aucun connecteur contractuel SeLoger, Leboncoin, Bien'ici, PAP ou autre portail n'est activé par défaut.
 - Le cache DPE actuel est en mémoire et ne constitue pas un entrepôt national durable.
 - Le rapprochement automatique entre annonce et DPE n'est pas encore implémenté comme une liaison certifiée.
+- Le rapprochement automatique des annonces avec les parcelles n'est pas encore enregistré dans un dossier de bien : la recherche cadastrale fonctionne par coordonnées et renvoie les parcelles candidates.
+- La recherche cadastrale/urbanisme est exposée par API ; l'écran web MON-AGENT n'est pas encore raccordé à cette route. L'application Android contient déjà un écran cartographique/urbanisme utilisant ces couches, à tester sur la dernière version.
 - Aucun système d'alertes temps réel (baisse de prix, nouvelle annonce, republication, retrait) n'est déclaré opérationnel.
 
 ## Architecture cible du service continu
@@ -31,16 +37,18 @@ Construire un radar immobilier continu, multi-sources et multi-agences, qui coll
 2. **File des sources autorisées** : chaque source possède un propriétaire/tenant, un contrat ou consentement documenté, un format, une fréquence, un statut, une date de prochaine synchronisation et un plafond de requêtes.
 3. **Connecteurs officiels** : API partenaires, flux XML/JSON/JSON-LD fournis par les agences, exports autorisés et intégrations contractuelles. Aucune extraction de pages derrière connexion, CAPTCHA, paywall ou mécanisme anti-robot.
 4. **Pipeline d'annonces** : collecte, validation de schéma, normalisation, déduplication multi-source, résolution de l'identité du bien, historique des changements, statut actif/retiré, provenance et URL source.
-5. **Pipeline DPE ADEME** : interrogation par numéro DPE, adresse BAN ou localisation suffisamment précise ; stockage du numéro, date, étiquettes, consommations, GES, validité et date de dernière mise à jour.
-6. **Rapprochement prudent** : priorité à l'identifiant BAN et au numéro DPE ; sinon adresse normalisée + bâtiment + surface/type. Un score faible ou plusieurs candidats doivent produire « correspondance à vérifier », jamais un DPE présenté comme certain.
-7. **Alertes** : nouvelles annonces, prix modifié, annonce republiée, bien retiré, DPE trouvé/modifié/expirant, passoire énergétique. Alertes tenant-scoped et désactivables.
-8. **Observabilité** : dernier succès, dernier échec, durée, nombre récupéré/dédupliqué/rejeté, fraîcheur par source, quota et alertes de panne.
+5. **Cadastre et urbanisme** : associer le point géocodé à la ou aux parcelles candidates, conserver la référence cadastrale et la géométrie, puis enrichir avec zonage PLU/PLUi, prescriptions, SUP et Géorisques. Ne jamais déduire une constructibilité de la seule présence d'une zone.
+6. **Pipeline DPE ADEME** : interrogation par numéro DPE, adresse BAN ou localisation suffisamment précise ; stockage du numéro, date, étiquettes, consommations, GES, validité et date de dernière mise à jour.
+7. **Rapprochement prudent** : priorité à l'identifiant BAN et au numéro DPE ; sinon adresse normalisée + bâtiment + surface/type. Un score faible ou plusieurs candidats doivent produire « correspondance à vérifier », jamais un DPE présenté comme certain.
+8. **Alertes** : nouvelles annonces, prix modifié, annonce republiée, bien retiré, DPE trouvé/modifié/expirant, passoire énergétique. Alertes tenant-scoped et désactivables.
+9. **Observabilité** : dernier succès, dernier échec, durée, nombre récupéré/dédupliqué/rejeté, fraîcheur par source, quota et alertes de panne.
 
 ## Règles de données et de conformité
 
 - Les annonces restent attribuées à leur source ; ne pas recopier photos, descriptions ou coordonnées hors du périmètre contractuel.
 - Conserver les URLs canoniques et les dates de collecte ; afficher la provenance aux utilisateurs.
 - Respecter les licences open data et les conditions propres à chaque fournisseur.
+- La contenance cadastrale est une information foncière, distincte de la surface habitable et d'un mesurage de géomètre. Le PLU, les prescriptions et les servitudes doivent être vérifiés dans les documents opposables auprès de la collectivité compétente.
 - Le DPE ADEME est une donnée brute : afficher le numéro et la date, vérifier la validité, et signaler les diagnostics absents ou incohérents. La base ne couvre pas tous les logements.
 - Ne pas inférer une classe DPE manquante à partir de l'âge, du quartier ou d'un logement voisin.
 - Cloisonnement agence/tenant, contrôle des droits, journal d'audit, limitation de débit et protection SSRF sur les URLs de flux.
@@ -70,4 +78,8 @@ Construire un radar immobilier continu, multi-sources et multi-agences, qui coll
 - ADEME — Observatoire DPE-AUDIT : https://observatoire-dpe-audit.ademe.fr/
 - SeLoger — Conditions générales et opposition explicite à l'extraction automatisée : https://www.seloger.com/Conditions_Generales_d_Utilisation.html
 - LeBoncoin — Règles de référencement des annonces : https://www.leboncoin.fr/dc/rules
+- IGN — API Carto : https://apicarto.ign.fr/
+- Géoportail de l'Urbanisme : https://www.geoportail-urbanisme.gouv.fr/
+- Géorisques : https://www.georisques.gouv.fr/
+- Cadastre : https://www.cadastre.gouv.fr/
 - DVF — Demandes de valeurs foncières : https://app.dvf.etalab.gouv.fr/faq.html
