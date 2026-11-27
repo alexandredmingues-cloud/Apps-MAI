@@ -263,7 +263,7 @@ async def register_agency_account(
 
 
 class RegisterClientRequest(BaseModel):
-    captcha_token: str = Field(min_length=1, max_length=2048)
+    captcha_token: str = Field(default="", max_length=2048)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=2, max_length=120)
@@ -318,7 +318,7 @@ async def register_client_account(
 
 
 class LoginRequest(BaseModel):
-    captcha_token: str = Field(min_length=1, max_length=2048)
+    captcha_token: str = Field(default="", max_length=2048)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
 
