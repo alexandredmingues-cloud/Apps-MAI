@@ -1,5 +1,5 @@
--- MON-AGENT brand advertising-- Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code.
-: advertiser requests are moderated before publication.
+-- Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code.
+-- MON-AGENT brand advertising: advertiser requests are moderated before publication.
 CREATE TABLE IF NOT EXISTS brand_ad_campaigns (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   advertiser_name varchar(140) NOT NULL,
