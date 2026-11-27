@@ -1,4 +1,5 @@
 """Create moderated brand advertising campaigns."""
+# Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code.
 from __future__ import annotations
 
 import pathlib
