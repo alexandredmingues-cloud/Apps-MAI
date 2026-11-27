@@ -61,3 +61,12 @@ Les règles Firestore (`seller_dossiers`) bloquent désormais toute écriture cl
 - `monty-saas/docs/DEPLOYMENT.md` — Déploiement unifié Render (`render.yaml`, `plan: starter`, disque, Redis) & Vercel
 - `monty-saas/docs/ANDROID_SAAS_SYNC_STRATEGY.md` — Stratégie de convergence Android ↔ SaaS
 - `monty-saas/docs/CHANGELOG.md` — Journal des évolutions V3
+
+
+## Copyright & publicité de marques
+
+- Les éléments originaux MON-AGENT sont couverts par la notice [COPYRIGHT.md](COPYRIGHT.md). Les composants, polices, cartes, données et dépendances tiers conservent leurs licences propres.
+- Les marques peuvent déposer une demande de campagne sur `/publicite`. Les demandes restent en attente de modération avant toute diffusion.
+- Emplacements prévus : accueil, recherche immobilière, contenus/actualités et espace professionnel. Les annonces sponsorisées sont explicitement identifiées et ne modifient jamais le classement organique des biens.
+- API : `GET /api/v1/ads/public`, `POST /api/v1/ads/public/requests`, métriques agrégées d'impressions/clics et modération réservée au rôle `SUPER_ADMIN`.
+- Migration PostgreSQL : Alembic `0013_brand_advertising`.
