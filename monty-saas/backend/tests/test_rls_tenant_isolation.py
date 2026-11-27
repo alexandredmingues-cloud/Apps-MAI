@@ -108,6 +108,15 @@ async def test_rls_blocks_cross_agency_reads_and_writes_as_non_superuser(monkeyp
         # SET LOCAL ROLE is transaction-scoped; cleanup runs as the owner.
         try:
             async with engine.begin() as conn:
-                await conn.execute(text(f'DROP ROLE IF EXISTS "{role_name}"'))
+                await conn.execute(text(f"""
+                    DO $cleanup$
+                    BEGIN
+                      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role_name}') THEN
+                        EXECUTE 'DROP OWNED BY "{role_name}"';
+                        EXECUTE 'DROP ROLE "{role_name}"';
+                      END IF;
+                    END
+                    $cleanup$;
+                """))
         finally:
             await engine.dispose()
