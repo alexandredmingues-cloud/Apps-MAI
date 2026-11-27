@@ -4,20 +4,25 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
+from sqlalchemy.engine import make_url
 from sqlalchemy import engine_from_config, pool
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.environ.get("DATABASE_URL_SYNC") or os.environ.get("DATABASE_URL", "")
-if database_url.startswith("postgresql+asyncpg://"):
-    database_url = database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
-elif database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql+psycopg://", 1)
-
+database_url = os.environ.get("DATABASE_URL_SYNC") or os.environ.get("DATABASE_URL", "").strip()
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    url = make_url(database_url)
+    if url.drivername in {"postgres", "postgresql", "postgresql+asyncpg"}:
+        url = url.set(drivername="postgresql+psycopg")
+    elif url.drivername != "postgresql+psycopg":
+        raise RuntimeError(
+            "DATABASE_URL must use PostgreSQL (postgresql:// or postgresql+psycopg://)."
+        )
+    # Alembic's ConfigParser treats '%' as interpolation syntax; escape it here
+    # so URL-encoded characters in the database password survive unchanged.
+    config.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False).replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
