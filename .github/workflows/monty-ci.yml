@@ -17,7 +17,21 @@ jobs:
   backend-python:
     name: Backend FastAPI & Domain Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: monagent_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d monagent_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: monty-saas/backend
@@ -30,6 +44,11 @@ jobs:
           cache-dependency-path: monty-saas/backend/requirements.txt
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Apply all PostgreSQL migrations on a clean PostgreSQL 16 database
+        env:
+          DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@localhost:5432/monagent_test
+        run: alembic upgrade head
+
       - name: Compile Python sources & run complete test suite
         env:
           ENVIRONMENT: development
