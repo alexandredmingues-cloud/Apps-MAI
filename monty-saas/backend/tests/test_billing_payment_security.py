@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 
 from app.api.v1.billing_router import _is_paid_eur_checkout_session
-from app.api.v1.deps import _is_rls_safe_database_role
+from app.api.v1.deps import _is_rls_safe_database_role, ensure_production_persistence
 
 
 def _session(**overrides):
@@ -52,3 +53,20 @@ def test_rejects_unpaid_wrong_mode_currency_or_amount(session, expected_amount) 
 )
 def test_production_database_role_must_not_bypass_rls(role_state, expected) -> None:
     assert _is_rls_safe_database_role(role_state) is expected
+
+
+
+def test_production_persistence_guard_rejects_missing_database() -> None:
+    with pytest.raises(HTTPException) as exc:
+        ensure_production_persistence(None, is_production=True, service_name="RNIC")
+    assert exc.value.status_code == 503
+    assert exc.value.headers == {"Retry-After": "60"}
+
+
+def test_production_persistence_guard_allows_configured_database() -> None:
+    marker = object()
+    ensure_production_persistence(marker, is_production=True, service_name="RNIC")
+
+
+def test_production_persistence_guard_keeps_local_development_fallback() -> None:
+    ensure_production_persistence(None, is_production=False, service_name="RNIC")
