@@ -9,6 +9,7 @@ import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
 import { SponsoredBrandSlot } from "@/components/ads/SponsoredBrandSlot";
 import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
 import { MonAgentAssistantWidget } from "@/components/ai/MonAgentAssistantWidget";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { RealEstateSimulatorsSuite } from "@/components/calculators/RealEstateSimulatorsSuite";
 import { CrmCockpitPanel } from "@/components/crm/CrmCockpitPanel";
 import { MontyShell } from "@/components/layout/MontyShell";
@@ -46,6 +47,8 @@ export default function MontySaasCockpitPage() {
   const [calcLoading, setCalcLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authFormError, setAuthFormError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -146,6 +149,10 @@ export default function MontySaasCockpitPage() {
     setApiError(null);
     setAuthFormError(null);
 
+    if (!captchaToken) {
+      setAuthFormError("Veuillez valider le contrôle anti-robot avant de continuer.");
+      return;
+    }
     const trimmedEmail = authEmail.trim();
     if (!EMAIL_RE.test(trimmedEmail)) {
       setAuthFormError("Veuillez saisir une adresse e-mail professionnelle valide.");
@@ -171,6 +178,7 @@ export default function MontySaasCockpitPage() {
       const issued =
         authMode === "register"
           ? await montyApi.registerAgency({
+              captcha_token: captchaToken,
               agency_name: authAgencyName.trim(),
               email: trimmedEmail,
               password: authPassword,
@@ -179,6 +187,7 @@ export default function MontySaasCockpitPage() {
           : await montyApi.login({
               email: trimmedEmail,
               password: authPassword,
+              captcha_token: captchaToken,
             });
       persistSession(issued);
       setSession(issued);
@@ -189,6 +198,8 @@ export default function MontySaasCockpitPage() {
       setAuthFormError(err instanceof Error ? err.message : "Échec d'authentification");
     } finally {
       setAuthLoading(false);
+      setCaptchaToken("");
+      setCaptchaReset((value) => value + 1);
     }
   }
 
@@ -521,9 +532,10 @@ export default function MontySaasCockpitPage() {
                       className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5 text-xs"
                     />
                   </div>
+                  <TurnstileWidget onVerify={setCaptchaToken} resetKey={captchaReset} />
                   <button
                     type="submit"
-                    disabled={authLoading}
+                    disabled={authLoading || !captchaToken}
                     className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid disabled:opacity-50"
                   >
                     {authLoading
