@@ -16,6 +16,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP TRIGGER IF EXISTS trg_guard_brand_ad_public_update ON brand_ad_campaigns;")
+    op.execute("DROP FUNCTION IF EXISTS guard_brand_ad_public_update();")
     op.execute("DROP POLICY IF EXISTS brand_ads_super_admin_all ON brand_ad_campaigns;")
     op.execute("DROP POLICY IF EXISTS brand_ads_public_update_metrics ON brand_ad_campaigns;")
     op.execute("DROP POLICY IF EXISTS brand_ads_public_insert_pending ON brand_ad_campaigns;")
