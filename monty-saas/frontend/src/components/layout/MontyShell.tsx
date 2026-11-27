@@ -84,7 +84,7 @@ export function MontyShell({
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-ivoryWarm text-obsidianInk">
       {/* Barre latérale Desktop */}
-      <aside className="hidden lg:flex lg:w-72 lg:flex-col bg-emeraldDeep text-ivoryWarm border-r border-emeraldMid shrink-0">
+      <aside className="hidden lg:flex lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:flex-col bg-emeraldDeep text-ivoryWarm border-r border-emeraldMid shrink-0 shadow-xl shadow-emeraldDeep/10">
         <div className="px-6 py-6 border-b border-emeraldMid">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-goldAntique/20 border border-goldAntique/60 flex items-center justify-center text-goldChampagne font-display font-bold text-lg">
@@ -126,7 +126,7 @@ export function MontyShell({
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav aria-label="Navigation principale professionnelle" className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
@@ -222,7 +222,7 @@ export function MontyShell({
       </header>
 
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-emeraldDeep text-ivoryWarm px-4 py-3 border-b border-emeraldMid grid grid-cols-2 gap-2">
+        <nav aria-label="Navigation mobile" className="lg:hidden bg-emeraldDeep text-ivoryWarm px-4 py-3 border-b border-emeraldMid grid grid-cols-2 gap-2">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
@@ -251,11 +251,11 @@ export function MontyShell({
             <Download className="w-4 h-4 shrink-0" />
             <span>Télécharger l&apos;application (APK)</span>
           </Link>
-        </div>
+        </nav>
       )}
 
       {/* Contenu principal */}
-      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
         {children}
       </main>
     </div>
