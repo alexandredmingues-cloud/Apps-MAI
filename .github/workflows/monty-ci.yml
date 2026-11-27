@@ -64,16 +64,24 @@ jobs:
           BACKUP_DIR: ${{ runner.temp }}/monagent-backup-test
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+          mkdir -p "$BACKUP_DIR"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE backup_restore_probe (id integer PRIMARY KEY, payload text NOT NULL)"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO backup_restore_probe VALUES (1, 'restore-ok')"
-          bash scripts/backup_postgres.sh
+          # Use the same PostgreSQL 16 client major as the service. Newer pg_dump
+          # emits settings that PostgreSQL 16 does not understand on restore.
+          docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e BACKUP_DIR=/backup \
+            -v "$BACKUP_DIR:/backup" \
+            -v "$GITHUB_WORKSPACE/monty-saas/backend/scripts:/scripts:ro" \
+            postgres:16 bash -lc 'set -euo pipefail; bash /scripts/backup_postgres.sh; DUMP_FILE="$(find /backup -maxdepth 1 -name "monty_saas_*.dump" -type f -print -quit)"; test -n "$DUMP_FILE"; sha256sum -c "$DUMP_FILE.sha256"'
           DUMP_FILE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'monty_saas_*.dump' -type f -print -quit)"
           test -n "$DUMP_FILE"
-          sha256sum -c "$DUMP_FILE.sha256"
           createdb -h localhost -U postgres monagent_restore
-          pg_restore --exit-on-error --no-owner --no-acl --dbname=postgresql://postgres:postgres@localhost:5432/monagent_restore "$DUMP_FILE"
+          docker run --rm --network host \
+            -v "$BACKUP_DIR:/backup:ro" \
+            postgres:16 pg_restore --exit-on-error --no-owner --no-acl \
+            --dbname=postgresql://postgres:postgres@127.0.0.1:5432/monagent_restore "/backup/$(basename "$DUMP_FILE")"
           RESTORED="$(psql postgresql://postgres:postgres@localhost:5432/monagent_restore -Atc "SELECT payload FROM backup_restore_probe WHERE id = 1")"
           test "$RESTORED" = "restore-ok"
 
