@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MON-AGENT — Système d'exploitation immobilier multi-agences",
+  title: "MON-AGENT — Plateforme immobilière intelligente",
   description:
-    "L'humain avant tout. La technologie au service du immobilier.",
+    "L'humain avant tout. La technologie au service de l'immobilier.",
 };
 
 export default function RootLayout({
@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="fr">
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
-        <link rel="icon" href="/icon-monty.svg" type="image/svg+xml" />
+        <link rel="icon" href="/icon-mon-agent.svg" type="image/svg+xml" />
         <meta name="theme-color" content="#0B3B2E" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
