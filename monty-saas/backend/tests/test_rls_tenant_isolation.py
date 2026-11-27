@@ -216,6 +216,17 @@ async def test_payment_and_rnic_entitlements_are_restricted_by_rls_context() -> 
             )
             assert hidden_order.first() is None, "Seller orders must be invisible without payment capability"
 
+            with pytest.raises(DBAPIError):
+                async with conn.begin_nested():
+                    await conn.execute(
+                        text("""
+                            INSERT INTO seller_pack_orders
+                              (order_id, dossier_id, buyer_email, amount_euro, status, stripe_session_id)
+                            VALUES (:oid, 'forged-dossier', 'intruder@example.test', 29, 'PENDING_PAYMENT', :sid)
+                        """),
+                        {"oid": f"{order_id}_forged", "sid": f"{stripe_session}_forged"},
+                    )
+
             hidden_pass = await conn.execute(
                 text("SELECT pass_token FROM rnic_access_passes WHERE pass_token = :token"),
                 {"token": pass_token},
