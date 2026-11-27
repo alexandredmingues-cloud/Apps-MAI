@@ -70,3 +70,5 @@ Les règles Firestore (`seller_dossiers`) bloquent désormais toute écriture cl
 - Emplacements prévus : accueil, recherche immobilière, contenus/actualités et espace professionnel. Les annonces sponsorisées sont explicitement identifiées et ne modifient jamais le classement organique des biens.
 - API : `GET /api/v1/ads/public`, `POST /api/v1/ads/public/requests`, métriques agrégées d'impressions/clics et modération réservée au rôle `SUPER_ADMIN`.
 - Migration PostgreSQL : Alembic `0013_brand_advertising`.
+
+Administration des campagnes publicitaires : route `/admin/publicite`, accessible aux comptes `SUPER_ADMIN` uniquement.
