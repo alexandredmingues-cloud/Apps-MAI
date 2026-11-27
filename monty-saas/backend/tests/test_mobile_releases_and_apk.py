@@ -16,6 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi import HTTPException  # noqa: E402
+from sqlalchemy.exc import IntegrityError  # noqa: E402
 from app.core.config import load_settings  # noqa: E402
 from app.core.storage import ObjectStorageAdapter  # noqa: E402
 from app.db.postgres_v3_orchestrator_repository import (  # noqa: E402
@@ -346,6 +347,33 @@ class MobileReleasePublicationCleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.status_code, 503)
         fake_storage.delete_object.assert_called_once_with(object_key="apk/rel-test1234-release.apk")
 
+
+    async def test_concurrent_duplicate_version_is_http_409_and_cleans_uploaded_object(self) -> None:
+        diagnostic = SimpleNamespace(constraint_name="uq_mobile_app_releases_package_version")
+        database_error = IntegrityError("INSERT mobile_app_releases", {}, SimpleNamespace(diag=diagnostic))
+        fake_storage = SimpleNamespace(
+            active_backend="supabase",
+            put_bytes=lambda **kwargs: SimpleNamespace(object_key=kwargs["object_key"]),
+            delete_object=Mock(),
+        )
+        fake_repo = SimpleNamespace(
+            assert_mobile_release_version_available=AsyncMock(return_value=None),
+            upsert_mobile_release=AsyncMock(side_effect=database_error),
+        )
+        release = SimpleNamespace(
+            id="rel-race1234", file_name="release.apk", storage_path="",
+            version_code=42, package_id="com.example.app",
+        )
+        with patch(
+            "app.api.v1.mobile_releases_router.PostgresV3OrchestratorRepository",
+            return_value=fake_repo,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await _persist_uploaded_mobile_release(
+                    release, raw_bytes=b"apk-bytes", storage=fake_storage, session_factory=object()
+                )
+        self.assertEqual(raised.exception.status_code, 409)
+        fake_storage.delete_object.assert_called_once_with(object_key="apk/rel-race1234-release.apk")
 
 if __name__ == "__main__":
     unittest.main()
