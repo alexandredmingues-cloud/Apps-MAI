@@ -70,10 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Robolectric API 36 requires JDK 21. JDK 17 causes
+      # DefaultSdkProvider.verifySupportedSdk() to throw UnsupportedOperationException.
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "17"
+          java-version: "21"
       - name: Setup pinned Gradle (project has no Gradle wrapper scripts)
         uses: gradle/actions/setup-gradle@v4
         with:
