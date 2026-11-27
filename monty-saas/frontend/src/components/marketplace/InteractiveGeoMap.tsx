@@ -155,7 +155,8 @@ export function InteractiveGeoMap({
               Géocodage inverse
             </button>
           )}
-          <button type="button" onClick={locateUser} disabled={locating} aria-label="Me localiser" title="Me localiser" className="p-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm hover:border-emeraldDeep disabled:opacity-50"><LocateFixed className="w-3.5 h-3.5" /></button>\n          <button type="button" onClick={() => changeZoom(zoom - 1)} aria-label="Dézoomer la carte" className="p-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm hover:border-emeraldDeep"><Minus className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={locateUser} disabled={locating} aria-label="Me localiser" title="Me localiser" className="p-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm hover:border-emeraldDeep disabled:opacity-50"><LocateFixed className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={() => changeZoom(zoom - 1)} aria-label="Dézoomer la carte" className="p-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm hover:border-emeraldDeep"><Minus className="w-3.5 h-3.5" /></button>
           <span className="px-2 font-mono text-[11px] text-slateMuted">Niveau {zoom}</span>
           <button type="button" onClick={() => changeZoom(zoom + 1)} aria-label="Zoomer sur la carte" className="p-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm hover:border-emeraldDeep"><Plus className="w-3.5 h-3.5" /></button>
           <button type="button" onClick={() => { setCenter(bounds.center); setZoom(initialZoom); }} aria-label="Recentrer la carte" className="p-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm hover:border-emeraldDeep"><RotateCcw className="w-3.5 h-3.5" /></button>
@@ -186,7 +187,17 @@ export function InteractiveGeoMap({
           />
         ))}
 
-        {userLocation && (() => {\n          const point = position(userLocation);\n          return (\n            <div className="absolute z-30 -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(50% + ${point.x}px)`, top: `calc(50% + ${point.y}px)` }}>\n              <div className="h-5 w-5 rounded-full bg-sky-500 border-[3px] border-white shadow-lg ring-4 ring-sky-500/25" />\n              <span className="mt-1 block rounded-full bg-sky-700 px-2 py-0.5 text-center text-[10px] font-bold text-white whitespace-nowrap">Votre position</span>\n            </div>\n          );\n        })()}\n\n        {originPoint && (
+        {userLocation && (() => {
+          const point = position(userLocation);
+          return (
+            <div className="absolute z-30 -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(50% + ${point.x}px)`, top: `calc(50% + ${point.y}px)` }}>
+              <div className="h-5 w-5 rounded-full bg-sky-500 border-[3px] border-white shadow-lg ring-4 ring-sky-500/25" />
+              <span className="mt-1 block rounded-full bg-sky-700 px-2 py-0.5 text-center text-[10px] font-bold text-white whitespace-nowrap">Votre position</span>
+            </div>
+          );
+        })()}
+
+        {originPoint && (
           <div className="absolute z-20 -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(50% + ${originPoint.x}px)`, top: `calc(50% + ${originPoint.y}px)` }}>
             <div className="w-12 h-12 rounded-full border-2 border-dashed border-goldAntique bg-goldChampagne/20 flex items-center justify-center">
               <div className="h-3.5 w-3.5 rounded-full bg-goldAntique border-2 border-white shadow" />
@@ -226,12 +237,29 @@ export function InteractiveGeoMap({
           Faites glisser la carte pour explorer
         </div>
       </div>
-      {locationError && <p role="status" className="text-xs text-amber-800">{locationError}</p>}\n      {locating && <p role="status" className="text-xs text-slateMuted">Localisation en cours…</p>}\n      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slateMuted">
+      {locationError && <p role="status" className="text-xs text-amber-800">{locationError}</p>}
+      {locating && <p role="status" className="text-xs text-slateMuted">Localisation en cours…</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slateMuted">
         <span>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></span>
         <span>Fond cartographique OSM · coordonnées WGS84</span>
       </div>
 
-      {selectedListingId && (() => {\n        const selected = hits.find((hit) => hit.listing.id === selectedListingId)?.listing;\n        if (!selected) return null;\n        const mapUrl = `https://www.openstreetmap.org/?mlat=${selected.latitude}&mlon=${selected.longitude}#map=17/${selected.latitude}/${selected.longitude}`;\n        return (\n          <div className="rounded-xl border border-emeraldDeep/20 bg-ivoryWarm p-3 text-xs flex flex-wrap items-center justify-between gap-3">\n            <div className="min-w-0">\n              <p className="font-bold text-emeraldDeep truncate">{selected.title}</p>\n              <p className="text-slateMuted">{selected.city} · {selected.surface_m2} m² · {selected.rooms} pièce(s) · {selected.price_euro.toLocaleString("fr-FR")} €</p>\n            </div>\n            <a href={mapUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-borderSubtle bg-white px-3 py-2 font-semibold text-emeraldDeep hover:border-emeraldDeep">Ouvrir dans OpenStreetMap ↗</a>\n          </div>\n        );\n      })()}\n\n      {selectedSuggestion && (
+      {selectedListingId && (() => {
+        const selected = hits.find((hit) => hit.listing.id === selectedListingId)?.listing;
+        if (!selected) return null;
+        const mapUrl = `https://www.openstreetmap.org/?mlat=${selected.latitude}&mlon=${selected.longitude}#map=17/${selected.latitude}/${selected.longitude}`;
+        return (
+          <div className="rounded-xl border border-emeraldDeep/20 bg-ivoryWarm p-3 text-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-bold text-emeraldDeep truncate">{selected.title}</p>
+              <p className="text-slateMuted">{selected.city} · {selected.surface_m2} m² · {selected.rooms} pièce(s) · {selected.price_euro.toLocaleString("fr-FR")} €</p>
+            </div>
+            <a href={mapUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-borderSubtle bg-white px-3 py-2 font-semibold text-emeraldDeep hover:border-emeraldDeep">Ouvrir dans OpenStreetMap ↗</a>
+          </div>
+        );
+      })()}
+
+      {selectedSuggestion && (
         <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-3 space-y-2 text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-bold text-emeraldDeep flex items-center gap-1.5"><Layers className="w-3.5 h-3.5 text-goldAntique" />Entités géographiques distinctes ({selectedSuggestion.source})</span>
