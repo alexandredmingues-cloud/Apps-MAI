@@ -12,9 +12,15 @@ La configuration d'une URL Ollama / LLM locale rejette systématiquement :
 - Les hôtes locaux/privés (`localhost`, `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `.local`, `.internal`) sauf si `LOCAL_LLM_ALLOW_PRIVATE_HOSTS=true`.
 
 ## 3. Rate Limiting Distribué Redis
-`SlidingWindowRateLimiter` utilise un sorted set Redis atomique (`ZREMRANGEBYSCORE` + `ZCARD` + `ZADD`) partagé entre tous les workers uvicorn lorsque `REDIS_URL` est défini, avec dégradation gracieuse en mémoire locale si Redis est injoignable.
+`SlidingWindowRateLimiter` utilise un sorted set Redis atomique (`ZREMRANGEBYSCORE` + `ZCARD` + `ZADD`) partagé entre tous les workers uvicorn lorsque `REDIS_URL` est défini, en mode fail-closed en production : si Redis est absent ou injoignable, les requêtes protégées sont temporairement refusées (HTTP 429) au lieu de retomber sur une limite locale contournable entre instances.
 
-## 4. Clé API Firebase (`app/google-services.json`)
+## 4. Isolation PostgreSQL et publicité
+- La migration `0014_rls_hardening` force le RLS sur les adhésions et invitations d'agence et active un RLS dédié aux campagnes publicitaires.
+- La lecture publique ne retourne que les campagnes approuvées et actives ; les soumissions restent en attente de modération.
+- Les routes publiques de suivi ne peuvent modifier que les compteurs d'impressions/clics, au maximum un incrément par requête ; les modifications éditoriales exigent le contexte serveur `SUPER_ADMIN`.
+- Exécuter les migrations Alembic jusqu'à `0014_rls_hardening` avant d'exposer ces routes.
+
+## 5. Clé API Firebase (`app/google-services.json`)
 `app/google-services.json` est ignoré dans `.gitignore`. La clé Firebase API (`AIzaSy...`) étant publique dans l'APK, elle doit être restreinte dans Google Cloud Console au package `com.aistudio.montyimmo.kxmpzq`, au SHA-1 de signature et aux API Firebase autorisées.
 
 ## 5. Paiement Serveur & Claims Firebase
