@@ -17,6 +17,7 @@ from app.db.postgres_portfolio_leads_repository import PostgresPortfolioLeadsRep
 from app.db.postgres_repositories import PostgresMarketplaceRepository
 from app.db.postgres_v2_ops_repository import PostgresV2OpsRepository
 from app.domain.authorized_feeds_service import AuthorizedListingFeedsService, FeedFormat
+from app.domain.ademe_dpe_service import ademe_dpe_service
 from app.domain.country_packs import CountryCode
 from app.domain.geocoding_service import (
     autocomplete_address,
@@ -166,6 +167,27 @@ async def geo_reverse_lookup(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _suggestion_dto(item)
+
+
+@marketplace_router.get("/dpe/lookup")
+async def lookup_ademe_dpe(
+    postal_code: str = Query(default="", max_length=10),
+    city: str = Query(default="", max_length=80),
+    dpe_number: str = Query(default="", max_length=32),
+    limit: int = Query(default=10, ge=1, le=15),
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_READ)),
+) -> dict:
+    """Recherche les diagnostics ADEME officiels. Les résultats restent des données brutes à vérifier."""
+    try:
+        return await asyncio.to_thread(
+            ademe_dpe_service.lookup,
+            postal_code=postal_code,
+            city=city,
+            dpe_number=dpe_number,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @marketplace_router.get("/listings")
