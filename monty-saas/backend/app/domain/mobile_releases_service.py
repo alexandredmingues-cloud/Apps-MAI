@@ -159,6 +159,7 @@ class MobileReleasesService:
         release_notes: str = "",
         publish_now: bool = True,
         mark_recommended: bool = True,
+        persist_local: bool = True,
     ) -> MobileAppRelease:
         if not (ctx.has_permission(Permission.AGENCY_MANAGE) or ctx.has_permission(Permission.PLATFORM_ADMIN)):
             raise PermissionError("Seul un administrateur peut publier un APK mobile.")
@@ -177,7 +178,8 @@ class MobileReleasesService:
         sha = hashlib.sha256(raw_bytes).hexdigest()
         rel_id = f"rel-{uuid.uuid4().hex[:8]}"
         dest = self._storage_dir / f"{rel_id}-{safe_name}"
-        dest.write_bytes(raw_bytes)
+        if persist_local:
+            dest.write_bytes(raw_bytes)
         now = datetime.now(timezone.utc).isoformat()
 
         if mark_recommended and publish_now:
@@ -194,7 +196,7 @@ class MobileReleasesService:
             sha256=sha,
             file_size_bytes=len(raw_bytes),
             file_name=safe_name,
-            storage_path=str(dest),
+            storage_path=str(dest) if persist_local else "",
             release_notes=InputSanitizer.sanitize_text(release_notes, 1500) or "Mise à jour Monty Mobile.",
             signature_verified=True,
             is_published=bool(publish_now),
