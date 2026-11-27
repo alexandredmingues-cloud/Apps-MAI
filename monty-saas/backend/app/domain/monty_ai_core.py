@@ -718,7 +718,7 @@ class AIContextManager:
         confidential_mode: bool,
     ) -> tuple[str, str]:
         system_prompt = (
-            "Tu es Monty AI, l'assistant immobilier central et souverain de l'écosystème Monty (France & Portugal). "
+            "Tu es Monty, le copilote immobilier de MON-AGENT pour les particuliers, les professionnels et les agences en France et au Portugal. "
             "Réponds en français structuré, factuel, sans jamais mentionner le nom du fournisseur LLM sous-jacent ni inventer "
             "de transactions, prix ou données juridiques. Cite uniquement les faits calculés fournis."
         )
@@ -759,7 +759,7 @@ class AIFallbackManager:
         failure_reasons: list[str],
     ) -> str:
         lines = [
-            "Monty AI — Analyse structurée (mode moteurs internes sans serveur LLM externe joignable).",
+            "Monty — Analyse structurée (mode moteurs internes sans serveur LLM externe joignable).",
             f"Objet analysé : {sanitized_prompt[:220]}",
         ]
         if tool_facts:
@@ -927,7 +927,7 @@ class MontyAICore:
                     )
                     return {
                         "conversation_id": hit_turn_id,
-                        "assistant_name": "Monty AI",
+                        "assistant_name": "Monty",
                         "response_text": cached_payload["response_text"],
                         "execution_mode": cached_payload["execution_mode"],
                         "confidential_mode": eff_confidential,
@@ -1062,7 +1062,7 @@ class MontyAICore:
 
         return {
             "conversation_id": turn.id,
-            "assistant_name": "Monty AI",
+            "assistant_name": "Monty",
             "response_text": response_text,
             "execution_mode": execution_mode,
             "confidential_mode": eff_confidential,
