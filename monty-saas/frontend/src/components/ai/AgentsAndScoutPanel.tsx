@@ -129,7 +129,7 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
       await montyApi.decideScoutProposal(id, approve);
       await refreshAll();
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Erreur validation Monty Scout.");
+      setErrorMsg(err instanceof Error ? err.message : "Erreur de validation Scout.");
     }
   }
 
@@ -144,7 +144,7 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          Assistant unifié Monty AI
+          Discuter avec MON-AGENT
         </button>
         <button
           type="button"
@@ -154,7 +154,7 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
           }`}
         >
           <Bot className="w-3.5 h-3.5" />
-          11 Agents &amp; Monty Scout
+          11 Agents spécialisés &amp; Scout
         </button>
       </div>
 
@@ -166,7 +166,7 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
       <div className="rounded-2xl bg-emeraldDeep text-ivoryWarm p-5 border border-goldAntique/40 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-goldChampagne font-semibold">
-            Gouvernance IA • 11 Agents Autonomes + Monty Scout + WhatsApp Meta
+            Gouvernance IA • 11 Agents Autonomes + Scout + WhatsApp Meta
           </p>
           <h2 className="font-display text-2xl font-bold mt-1">
             Orchestration Agents IA &amp; Validation Humaine 1-Clic
@@ -300,14 +300,14 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
           )}
         </div>
 
-        {/* Monty Scout Mode Proposition -> 1-clic */}
+        {/* Scout Mode Proposition -> 1-clic */}
         <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-4">
           <h3 className="font-display font-bold text-base text-emeraldDeep flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-goldAntique" />
-            Monty Scout • Validation 1-Clic
+            Scout • Validation en 1 clic
           </h3>
           <p className="text-[11px] text-slateMuted">
-            Chaque message préparé par Monty Scout inclut la base légale RGPD et le mot-clé de désinscription <strong>STOP</strong>, validé par un conseiller avant envoi WhatsApp/Email/SMS.
+            Chaque message préparé par Scout inclut la base légale RGPD et le mot-clé de désinscription <strong>STOP</strong>, validé par un conseiller avant envoi WhatsApp/Email/SMS.
           </p>
 
           <form onSubmit={handleCreateProposal} className="space-y-2 text-xs border-b border-borderSubtle pb-3">

@@ -99,32 +99,45 @@ class MontyPriceIndexTests(unittest.TestCase):
         self.assertEqual(res["confidence_tier"], PriceConfidenceTier.INSUFFICIENT.value)
         self.assertIn("minimum requis", res["explanation_grounded"])
 
-    def test_fr_and_pt_auto_reference_benchmarks(self) -> None:
+    def test_no_synthetic_transactions_are_created_for_known_cities(self) -> None:
         engine = MontyPriceEngine()
-        fr_res = engine.evaluate_property(
-            title="T3 Antigone",
-            city="Montpellier",
-            sector_label="Antigone",
-            property_kind="Appartement",
-            asking_price_euro=325_000,
-            surface_m2=75,
-            dpe="B",
-        )
-        self.assertTrue(fr_res["display_badge"])
-        self.assertGreater(fr_res["estimated_market_value"], 150_000)
+        for city, country in (("Montpellier", CountryCode.FR), ("Lisboa", CountryCode.PT)):
+            result = engine.evaluate_property(
+                title=f"Bien sans actes vérifiés — {city}",
+                country_code=country,
+                city=city,
+                property_kind="Appartement",
+                asking_price_euro=325_000,
+                surface_m2=75,
+                dpe="B",
+            )
+            self.assertFalse(result["display_badge"])
+            self.assertEqual(
+                result["category"],
+                PriceIndexCategory.DONNEES_INSUFFISANTES.value,
+            )
+            self.assertEqual(result["comparables"]["comparables_retained_count"], 0)
+            self.assertEqual(result["estimated_market_value"], 0)
 
-        pt_res = engine.evaluate_property(
-            title="Apartamento T2 Lisboa",
-            country_code=CountryCode.PT,
-            city="Lisboa",
-            property_kind="Appartement",
-            asking_price_euro=410_000,
-            surface_m2=80,
-            dpe="C",
-        )
-        self.assertTrue(pt_res["display_badge"])
-        self.assertIn("Portugal", pt_res["comparables"]["source_label"])
-
+    def test_estimation_rejects_stale_distant_and_wrong_type_comparables(self) -> None:
+        engine = MontyPriceEngine()
+        bad_comparables = [
+            DvfComparable(mutation_id="old-sale", date_mutation="2020-01-15", year=2020, price_euro=320_000, surface_m2=80, property_type="Appartement", distance_meters=250),
+            DvfComparable(mutation_id="far-sale", date_mutation="2026-06-15", year=2026, price_euro=320_000, surface_m2=80, property_type="Appartement", distance_meters=20_000),
+            DvfComparable(mutation_id="wrong-kind", date_mutation="2026-06-15", year=2026, price_euro=320_000, surface_m2=80, property_type="Maison", distance_meters=250),
+        ]
+        for comparable in bad_comparables:
+            result = engine.evaluate_property(
+                title="Estimation test sans comparables fiables",
+                city="Montpellier",
+                property_kind="Appartement",
+                asking_price_euro=320_000,
+                surface_m2=80,
+                explicit_comparables=[comparable],
+            )
+            self.assertFalse(result["display_badge"])
+            self.assertEqual(result["confidence_tier"], PriceConfidenceTier.INSUFFICIENT.value)
+            self.assertEqual(result["comparables"]["comparables_retained_count"], 0)
     def test_admin_threshold_validation_and_tenant_history_isolation(self) -> None:
         engine = MontyPriceEngine()
         dir_a = TenantContext(user_id="u-a", agency_id="ag-a", role=MontyRole.DIRECTOR)

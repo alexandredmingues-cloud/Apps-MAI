@@ -49,7 +49,8 @@ async def search_official_french_notaries(
     query: str = Query(default="", max_length=100),
     department_code: str = Query(default="", max_length=3),
     postal_code: str = Query(default="", max_length=5),
-    per_page: int = Query(default=15, ge=5, le=25),
+    per_page: int = Query(default=25, ge=5, le=25),
+    page: int = Query(default=1, ge=1, le=1000),
 ) -> dict[str, Any]:
     """
     Recherche live dans l'annuaire officiel des études notariales de France
@@ -61,6 +62,7 @@ async def search_official_french_notaries(
         department_code=department_code,
         postal_code=postal_code,
         per_page=per_page,
+        page=page,
     )
 
 
@@ -82,6 +84,7 @@ class SaveNotaryRequest(BaseModel):
     notary_name: str = Field(default="", max_length=160)
     email: str = Field(default="", max_length=160)
     phone: str = Field(default="", max_length=40)
+    email_verified: bool = False
     street_address: str = Field(default="", max_length=240)
     postal_code: str = Field(default="", max_length=16)
     city: str = Field(default="", max_length=100)
@@ -104,6 +107,7 @@ async def save_agency_notary(
                 notary_name=body.notary_name,
                 email=body.email,
                 phone=body.phone,
+                email_verified=body.email_verified,
                 street_address=body.street_address,
                 postal_code=body.postal_code,
                 city=body.city,
@@ -118,6 +122,7 @@ async def save_agency_notary(
                 notary_name=body.notary_name,
                 email=body.email,
                 phone=body.phone,
+                email_verified=body.email_verified,
                 street_address=body.street_address,
                 postal_code=body.postal_code,
                 city=body.city,

@@ -1,4 +1,4 @@
-# PHASE 0 — AUDIT TECHNIQUE & PLAN DE MIGRATION MONTY SAAS
+# PHASE 0 — AUDIT TECHNIQUE & PLAN DE MIGRATION MON-AGENT SAAS
 
 > **Source analysée** : Dépôt local du projet **Mon Agent Immo / Monty** (`app/`, `firestore.rules`, `firebase-blueprint.json`, `firestore.test.js`, `README.md`, `package.json`, `.env.example`).  
 > *Note environnementale : le workspace courant contient directement l'arborescence extraite du projet Android Kotlin/Compose plutôt qu'un fichier `.zip` non décompressé.*

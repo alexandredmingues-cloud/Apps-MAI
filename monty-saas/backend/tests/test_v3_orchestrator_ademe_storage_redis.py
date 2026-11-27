@@ -236,16 +236,16 @@ class OrchestratorHardeningAndAdemePriceIndexTests(unittest.TestCase):
             return 200, {
                 "results": [
                     {
-                        "N°DPE": "2434E0012345X",
-                        "Etiquette_DPE": "B",
-                        "Etiquette_GES": "A",
-                        "Conso_5_usages_par_m²_é_primaire": 82.0,
-                        "Emission_GES_5_usages_par_m²": 3.2,
-                        "Nom__commune_(BAN)": "Montpellier",
-                        "Code_postal_(BAN)": "34000",
-                        "Surface_habitable_logement": 78.0,
-                        "Année_construction": 2018,
-                        "Date_établissement_DPE": "2025-09-14",
+                        "numero_dpe": "2434E0012345X",
+                        "etiquette_dpe": "B",
+                        "etiquette_ges": "A",
+                        "conso_5_usages_par_m2_ep": 82.0,
+                        "emission_ges_5_usages_par_m2": 3.2,
+                        "nom_commune_ban": "Montpellier",
+                        "code_postal_ban": "34000",
+                        "surface_habitable_logement": 78.0,
+                        "annee_construction": 2018,
+                        "date_etablissement_dpe": "2025-09-14",
                     }
                 ]
             }

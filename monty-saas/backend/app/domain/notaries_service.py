@@ -147,14 +147,14 @@ def search_french_notary_offices(
     query: str = "",
     department_code: str = "",
     postal_code: str = "",
-    per_page: int = 15,
+    per_page: int = 25,
+    page: int = 1,
     http_client: Any = None,
 ) -> dict[str, Any]:
     """
-    Interroge l'API officielle DINUM/INSEE (recherche-entreprises.api.gouv.fr, code NAF 69.10Z)
-    pour lister les études notariales actives en France (nom, SIRET, adresse officielle).
-    L'e-mail @notaires.fr n'étant pas publié en open-data par le CSN (anti-phishing), un lien direct
-    vers l'annuaire officiel notaires.fr est fourni pour vérification et ajout au carnet d'agence.
+    Recherche les établissements actifs via DINUM/INSEE (NAF 69.10Z).
+    Cette API fournit identité légale et adresse, mais pas les téléphones/e-mails de contact.
+    Les coordonnées de contact doivent être vérifiées sur la fiche publique CSN liée à chaque résultat.
     """
     clean_q = InputSanitizer.sanitize_text(query, 100)
     clean_dept = re.sub(r"[^0-9ABab]", "", department_code or "")[:3].upper()
@@ -166,6 +166,7 @@ def search_french_notary_offices(
         "activite_principale": "69.10Z",
         "etat_administratif": "A",
         "per_page": max(5, min(25, per_page)),
+        "page": max(1, min(1000, page)),
     }
     if clean_dept:
         params["departement"] = clean_dept
@@ -192,15 +193,19 @@ def search_french_notary_offices(
                 "status": "api_error",
                 "status_code": status_code,
                 "source": "recherche-entreprises.api.gouv.fr",
-                "email_notice": "Les e-mails @notaires.fr ne sont pas diffusés en open-data : vérifiez sur notaires.fr et enregistrez-les dans votre carnet agence.",
+                "email_notice": "Téléphone et e-mail ne sont pas fournis par l’API DINUM/INSEE. Ouvrez la fiche de l’annuaire officiel CSN pour consulter les coordonnées publiées, puis enregistrez-les dans le carnet agence.",
                 "offices": [],
             }
         offices = parse_dinum_notary_results(payload_json)
         return {
             "status": "live",
             "source": "recherche-entreprises.api.gouv.fr (NAF 69.10Z)",
-            "email_notice": "Les e-mails @notaires.fr ne sont pas diffusés en open-data : utilisez le lien Annuaire CSN notaires.fr puis enregistrez l'adresse vérifiée dans le carnet d'agence.",
+            "email_notice": "Téléphone et e-mail ne sont pas fournis en open-data par l’API DINUM/INSEE. Consultez la fiche de l’annuaire officiel CSN pour vérifier les coordonnées publiées, puis enregistrez-les dans le carnet d’agence.",
             "count": len(offices),
+            "total_results": int(payload_json.get("total_results") or 0),
+            "total_pages": int(payload_json.get("total_pages") or 0),
+            "page": int(payload_json.get("page") or params["page"]),
+            "per_page": int(payload_json.get("per_page") or params["per_page"]),
             "offices": [o.__dict__ for o in offices],
         }
     except Exception as exc:
@@ -384,6 +389,7 @@ class NotaryBookService:
         notary_name: str = "",
         email: str = "",
         phone: str = "",
+        email_verified: bool = False,
         street_address: str = "",
         postal_code: str = "",
         city: str = "",
@@ -414,7 +420,7 @@ class NotaryBookService:
                 existing.street_address = InputSanitizer.sanitize_text(street_address, 240) or existing.street_address
                 existing.city = InputSanitizer.sanitize_text(city, 100) or existing.city
                 existing.department_code = dept or existing.department_code
-                existing.email_verified = bool(existing.email)
+                existing.email_verified = bool(email_verified and clean_email)
                 existing.is_official_notaire_domain = existing.email.endswith("@notaires.fr")
                 existing.notes = InputSanitizer.sanitize_text(notes, 600) or existing.notes
                 return existing
@@ -432,7 +438,7 @@ class NotaryBookService:
             city=InputSanitizer.sanitize_text(city, 100),
             department_code=dept,
             source=InputSanitizer.sanitize_text(source, 40) or "DINUM_API_GOUV",
-            email_verified=bool(clean_email),
+            email_verified=bool(email_verified and clean_email),
             is_official_notaire_domain=clean_email.endswith("@notaires.fr"),
             notes=InputSanitizer.sanitize_text(notes, 600),
             created_at=datetime.now(timezone.utc).isoformat(),

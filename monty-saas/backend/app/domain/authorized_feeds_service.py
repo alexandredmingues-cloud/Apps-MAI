@@ -87,9 +87,8 @@ def check_robots_txt_allowed(
         # 404 sur robots.txt signifie aucune restriction déclarée ; 403/401/429 => prudence : refus
         return exc.code == 404
     except Exception:
-        # En cas d'erreur réseau sur robots.txt, on autorise uniquement si appel explicite partenaire HTTPS,
-        # sauf si un robots_fetcher de test a levé explicitement une interdiction.
-        return True
+        # En cas d'incertitude réseau, on échoue en mode fermé : aucune collecte automatisée.
+        return False
 
 
 def parse_xml_listings(raw_xml: str) -> list[dict[str, Any]]:
@@ -114,17 +113,17 @@ def parse_xml_listings(raw_xml: str) -> list[dict[str, Any]]:
             {
                 "external_id": _txt("id", "external_id", "reference", "mandate_id"),
                 "title": _txt("title", "titre"),
-                "property_kind": _txt("property_kind", "type_bien", default="Appartement"),
-                "city": _txt("city", "ville", default="Lyon"),
-                "sector_label": _txt("sector", "quartier", default="Centre"),
+                "property_kind": _txt("property_kind", "type_bien"),
+                "city": _txt("city", "ville"),
+                "sector_label": _txt("sector", "quartier"),
                 "price_euro": _txt("price", "prix", default="0"),
                 "surface_m2": _txt("surface", "surface_m2", default="0"),
                 "rooms": _txt("rooms", "pieces", default="2"),
-                "dpe": _txt("dpe", default="C"),
-                "condition_label": _txt("condition", "etat", default="Bon état"),
+                "dpe": _txt("dpe"),
+                "condition_label": _txt("condition", "etat", default="Non renseigné"),
                 "description": _txt("description", "descriptif"),
                 "canonical_url": _txt("url", "link", "lien"),
-                "photo_count": _txt("photo_count", "nb_photos", default="3"),
+                "photo_count": _txt("photo_count", "nb_photos", default="0"),
             }
         )
     return items
@@ -149,21 +148,8 @@ class AuthorizedListingFeedsService:
 
     def __init__(self, marketplace: MarketplaceService) -> None:
         self._marketplace = marketplace
-        self._feeds: dict[str, AuthorizedFeedSource] = {
-            "feed-seed-lyon": AuthorizedFeedSource(
-                id="feed-seed-lyon",
-                agency_id="agency-france-reseau",
-                name="Passerelle Syndication Agences Rhône-Alpes (XML)",
-                country_code=CountryCode.FR,
-                publisher_type=PublisherType.AGENCE,
-                feed_format=FeedFormat.XML,
-                feed_url="https://syndication.monty-immo.example/feeds/rhone-alpes.xml",
-                agreement_confirmed=True,
-                respect_robots_txt=True,
-                auto_publish_verified_agency=True,
-                last_status="READY",
-            )
-        }
+        # No sample/demo feeds: only explicitly authorized, real partner feeds are registered.
+        self._feeds: dict[str, AuthorizedFeedSource] = {}
         self._ingested_keys: set[tuple[str, str]] = set()
 
     def list_feeds(self, ctx: TenantContext) -> list[AuthorizedFeedSource]:
@@ -306,20 +292,20 @@ class AuthorizedListingFeedsService:
 
             try:
                 title = InputSanitizer.sanitize_text(str(item.get("title") or item.get("name") or ""), 160)
-                city = InputSanitizer.sanitize_text(str(item.get("city") or "Lyon"), 80)
-                sector = InputSanitizer.sanitize_text(str(item.get("sector_label") or item.get("sector") or "Centre"), 80)
-                prop_kind = InputSanitizer.sanitize_text(str(item.get("property_kind") or "Appartement"), 40)
+                city = InputSanitizer.sanitize_text(str(item.get("city") or ""), 80)
+                sector = InputSanitizer.sanitize_text(str(item.get("sector_label") or item.get("sector") or ""), 80)
+                prop_kind = InputSanitizer.sanitize_text(str(item.get("property_kind") or "Non renseigné"), 40)
                 price = int(float(item.get("price_euro") or item.get("price") or 0))
                 surface = int(float(item.get("surface_m2") or item.get("surface") or 0))
                 rooms = max(1, int(float(item.get("rooms") or 2)))
-                dpe = InputSanitizer.sanitize_text(str(item.get("dpe") or "C"), 4).upper()
-                cond = InputSanitizer.sanitize_text(str(item.get("condition_label") or "Bon état"), 40)
+                dpe = InputSanitizer.sanitize_text(str(item.get("dpe") or ""), 4).upper()
+                cond = InputSanitizer.sanitize_text(str(item.get("condition_label") or "Non renseigné"), 40)
                 raw_desc = str(item.get("description") or "")
                 clean_desc = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(raw_desc, 1600))
-                photo_count = max(0, int(float(item.get("photo_count") or 3)))
+                photo_count = max(0, int(float(item.get("photo_count") or 0)))
                 canonical_url = InputSanitizer.sanitize_public_http_url(str(item.get("canonical_url") or item.get("url") or ""))
 
-                if len(title) < 5 or price < 10_000 or surface < 9 or len(clean_desc) < 10:
+                if len(title) < 5 or len(city) < 2 or price < 10_000 or surface < 9 or len(clean_desc) < 10:
                     rejected += 1
                     continue
 

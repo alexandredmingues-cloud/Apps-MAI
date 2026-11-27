@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+/* Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code. */
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Monty SaaS — Système d'exploitation immobilier multi-agences",
+  title: "MON-AGENT — Plateforme immobilière intelligente",
   description:
-    "L'humain avant tout. La technologie au service du conseiller immobilier.",
+    "L'humain avant tout. La technologie au service de l'immobilier.",
 };
 
 export default function RootLayout({
@@ -16,7 +17,7 @@ export default function RootLayout({
     <html lang="fr">
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
-        <link rel="icon" href="/icon-monty.svg" type="image/svg+xml" />
+        <link rel="icon" href="/icon-mon-agent.svg" type="image/svg+xml" />
         <meta name="theme-color" content="#0B3B2E" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -27,6 +28,10 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased bg-ivoryWarm text-obsidianInk">
         {children}
+        <footer className="border-t border-borderSubtle bg-ivoryCard px-4 py-4 text-center text-[11px] text-slateMuted">
+          MON-AGENT · Copyright © 2024–2026. Tous droits réservés sur les éléments originaux. Les composants et données tiers restent soumis à leurs licences respectives.
+          <a href="/publicite" className="ml-2 font-semibold text-emeraldDeep underline underline-offset-2">Devenir annonceur</a>
+        </footer>
       </body>
     </html>
   );

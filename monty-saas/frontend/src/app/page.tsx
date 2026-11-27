@@ -1,11 +1,15 @@
 "use client";
+/* Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code. */
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, Calculator, CalendarDays, CheckCircle2, Database, Download, Globe2, Newspaper, Server, Shield, TrendingUp } from "lucide-react";
 import { LogOut } from "lucide-react";
 import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
+import { SponsoredBrandSlot } from "@/components/ads/SponsoredBrandSlot";
 import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
+import { MonAgentAssistantWidget } from "@/components/ai/MonAgentAssistantWidget";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { RealEstateSimulatorsSuite } from "@/components/calculators/RealEstateSimulatorsSuite";
 import { CrmCockpitPanel } from "@/components/crm/CrmCockpitPanel";
 import { MontyShell } from "@/components/layout/MontyShell";
@@ -43,6 +47,8 @@ export default function MontySaasCockpitPage() {
   const [calcLoading, setCalcLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authFormError, setAuthFormError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -143,6 +149,10 @@ export default function MontySaasCockpitPage() {
     setApiError(null);
     setAuthFormError(null);
 
+    if (!captchaToken) {
+      setAuthFormError("Veuillez valider le contrôle anti-robot avant de continuer.");
+      return;
+    }
     const trimmedEmail = authEmail.trim();
     if (!EMAIL_RE.test(trimmedEmail)) {
       setAuthFormError("Veuillez saisir une adresse e-mail professionnelle valide.");
@@ -168,6 +178,7 @@ export default function MontySaasCockpitPage() {
       const issued =
         authMode === "register"
           ? await montyApi.registerAgency({
+              captcha_token: captchaToken,
               agency_name: authAgencyName.trim(),
               email: trimmedEmail,
               password: authPassword,
@@ -176,6 +187,7 @@ export default function MontySaasCockpitPage() {
           : await montyApi.login({
               email: trimmedEmail,
               password: authPassword,
+              captcha_token: captchaToken,
             });
       persistSession(issued);
       setSession(issued);
@@ -186,6 +198,8 @@ export default function MontySaasCockpitPage() {
       setAuthFormError(err instanceof Error ? err.message : "Échec d'authentification");
     } finally {
       setAuthLoading(false);
+      setCaptchaToken("");
+      setCaptchaReset((value) => value + 1);
     }
   }
 
@@ -269,6 +283,7 @@ export default function MontySaasCockpitPage() {
       activeModuleFlags={moduleFlags}
     >
       <div className="space-y-6">
+        <SponsoredBrandSlot placement="PRO" countryCode="FR" />
         {/* Barre d'accès rapide Site Web Public & Double Public */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-ivoryCard border border-borderSubtle px-4 py-3 text-xs">
           <span className="font-semibold text-emeraldDeep">
@@ -296,6 +311,11 @@ export default function MontySaasCockpitPage() {
               <Newspaper className="w-3.5 h-3.5" />
               Espace Particulier
             </Link>
+            {session?.role === "SUPER_ADMIN" && (
+              <Link href="/admin/publicite" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-goldAntique bg-ivoryWarm text-emeraldDeep font-semibold hover:border-emeraldMid">
+                Modération publicitaire
+              </Link>
+            )}
             <Link
               href="/simulateurs"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm text-emeraldDeep font-semibold hover:border-emeraldMid"
@@ -328,12 +348,12 @@ export default function MontySaasCockpitPage() {
           <section className="rounded-2xl bg-ivoryCard border border-amber-300 p-6 space-y-4">
             <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-xl">
               <Shield className="w-5 h-5 text-amber-700" />
-              Session Monty Pro requise pour le module « {activeSection.toUpperCase()} »
+              Session Mon-Agent Pro requise pour le module « {activeSection.toUpperCase()} »
             </div>
             <p className="text-sm text-slateMuted">
               {session
                 ? `Votre compte connecté (${session.role}) appartient à l'espace Particulier/Vendeur et n'a pas accès au CRM, Pipeline, Pré-État Daté ou Administration d'agence.`
-                : "Connectez un compte agence Monty Pro (Directeur, Admin, Agent ou Assistant) depuis le Dashboard pour accéder aux données cloisonnées par agence (PostgreSQL RLS)."}
+                : "Connectez un compte agence Mon-Agent Pro (Directeur, Admin, Agent ou Assistant) depuis le Dashboard pour accéder aux données cloisonnées par agence (PostgreSQL RLS)."}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -377,7 +397,7 @@ export default function MontySaasCockpitPage() {
             initialTab="search"
             initialCountry="FR"
             showTabs={true}
-            audienceLabel="Monty Pro • Catalogue Agences & Mobilité"
+            audienceLabel="Mon-Agent Pro • Catalogue Agences & Mobilité"
           />
         ) : (
           <>
@@ -389,10 +409,10 @@ export default function MontySaasCockpitPage() {
                     Phase 1 + Centre d&apos;Information &amp; Site Web — Socle SaaS Multi-Agences
                   </p>
                   <h2 className="mt-1 font-display text-2xl sm:text-3xl font-bold">
-                    Monty Immobilier • Cockpit Web Pro
+                    MON-AGENT • Cockpit Web Pro
                   </h2>
                   <p className="mt-1 text-sm text-ivoryWarm/80">
-                    « L&apos;humain avant tout. La technologie au service du conseiller immobilier. »
+                    « L&apos;humain avant tout. La technologie au service de l&apos;immobilier. »
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -512,9 +532,10 @@ export default function MontySaasCockpitPage() {
                       className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5 text-xs"
                     />
                   </div>
+                  <TurnstileWidget onVerify={setCaptchaToken} resetKey={captchaReset} />
                   <button
                     type="submit"
-                    disabled={authLoading}
+                    disabled={authLoading || !captchaToken}
                     className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid disabled:opacity-50"
                   >
                     {authLoading
@@ -763,11 +784,11 @@ export default function MontySaasCockpitPage() {
               <div>
                 <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-lg">
                   <TrendingUp className="w-5 h-5 text-goldAntique" />
-                  Plateforme Monty Complète — Particuliers, Pro, Notaires, RNIC, Monty AI &amp; APK
+                  Plateforme MON-AGENT — Particuliers, Pro, Notaires, RNIC, Mon-Agent AI &amp; APK
                 </div>
                 <p className="mt-1.5 text-sm text-slateMuted">
                   Socle multi-pays FR/PT + Site Web Public (`/site`, `/annonces`, `/publier`, `/coproprietes`, `/telecharger`, `/mon-compte`),
-                  Monty Price Index, Monty AI Core multi-moteurs, Annuaire Notaires &amp; RNIC, CRM Multi-Agences et Pipeline Transactions.
+                  Mon-Agent Price Index, Mon-Agent AI Core multi-moteurs, Annuaire Notaires &amp; RNIC, CRM Multi-Agences et Pipeline Transactions.
                 </p>
               </div>
               <Link
@@ -781,6 +802,7 @@ export default function MontySaasCockpitPage() {
           </>
         )}
       </div>
+      {session && <MonAgentAssistantWidget />}
     </MontyShell>
   );
 }

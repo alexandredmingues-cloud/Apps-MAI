@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { Briefcase, Building2, Calculator, Download, Globe2, Home, Newspaper, PlusCircle, ShieldCheck, UserCircle } from "lucide-react";
 import { SUPPORTED_LOCALES, useMontyLocale, type UiLocaleCode } from "@/lib/i18n";
+import { MonAgentAssistantWidget } from "@/components/ai/MonAgentAssistantWidget";
 
 interface PublicWebHeaderProps {
   activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs" | "coproprietes" | "telecharger" | "mon-compte";
@@ -13,7 +14,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
   const { locale, setLocale, t } = useMontyLocale();
 
   return (
-    <header className="sticky top-0 z-40 bg-emeraldDeep/95 backdrop-blur border-b border-goldAntique/30 text-ivoryWarm">
+    <header className="sticky top-0 z-40 bg-emeraldDeep/95 backdrop-blur-xl border-b border-goldAntique/30 text-ivoryWarm shadow-lg shadow-emeraldDeep/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         <Link href="/site" className="flex items-center gap-3 shrink-0">
           <div className="h-9 w-9 rounded-xl bg-goldAntique/20 border border-goldAntique/60 flex items-center justify-center text-goldChampagne font-display font-bold text-lg">
@@ -21,7 +22,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
           </div>
           <div>
             <p className="font-display font-bold text-base tracking-tight leading-none">
-              MONTY IMMOBILIER
+              MON-AGENT
             </p>
             <p className="text-[11px] text-goldChampagne/90 mt-0.5">
               {t.tagline}
@@ -29,7 +30,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
           </div>
         </Link>
 
-        <nav className="hidden xl:flex items-center gap-1 text-xs font-medium">
+        <nav aria-label="Navigation principale" className="hidden xl:flex items-center gap-1 text-xs font-medium">
           <Link
             href="/site"
             className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
@@ -150,7 +151,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
       </div>
 
       {/* Navigation mobile compacte */}
-      <div className="xl:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap">
+      <nav aria-label="Navigation mobile" className="xl:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Link href="/site" className={`px-3 py-1.5 rounded-lg ${activePath === "site" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           {t.navHome}
         </Link>
@@ -176,7 +177,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
         <Link href="/mon-compte" className={`px-3 py-1.5 rounded-lg ${activePath === "mon-compte" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           {t.navMySpace}
         </Link>
-      </div>
+      </nav>
     </header>
   );
 }
@@ -184,11 +185,12 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
 export function PublicWebFooter() {
   const { t } = useMontyLocale();
   return (
+    <>
     <footer className="bg-emeraldDeep text-ivoryWarm/85 border-t border-goldAntique/30 mt-14">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-xs">
         <div className="space-y-2">
-          <p className="font-display text-base font-bold text-ivoryWarm">MONTY IMMOBILIER</p>
-          <p className="text-goldChampagne">« L&apos;humain avant tout. La technologie au service du conseiller immobilier. »</p>
+          <p className="font-display text-base font-bold text-ivoryWarm">MON-AGENT</p>
+          <p className="text-goldChampagne">« L&apos;humain avant tout. La technologie au service de l'immobilier. »</p>
           <p className="text-ivoryWarm/70">{t.footerSummary}</p>
         </div>
         <div className="space-y-2">
@@ -214,5 +216,7 @@ export function PublicWebFooter() {
         </div>
       </div>
     </footer>
+    <MonAgentAssistantWidget authenticated={false} />
+    </>
   );
 }

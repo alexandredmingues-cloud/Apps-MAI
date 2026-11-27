@@ -74,6 +74,9 @@ export function NotariesAndRnicPanel({
   const [notarySearchStatus, setNotarySearchStatus] = useState<string | null>(null);
   const [notaryNotice, setNotaryNotice] = useState<string | null>(null);
   const [officialOffices, setOfficialOffices] = useState<OfficialNotaryOffice[]>([]);
+  const [notaryPage, setNotaryPage] = useState(1);
+  const [notaryTotalPages, setNotaryTotalPages] = useState(0);
+  const [notaryTotalResults, setNotaryTotalResults] = useState(0);
 
   // --- Carnet Agence & Formulaire Sauvegarde Notaire ---
   const [agencyNotaries, setAgencyNotaries] = useState<AgencyNotaryContact[]>([]);
@@ -81,6 +84,7 @@ export function NotariesAndRnicPanel({
   const [bookNotaryName, setBookNotaryName] = useState("");
   const [bookEmail, setBookEmail] = useState("");
   const [bookPhone, setBookPhone] = useState("");
+  const [bookEmailVerified, setBookEmailVerified] = useState(false);
   const [bookStreet, setBookStreet] = useState("");
   const [bookPostal, setBookPostal] = useState("");
   const [bookCity, setBookCity] = useState("");
@@ -209,8 +213,7 @@ export function NotariesAndRnicPanel({
     refreshRnicAccess(activeToken);
   }, [refreshRnicAccess]);
 
-  async function handleSearchNotaries(e: React.FormEvent) {
-    e.preventDefault();
+  async function runNotarySearch(pageNumber: number) {
     setPanelError(null);
     setNotarySearchBusy(true);
     try {
@@ -218,16 +221,25 @@ export function NotariesAndRnicPanel({
         query: notaryQuery.trim(),
         postal_code: notaryPostal.trim(),
         department_code: notaryDept.trim(),
-        per_page: 15,
+        per_page: 25,
+        page: pageNumber,
       });
       setOfficialOffices(res.offices);
       setNotarySearchStatus(res.status);
       setNotaryNotice(res.email_notice);
+      setNotaryPage(res.page ?? pageNumber);
+      setNotaryTotalPages(res.total_pages ?? 0);
+      setNotaryTotalResults(res.total_results ?? res.count ?? 0);
     } catch (err) {
       setPanelError(err instanceof Error ? err.message : "Erreur recherche annuaire des notaires.");
     } finally {
       setNotarySearchBusy(false);
     }
+  }
+
+  async function handleSearchNotaries(e: React.FormEvent) {
+    e.preventDefault();
+    await runNotarySearch(1);
   }
 
   function handlePrefillNotaryBook(office: OfficialNotaryOffice) {
@@ -265,10 +277,11 @@ export function NotariesAndRnicPanel({
         notary_name: bookNotaryName.trim(),
         email: bookEmail.trim(),
         phone: bookPhone.trim(),
+        email_verified: bookEmailVerified,
         street_address: bookStreet.trim(),
         postal_code: bookPostal.trim(),
         city: bookCity.trim(),
-        source: bookSiret ? "DINUM_API_GOUV" : "MANUEL_AGENCE",
+        source: bookEmailVerified ? "CSN_DIRECTORY_VERIFIED" : bookSiret ? "DINUM_API_GOUV" : "MANUEL_AGENCE",
         notes: bookNotes.trim(),
       });
       setAgencyNotaries((prev) => [saved, ...prev.filter((item) => item.id !== saved.id)]);
@@ -277,6 +290,7 @@ export function NotariesAndRnicPanel({
       setBookNotaryName("");
       setBookEmail("");
       setBookPhone("");
+      setBookEmailVerified(false);
       setBookStreet("");
       setBookPostal("");
       setBookCity("");
@@ -459,14 +473,14 @@ export function NotariesAndRnicPanel({
           <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 space-y-3">
             <h4 className="font-display font-bold text-sm text-emeraldDeep flex items-center gap-1.5">
               <Search className="w-4 h-4 text-goldAntique" />
-              Annuaire Officiel des Études Notariales de France (API DINUM / INSEE 69.10Z)
+              Répertoire national des études notariales (DINUM / INSEE + fiches officielles CSN)
             </h4>
             <form onSubmit={handleSearchNotaries} className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
               <input
                 type="text"
                 value={notaryQuery}
                 onChange={(e) => setNotaryQuery(e.target.value)}
-                placeholder="Nom étude ou ville (ex: Alcaix Lyon)"
+                placeholder="Nom d’étude ou ville (ex. Montpellier)"
                 className="sm:col-span-2 rounded-xl border border-borderSubtle bg-white px-3 py-2"
               />
               <input
@@ -499,8 +513,16 @@ export function NotariesAndRnicPanel({
                 Source : {notarySearchStatus} — {notaryNotice}
               </p>
             )}
+            <p className="text-[11px] text-slateMuted">
+              Le répertoire national permet de retrouver les études actives et leurs adresses. Pour les téléphones et e-mails, ouvrez la fiche CSN de chaque étude : ces coordonnées ne sont pas présentes dans l’API SIRENE. MON-AGENT ne complète jamais ces champs par déduction.
+            </p>
 
             {officialOffices.length > 0 && (
+              <>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slateMuted">
+                <span>{notaryTotalResults.toLocaleString("fr-FR")} établissements trouvés · page {notaryPage}{notaryTotalPages ? ` / ${notaryTotalPages}` : ""}</span>
+                <span>25 résultats maximum par page · recherche nationale</span>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
                 {officialOffices.map((o) => (
                   <div
@@ -525,7 +547,7 @@ export function NotariesAndRnicPanel({
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-borderSubtle text-emeraldDeep font-semibold hover:border-emeraldDeep"
                       >
                         <ExternalLink className="w-3 h-3" />
-                        Annuaire CSN notaires.fr
+                        Fiche CSN · téléphone / e-mail
                       </a>
                       {mode === "pro" && (
                         <button
@@ -541,6 +563,28 @@ export function NotariesAndRnicPanel({
                   </div>
                 ))}
               </div>
+              {notaryTotalPages > 1 && (
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    disabled={notarySearchBusy || notaryPage <= 1}
+                    onClick={() => runNotarySearch(notaryPage - 1)}
+                    className="rounded-lg border border-borderSubtle px-3 py-1.5 text-xs font-semibold text-emeraldDeep disabled:opacity-40"
+                  >
+                    Page précédente
+                  </button>
+                  <span className="text-xs text-slateMuted">Page {notaryPage} / {notaryTotalPages}</span>
+                  <button
+                    type="button"
+                    disabled={notarySearchBusy || notaryPage >= notaryTotalPages}
+                    onClick={() => runNotarySearch(notaryPage + 1)}
+                    className="rounded-lg border border-borderSubtle px-3 py-1.5 text-xs font-semibold text-emeraldDeep disabled:opacity-40"
+                  >
+                    Page suivante
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </div>
 
@@ -590,6 +634,15 @@ export function NotariesAndRnicPanel({
                       className="rounded-lg border border-borderSubtle bg-white px-2.5 py-1.5"
                     />
                   </div>
+                  <label className="flex items-start gap-2 text-[11px] text-slateMuted">
+                    <input
+                      type="checkbox"
+                      checked={bookEmailVerified}
+                      onChange={(e) => setBookEmailVerified(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>J’ai vérifié cette adresse e-mail sur la fiche officielle de l’office notarial (CSN).</span>
+                  </label>
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       type="text"

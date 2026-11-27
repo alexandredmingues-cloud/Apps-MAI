@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import math
 import statistics
@@ -12,8 +12,7 @@ from app.core.rbac import Permission, TenantContext
 from app.core.security import InputSanitizer
 from app.domain.country_packs import CountryCode
 from app.domain.dvf_sync_service import DvfSyncService
-from app.domain.marketplace_service import CITY_COORDINATES
-from app.domain.real_estate_engines import DvfComparable, MONTPELLIER_SECTORS
+from app.domain.real_estate_engines import DvfComparable
 
 
 class PriceIndexCategory(str, Enum):
@@ -112,53 +111,6 @@ class ComparableTransactionService:
             pool = self._dvf.get_cached_comparables(postal_code)
             source_label = f"Base DVF officielle (secteur {postal_code})"
 
-        # Référentiel secteurs Montpellier
-        if not pool:
-            combined_loc = f"{city} {sector_label}".lower()
-            for sec in MONTPELLIER_SECTORS:
-                short = sec.name.split(" (")[0].lower()
-                if short in combined_loc:
-                    base_m2 = (sec.price_m2_house or sec.price_m2_apartment) if "maison" in property_kind.lower() else sec.price_m2_apartment
-                    pool = [
-                        DvfComparable(
-                            mutation_id=f"sec-{short[:6]}-{i}",
-                            date_mutation=f"2026-0{(i % 6) + 1}-12",
-                            year=2026,
-                            price_euro=round((base_m2 + (i - 2) * 110) * max(20, surface_m2)),
-                            surface_m2=max(20, surface_m2),
-                            property_type=property_kind,
-                            distance_meters=180 + i * 160,
-                        )
-                        for i in range(6)
-                    ]
-                    source_label = f"Référentiel marché local Monty ({sec.name})"
-                    break
-
-        # Référentiel national FR/PT par ville connue
-        if not pool:
-            city_key = city.strip().lower()
-            matched_city = next((k for k in CITY_COORDINATES if k in city_key), None)
-            if matched_city:
-                _lat, _lon, c_code, region, ref_m2 = CITY_COORDINATES[matched_city]
-                adj_m2 = round(ref_m2 * (1.07 if "maison" in property_kind.lower() else 1.0))
-                pool = [
-                    DvfComparable(
-                        mutation_id=f"city-{matched_city}-{i}",
-                        date_mutation=f"2026-0{(i % 6) + 1}-10",
-                        year=2026,
-                        price_euro=round((adj_m2 + (i - 2) * 125) * max(20, surface_m2)),
-                        surface_m2=max(20, surface_m2),
-                        property_type=property_kind,
-                        distance_meters=350 + i * 240,
-                    )
-                    for i in range(5)
-                ]
-                source_label = (
-                    f"Référentiel marché Portugal ({matched_city.title()}, {region})"
-                    if c_code == CountryCode.PT
-                    else f"Repères DVF / marché ({matched_city.title()}, {region})"
-                )
-
         if not pool:
             return ComparableStats(
                 comparables_found_count=0,
@@ -174,16 +126,47 @@ class ComparableTransactionService:
                 data_date="",
             )
 
-        # Filtrage distance & type de bien compatible
-        dist_filtered = [
-            c for c in pool if c.distance_meters <= config.max_comparable_distance_m
-        ] or pool
-        kind_lower = property_kind.lower()
-        same_kind = [
-            c for c in dist_filtered
-            if (kind_lower in c.property_type.lower()) or (c.property_type.lower() in kind_lower)
+        # Une transaction trop ancienne, future, mal formée ou hors périmètre ne doit
+        # jamais contribuer à une estimation présentée comme fondée sur le marché actuel.
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=max(1, config.max_comparable_age_months) * 30)
+        dated_pool: list[DvfComparable] = []
+        for comparable in pool:
+            try:
+                mutation_date = datetime.fromisoformat(comparable.date_mutation[:10]).replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                continue
+            if (
+                cutoff <= mutation_date <= now
+                and comparable.price_euro > 0
+                and comparable.surface_m2 > 0
+                and comparable.distance_meters >= 0
+            ):
+                dated_pool.append(comparable)
+
+        # Pas de repli silencieux vers des ventes trop éloignées ou un autre type de bien.
+        kind_lower = property_kind.strip().lower()
+        working = [
+            c for c in dated_pool
+            if c.distance_meters <= config.max_comparable_distance_m
+            and kind_lower
+            and c.property_type.strip().lower() == kind_lower
+            and 0.5 <= (c.surface_m2 / max(1, surface_m2)) <= 2.0
         ]
-        working = same_kind if len(same_kind) >= 2 else dist_filtered
+        if not working:
+            return ComparableStats(
+                comparables_found_count=len(pool),
+                comparables_retained_count=0,
+                outliers_removed_count=0,
+                median_price_m2=0,
+                weighted_price_m2=0,
+                q1_price_m2=0,
+                q3_price_m2=0,
+                dispersion_cv=1.0,
+                avg_distance_m=0,
+                source_label="Aucune transaction récente, proche et de typologie strictement comparable",
+                data_date="",
+            )
 
         # Prix/m² + filtrage valeurs aberrantes IQR
         per_m2_pairs = sorted(
@@ -451,6 +434,28 @@ class MontyPriceEngine:
         tier, reliability_score, confidence_label, display_badge = PriceConfidenceService.evaluate_confidence(stats, cfg)
 
         if not display_badge:
+            history_record: PriceIndexHistoryRecord | None = None
+            if record_history:
+                history_record = PriceIndexHistoryRecord(
+                    id=f"mpi-{uuid.uuid4().hex[:10]}",
+                    agency_id=agency_id,
+                    target_ref=InputSanitizer.sanitize_text(target_ref, 120),
+                    title=InputSanitizer.sanitize_text(title, 200),
+                    country_code=country_code.value,
+                    city=InputSanitizer.sanitize_text(city, 120),
+                    property_kind=InputSanitizer.sanitize_text(property_kind, 60),
+                    asking_price_euro=asking_price_euro,
+                    estimated_market_value=0,
+                    gap_percent=0.0,
+                    category=PriceIndexCategory.DONNEES_INSUFFISANTES.value,
+                    confidence_tier=tier.value,
+                    comparables_count=stats.comparables_retained_count,
+                    evaluated_by=user_id,
+                    created_at=calculated_at,
+                )
+                self._history.insert(0, history_record)
+                if len(self._history) > 300:
+                    self._history = self._history[:300]
             return {
                 "display_badge": False,
                 "category": PriceIndexCategory.DONNEES_INSUFFISANTES.value,
@@ -477,6 +482,7 @@ class MontyPriceEngine:
                 },
                 "calculated_at": calculated_at,
                 "estimation_disclaimer": PRICE_INDEX_DISCLAIMER,
+                "history_record_id": history_record.id if history_record else "",
                 "explanation_grounded": (
                     f"Indicateur masqué pour « {InputSanitizer.sanitize_text(title, 120)} » : "
                     f"seulement {stats.comparables_retained_count} comparable(s) retenu(s) "

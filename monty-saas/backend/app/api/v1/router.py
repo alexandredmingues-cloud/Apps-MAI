@@ -1,4 +1,5 @@
 from __future__ import annotations
+# Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code.
 
 import base64
 from datetime import datetime, timezone
@@ -9,10 +10,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 
+from app.api.v1.ads_router import ads_router
 from app.api.v1.billing_router import billing_router
 from app.api.v1.crm_router import crm_router
 from app.api.v1.deps import (
@@ -34,6 +36,7 @@ from app.core.config import Settings
 from app.core.rbac import ROLE_PERMISSIONS, MontyRole, Permission, TenantContext
 from app.core.rgpd import compute_retention_until, redact_direct_pii_for_ai
 from app.core.security import create_access_token
+from app.core.turnstile import verify_turnstile
 from app.db.postgres_repositories import PostgresAuthRepository
 from app.domain.auth_and_billing import AuthService
 from app.domain.country_packs import CountryCode
@@ -53,6 +56,7 @@ from app.domain.real_estate_engines import (
 )
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(ads_router)
 router.include_router(news_router)
 router.include_router(crm_router)
 router.include_router(marketplace_router)
@@ -206,6 +210,7 @@ async def issue_dev_session(
 
 
 class RegisterAgencyRequest(BaseModel):
+    captcha_token: str = Field(default="", max_length=2048)
     agency_name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
@@ -217,9 +222,11 @@ class RegisterAgencyRequest(BaseModel):
 @router.post("/auth/register", response_model=SessionResponse, status_code=status.HTTP_201_CREATED, tags=["Auth"])
 async def register_agency_account(
     body: RegisterAgencyRequest,
+    request: Request,
     settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> SessionResponse:
+    await verify_turnstile(body.captcha_token, request, settings)
     try:
         if sf is not None:
             res = await PostgresAuthRepository(sf).register_agency_director(
@@ -256,6 +263,7 @@ async def register_agency_account(
 
 
 class RegisterClientRequest(BaseModel):
+    captcha_token: str = Field(default="", max_length=2048)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=2, max_length=120)
@@ -271,9 +279,11 @@ class RegisterClientRequest(BaseModel):
 )
 async def register_client_account(
     body: RegisterClientRequest,
+    request: Request,
     settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> SessionResponse:
+    await verify_turnstile(body.captcha_token, request, settings)
     try:
         if sf is not None:
             res = await PostgresAuthRepository(sf).register_client_account(
@@ -308,6 +318,7 @@ async def register_client_account(
 
 
 class LoginRequest(BaseModel):
+    captcha_token: str = Field(default="", max_length=2048)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
 
@@ -315,9 +326,11 @@ class LoginRequest(BaseModel):
 @router.post("/auth/login", response_model=SessionResponse, tags=["Auth"])
 async def login_account(
     body: LoginRequest,
+    request: Request,
     settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> SessionResponse:
+    await verify_turnstile(body.captcha_token, request, settings)
     try:
         if sf is not None:
             res = await PostgresAuthRepository(sf).login(

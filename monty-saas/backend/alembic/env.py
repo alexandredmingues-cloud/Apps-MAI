@@ -4,7 +4,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 config = context.config
 if config.config_file_name is not None:
@@ -34,6 +34,18 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Plusieurs identifiants historiques dépassent 32 caractères, limite du
+        # alembic_version créé par défaut. Préparer une colonne extensible avant
+        # le premier upgrade, et réparer sans perte les bases déjà initialisées.
+        with connection.begin():
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS alembic_version (
+                    version_num VARCHAR(128) NOT NULL PRIMARY KEY
+                )
+            """))
+            connection.execute(text(
+                "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"
+            ))
         context.configure(connection=connection, target_metadata=None)
         with context.begin_transaction():
             context.run_migrations()

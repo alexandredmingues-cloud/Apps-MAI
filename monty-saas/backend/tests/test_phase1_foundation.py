@@ -93,6 +93,13 @@ class SecurityAndRbacTests(unittest.TestCase):
         t[0] += 61.0
         self.assertTrue(limiter.check_and_consume("u1", 2, 60).allowed)
 
+    def test_production_rate_limiter_fails_closed_without_redis(self) -> None:
+        limiter = SlidingWindowRateLimiter(require_redis=True)
+        decision = limiter.check_and_consume("production-api:user-1", 120, 60)
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.remaining, 0)
+        self.assertGreaterEqual(decision.retry_after_seconds, 1)
+
     def test_multi_tenant_and_private_notes_rbac(self) -> None:
         agent_a = TenantContext(user_id="usr-a1", agency_id="ag-a", role=MontyRole.AGENT)
         director_a = TenantContext(user_id="usr-dir", agency_id="ag-a", role=MontyRole.DIRECTOR)

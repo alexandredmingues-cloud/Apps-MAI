@@ -723,19 +723,19 @@ class PostgresV2OpsRepository:
 
             try:
                 title = InputSanitizer.sanitize_text(str(item.get("title") or item.get("name") or ""), 160)
-                city = InputSanitizer.sanitize_text(str(item.get("city") or "Lyon"), 80)
-                sector = InputSanitizer.sanitize_text(str(item.get("sector_label") or item.get("sector") or "Centre"), 80)
-                prop_kind = InputSanitizer.sanitize_text(str(item.get("property_kind") or "Appartement"), 40)
+                city = InputSanitizer.sanitize_text(str(item.get("city") or ""), 80)
+                sector = InputSanitizer.sanitize_text(str(item.get("sector_label") or item.get("sector") or ""), 80)
+                prop_kind = InputSanitizer.sanitize_text(str(item.get("property_kind") or "Non renseigné"), 40)
                 price = int(float(item.get("price_euro") or item.get("price") or 0))
                 surface = int(float(item.get("surface_m2") or item.get("surface") or 0))
                 rooms = max(1, int(float(item.get("rooms") or 2)))
-                dpe = InputSanitizer.sanitize_text(str(item.get("dpe") or "C"), 4).upper()
-                cond = InputSanitizer.sanitize_text(str(item.get("condition_label") or "Bon état"), 40)
+                dpe = InputSanitizer.sanitize_text(str(item.get("dpe") or ""), 4).upper()
+                cond = InputSanitizer.sanitize_text(str(item.get("condition_label") or "Non renseigné"), 40)
                 clean_desc = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(str(item.get("description") or ""), 1600))
-                photo_count = max(0, int(float(item.get("photo_count") or 3)))
+                photo_count = max(0, int(float(item.get("photo_count") or 0)))
                 canonical_url = InputSanitizer.sanitize_public_http_url(str(item.get("canonical_url") or item.get("url") or ""))
 
-                if len(title) < 5 or price < 10_000 or surface < 9 or len(clean_desc) < 10:
+                if len(title) < 5 or len(city) < 2 or price < 10_000 or surface < 9 or len(clean_desc) < 10:
                     rejected += 1
                     continue
 

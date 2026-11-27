@@ -23,6 +23,7 @@ class AuthorizedPartnerFeedsTests(unittest.TestCase):
         market = MarketplaceService()
         feeds = AuthorizedListingFeedsService(market)
         director = TenantContext(user_id="usr-dir", agency_id="ag-feed", role=MontyRole.DIRECTOR)
+        self.assertEqual(feeds.list_feeds(director), [])
 
         # Refus sans accord explicite de diffusion
         with self.assertRaises(ValueError):

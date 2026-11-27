@@ -1,4 +1,4 @@
-# MONTY SAAS — Plateforme Immobilière Multi-Agences & Multi-Pays
+# MON-AGENT SAAS — Plateforme Immobilière Multi-Agences & Multi-Pays
 
 > **Philosophie :** « L'humain avant tout. La technologie au service du conseiller immobilier. »
 
@@ -115,3 +115,10 @@ python3 -m unittest discover -s monty-saas/backend/tests -v
 # Lancement complet avec Docker Compose (sur poste local / CI avec Docker)
 cd monty-saas && docker compose up --build
 ```
+
+
+## Publicité de marques & propriété intellectuelle
+
+La régie publicitaire permet aux marques de soumettre une campagne via le portail public `/publicite`. Les campagnes sont modérées par un administrateur plateforme avant publication, peuvent être ciblées par emplacement/pays/ville et disposent de statistiques agrégées d'impressions et de clics. Les emplacements sponsorisés portent une mention explicite et restent distincts des résultats organiques.
+
+Migration additionnelle : `0013_brand_advertising`. Les éléments originaux du projet sont couverts par le fichier racine `COPYRIGHT.md`; les licences et attributions des composants tiers restent applicables.

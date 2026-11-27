@@ -158,6 +158,7 @@ export const montyApi = {
       false
     ),
   registerAgency: (payload: {
+    captcha_token: string;
     agency_name: string;
     email: string;
     password: string;
@@ -170,7 +171,7 @@ export const montyApi = {
       { method: "POST", body: JSON.stringify(payload) },
       false
     ),
-  login: (payload: { email: string; password: string }) =>
+  login: (payload: { email: string; password: string; captcha_token: string }) =>
     requestJson<SessionInfo>(
       "/api/v1/auth/login",
       { method: "POST", body: JSON.stringify(payload) },
@@ -826,6 +827,7 @@ export const montyApi = {
 
   // Inscription Particulier (Acquéreur / Vendeur) sans créer d'agence
   registerClient: (payload: {
+    captcha_token: string;
     email: string;
     password: string;
     display_name: string;
@@ -839,12 +841,13 @@ export const montyApi = {
     ),
 
   // Annuaire Officiel des Notaires de France & Transmissions Dossiers Compromis
-  searchFrenchNotaries: (params: { query?: string; department_code?: string; postal_code?: string; per_page?: number }) => {
+  searchFrenchNotaries: (params: { query?: string; department_code?: string; postal_code?: string; per_page?: number; page?: number }) => {
     const q = new URLSearchParams();
     if (params.query) q.set("query", params.query);
     if (params.department_code) q.set("department_code", params.department_code);
     if (params.postal_code) q.set("postal_code", params.postal_code);
     if (params.per_page) q.set("per_page", String(params.per_page));
+    if (params.page) q.set("page", String(params.page));
     return requestJson<NotarySearchResponse>(`/api/v1/notaries/search?${q.toString()}`, {}, false);
   },
 
@@ -857,6 +860,7 @@ export const montyApi = {
     notary_name?: string;
     email?: string;
     phone?: string;
+    email_verified?: boolean;
     street_address?: string;
     postal_code?: string;
     city?: string;

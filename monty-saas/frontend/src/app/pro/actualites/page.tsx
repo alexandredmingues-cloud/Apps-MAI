@@ -54,7 +54,7 @@ export default function ProNewsPage() {
     >
       {checking ? (
         <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-6 text-sm text-slateMuted">
-          Vérification de la session professionnelle Monty Pro...
+          Vérification de la session professionnelle MON-AGENT Pro...
         </div>
       ) : !isProAuthorized ? (
         <div className="rounded-2xl bg-ivoryCard border border-amber-300 p-6 space-y-3">
@@ -65,7 +65,7 @@ export default function ProNewsPage() {
           <p className="text-sm text-slateMuted">
             {session
               ? `Votre session actuelle (${session.role}) dispose uniquement de l'accès Particulier.`
-              : "Veuillez vous connecter avec un compte agence Monty Pro pour accéder aux analyses professionnelles et au générateur IA."}
+              : "Veuillez vous connecter avec un compte agence MON-AGENT Pro pour accéder aux analyses professionnelles et au générateur IA."}
           </p>
           <div className="flex flex-wrap gap-2">
             <Link

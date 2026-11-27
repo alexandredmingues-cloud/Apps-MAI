@@ -26,23 +26,9 @@ class DvfSyncService:
     """Import DVF planifié avec validation Pydantic/métier, cache et fallback résilient."""
 
     def __init__(self) -> None:
-        self._cache_by_sector: dict[str, list[DvfComparable]] = {
-            "69003": [
-                DvfComparable(
-                    mutation_id=f"seed-69003-{i}",
-                    date_mutation=f"2026-0{(i % 6) + 1}-15",
-                    year=2026,
-                    price_euro=(5100 + (i % 4) * 120) * (70 + (i % 3) * 5),
-                    surface_m2=70 + (i % 3) * 5,
-                    property_type="Appartement",
-                    distance_meters=40 + i * 15,
-                )
-                for i in range(16)
-            ]
-        }
-        self._last_sync_iso_by_sector: dict[str, str] = {
-            "69003": "2026-11-25T02:00:00Z",
-        }
+        # Aucune vente fictive préchargée : le cache est alimenté uniquement par une ingestion DVF validée.
+        self._cache_by_sector: dict[str, list[DvfComparable]] = {}
+        self._last_sync_iso_by_sector: dict[str, str] = {}
 
     def ingest_raw_rows(
         self,

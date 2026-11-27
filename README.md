@@ -2,11 +2,11 @@
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
 
-# MONTY IMMOBILIER — Écosystème Tri-Plateforme (Android + Web Next.js + SaaS FastAPI)
+# MON-AGENT — Écosystème Tri-Plateforme (Android + Web Next.js + SaaS FastAPI)
 
-Plateforme immobilière complète multi-pays (France active • Portugal isolé & prêt) composée de :
+Plateforme immobilière intelligente multi-pays (France active • Portugal isolé & prêt) composée de :
 - **Application Android (`app/`)** : Jetpack Compose, Room hors-ligne, Cloud Firestore + App Check, Google Sign-In (`CredentialManager`), Firebase AI Logic (`MontyAiModelConfig.AI_MODEL_NAME`) et convergence SaaS (`MontySaasApiClient`).
-- **Backend SaaS (`monty-saas/backend/`)** : FastAPI, PostgreSQL 16 + RLS (`0001` à `0012`), Redis (`SlidingWindowRateLimiter` + ARQ), `Monty AI Core` multi-moteurs, ADEME Open Data DPE, Monty Price Index 6 paliers, Stripe Checkout & Webhooks (abonnements, Pass RNIC, Pack Vendeur), et Stockage Objet S3/R2/Supabase.
+- **Backend SaaS (`monty-saas/backend/`)** : FastAPI, PostgreSQL 16 + RLS (`0001` à `0014`), Redis (`SlidingWindowRateLimiter` + ARQ), `Mon-Agent AI Core` multi-moteurs, ADEME Open Data DPE, Mon-Agent Price Index 6 paliers, Stripe Checkout & Webhooks (abonnements, Pass RNIC, Pack Vendeur), et Stockage Objet S3/R2/Supabase.
 - **Frontend Web (`monty-saas/frontend/`)** : Next.js 15.5+ / React 19, i18n (`fr-FR`, `pt-PT`, `en-GB`), espace pro SaaS + portail public + téléchargement APK vérifié SHA-256.
 
 Voir l'app dans AI Studio : https://ai.studio/apps/cd75241a-b5fc-44ff-a2a6-4ccc33fec8d3
@@ -56,8 +56,19 @@ Les règles Firestore (`seller_dossiers`) bloquent désormais toute écriture cl
 
 - `monty-saas/docs/ARCHITECTURE.md` — Architecture tri-plateforme & flux
 - `monty-saas/docs/DATABASE.md` — Migrations PostgreSQL 16 + RLS (`0001`–`0012`) & Firestore
-- `monty-saas/docs/AI_ORCHESTRATOR.md` — Monty AI Core multi-fournisseurs, cache sémantique & garde-fous
+- `monty-saas/docs/AI_ORCHESTRATOR.md` — Mon-Agent AI Core multi-fournisseurs, cache sémantique & garde-fous
 - `monty-saas/docs/SECURITY.md` — RBAC `PLATFORM_ADMIN_USER_IDS`, anti-SSRF, Redis rate limiting, Stripe & Firebase
 - `monty-saas/docs/DEPLOYMENT.md` — Déploiement unifié Render (`render.yaml`, `plan: starter`, disque, Redis) & Vercel
 - `monty-saas/docs/ANDROID_SAAS_SYNC_STRATEGY.md` — Stratégie de convergence Android ↔ SaaS
 - `monty-saas/docs/CHANGELOG.md` — Journal des évolutions V3
+
+
+## Copyright & publicité de marques
+
+- Les éléments originaux MON-AGENT sont couverts par la notice [COPYRIGHT.md](COPYRIGHT.md). Les composants, polices, cartes, données et dépendances tiers conservent leurs licences propres.
+- Les marques peuvent déposer une demande de campagne sur `/publicite`. Les demandes restent en attente de modération avant toute diffusion.
+- Emplacements prévus : accueil, recherche immobilière, contenus/actualités et espace professionnel. Les annonces sponsorisées sont explicitement identifiées et ne modifient jamais le classement organique des biens.
+- API : `GET /api/v1/ads/public`, `POST /api/v1/ads/public/requests`, métriques agrégées d'impressions/clics et modération réservée au rôle `SUPER_ADMIN`.
+- Migration PostgreSQL : Alembic `0013_brand_advertising`.
+
+Administration des campagnes publicitaires : route `/admin/publicite`, accessible aux comptes `SUPER_ADMIN` uniquement.

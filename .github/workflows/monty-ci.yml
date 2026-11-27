@@ -1,4 +1,4 @@
-name: Monty CI — Tri-Platform Verification
+name: MON-AGENT CI — Tri-Platform Verification
 
 on:
   push:
@@ -16,8 +16,22 @@ concurrency:
 jobs:
   backend-python:
     name: Backend FastAPI & Domain Tests
-    needs: android-kotlin
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: monagent_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d monagent_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: monty-saas/backend
@@ -28,13 +42,13 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: monty-saas/backend/requirements.txt
-      - name: Download Android APK built by CI
-        uses: actions/download-artifact@v4
-        with:
-          name: monty-debug-apk
-          path: app/build/outputs/apk/debug
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Apply all PostgreSQL migrations on a clean PostgreSQL 16 database
+        env:
+          DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@localhost:5432/monagent_test
+        run: alembic upgrade head
+
       - name: Compile Python sources & run complete test suite
         env:
           ENVIRONMENT: development
@@ -43,9 +57,79 @@ jobs:
           python -m compileall -q app tests
           python -m pytest -q
 
+      - name: PostgreSQL backup, checksum and restore smoke test
+        env:
+          PGPASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monagent_test
+          BACKUP_DIR: ${{ runner.temp }}/monagent-backup-test
+        run: |
+          set -euo pipefail
+          mkdir -p "$BACKUP_DIR"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE backup_restore_probe (id integer PRIMARY KEY, payload text NOT NULL)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO backup_restore_probe VALUES (1, 'restore-ok')"
+          # Use the same PostgreSQL 16 client major as the service. Newer pg_dump
+          # emits settings that PostgreSQL 16 does not understand on restore.
+          docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e BACKUP_DIR=/backup \
+            -v "$BACKUP_DIR:/backup" \
+            -v "$GITHUB_WORKSPACE/monty-saas/backend/scripts:/scripts:ro" \
+            postgres:16 bash -lc 'set -euo pipefail; bash /scripts/backup_postgres.sh; DUMP_FILE="$(find /backup -maxdepth 1 -name "monty_saas_*.dump" -type f -print -quit)"; test -n "$DUMP_FILE"; sha256sum -c "$DUMP_FILE.sha256"'
+          DUMP_FILE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'monty_saas_*.dump' -type f -print -quit)"
+          test -n "$DUMP_FILE"
+          createdb -h localhost -U postgres monagent_restore
+          docker run --rm --network host \
+            -v "$BACKUP_DIR:/backup:ro" \
+            postgres:16 pg_restore --exit-on-error --no-owner --no-acl \
+            --dbname=postgresql://postgres:postgres@127.0.0.1:5432/monagent_restore "/backup/$(basename "$DUMP_FILE")"
+          RESTORED="$(psql postgresql://postgres:postgres@localhost:5432/monagent_restore -Atc "SELECT payload FROM backup_restore_probe WHERE id = 1")"
+          test "$RESTORED" = "restore-ok"
+
+      - name: API health and concurrent latency smoke test
+        env:
+          ENVIRONMENT: development
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monagent_test
+          JWT_SECRET: ci-only-secret-not-for-production-000000000000
+        run: |
+          set -euo pipefail
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/monagent-api.log 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import asyncio
+          import time
+          import httpx
+
+          async def main():
+              async with httpx.AsyncClient(base_url="http://127.0.0.1:8000", timeout=5.0) as client:
+                  for _ in range(40):
+                      try:
+                          response = await client.get("/api/v1/health")
+                          if response.status_code == 200:
+                              break
+                      except httpx.HTTPError:
+                          pass
+                      await asyncio.sleep(0.5)
+                  else:
+                      raise SystemExit("API health endpoint did not become ready")
+                  async def hit():
+                      started = time.perf_counter()
+                      response = await client.get("/api/v1/health")
+                      response.raise_for_status()
+                      return (time.perf_counter() - started) * 1000
+                  samples = await asyncio.gather(*(hit() for _ in range(80)))
+                  samples.sort()
+                  p50, p95 = samples[39], samples[75]
+                  print(f"Health API smoke: 80 requests / concurrency=80, p50={p50:.1f}ms, p95={p95:.1f}ms")
+                  if p95 > 2000:
+                      raise SystemExit(f"Health API p95 too high for CI smoke threshold: {p95:.1f}ms")
+          asyncio.run(main())
+          PY
+
   frontend-nextjs:
     name: Frontend Next.js Typecheck & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: monty-saas/frontend
@@ -64,10 +148,54 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+      - name: Public landing page HTTP smoke test
+        run: |
+          set -euo pipefail
+          npm run start -- --hostname 127.0.0.1 >/tmp/monagent-next.log 2>&1 &
+          NEXT_PID=$!
+          trap 'kill "$NEXT_PID" 2>/dev/null || true' EXIT
+          node --input-type=module - <<'JS'
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+          for (let attempt = 0; attempt < 40; attempt++) {
+            try {
+              const response = await fetch("http://127.0.0.1:3000/");
+              const html = await response.text();
+              if (response.status === 200 && html.includes("MON-AGENT")) {
+                console.log("Public landing page returned HTTP 200 and contains MON-AGENT.");
+                process.exit(0);
+              }
+              if (response.status >= 500) throw new Error("HTTP " + response.status);
+            } catch (error) {
+              if (attempt === 39) throw error;
+            }
+            await sleep(500);
+          }
+          throw new Error("Next.js server did not become ready");
+          JS
+
+  firestore-rules:
+    name: Firestore Security Rules Emulator Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Install locked Firebase test dependencies
+        run: npm ci
+      - name: Execute Firestore emulator security suite
+        run: npm test
 
   android-kotlin:
     name: Android Kotlin Compile & Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       # Robolectric API 36 requires JDK 21. JDK 17 causes
@@ -80,16 +208,39 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
-      - name: Generate CI-only Android debug keystore
+      - name: Generate and verify CI-only Android signing keystores
+        shell: bash
         run: |
+          set -euo pipefail
+
+          # CI keys are disposable test credentials. Never use them to publish to Play Store.
           if [ ! -f debug.keystore ]; then
-            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            keytool -genkeypair -noprompt -v -storetype JKS \
+              -keystore debug.keystore -storepass android \
+              -alias androiddebugkey -keypass android -keyalg RSA \
+              -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
-      - name: Compile Android & run JVM unit tests
-        run: gradle :app:assembleDebug :app:testDebugUnitTest
-      - name: Upload Android APK for backend release tests
-        uses: actions/upload-artifact@v4
-        with:
-          name: monty-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+
+          # Use one password for both JKS and private key. This avoids provider-dependent
+          # PKCS12/JKS password handling and makes the CI signing input deterministic.
+          rm -f ci-release.keystore
+          keytool -genkeypair -noprompt -v -storetype JKS \
+            -keystore ci-release.keystore -storepass ci-release-ci-only \
+            -alias upload -keypass ci-release-ci-only -keyalg RSA \
+            -keysize 2048 -validity 10000 \
+            -dname "CN=MON-AGENT CI,O=MON-AGENT,C=FR"
+
+          keytool -list -v -storetype JKS \
+            -keystore ci-release.keystore -storepass ci-release-ci-only \
+            | grep -Fq "Alias name: upload"
+          keytool -list -v -storetype JKS \
+            -keystore debug.keystore -storepass android \
+            | grep -Fq "Alias name: androiddebugkey"
+
+      - name: Compile Android debug, unit tests and minified release APK
+        run: gradle :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/ci-release.keystore
+          STORE_PASSWORD: ci-release-ci-only
+          KEY_PASSWORD: ci-release-ci-only

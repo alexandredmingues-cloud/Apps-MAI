@@ -29,7 +29,7 @@ const TASK_OPTIONS: { key: MontyAITaskType; label: string; hint: string }[] = [
   { key: "QUICK_SUMMARY", label: "Résumé rapide", hint: "Synthèse d'échange ou compte-rendu" },
   { key: "DOCUMENT_ANALYSIS", label: "Analyse document", hint: "PV AG, DPE, compromis ou fichier texte" },
   { key: "WRITING", label: "Rédaction pro", hint: "Annonce, e-mail client ou notaire" },
-  { key: "PRICE_EXPLANATION", label: "Analyse Prix / DVF", hint: "Argumentaire Monty Price Index" },
+  { key: "PRICE_EXPLANATION", label: "Analyse Prix / DVF", hint: "Argumentaire MON-AGENT Price Index" },
   { key: "COMPLEX_REASONING", label: "Raisonnement complexe", hint: "Stratégie négociation & fiscalité" },
 ];
 
@@ -65,7 +65,7 @@ export function MontyAIChatWorkspace() {
       setPendingActions(actRes.actions);
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : "Connectez une session Pro pour dialoguer avec Monty AI."
+        err instanceof Error ? err.message : "Connectez votre compte MON-AGENT pour dialoguer avec MON-AGENT."
       );
     }
   }
@@ -108,7 +108,7 @@ export function MontyAIChatWorkspace() {
       setPrompt("");
       await refreshAll();
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Erreur d'exécution Monty AI.");
+      setErrorMsg(err instanceof Error ? err.message : "Erreur de réponse de MON-AGENT.");
     } finally {
       setBusy(false);
     }
@@ -161,11 +161,11 @@ export function MontyAIChatWorkspace() {
       <div className="rounded-2xl bg-gradient-to-r from-emeraldDeep to-emeraldMid text-ivoryWarm p-5 border border-goldAntique/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-goldChampagne font-semibold">
-            Monty AI Core • Intelligence Centrale Multi-Moteurs
+            MON-AGENT • VOTRE COPILOTE IMMOBILIER
           </p>
           <h2 className="font-display text-2xl font-bold mt-1 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-goldChampagne" />
-            Assistant Monty AI
+            MON-AGENT
           </h2>
           <p className="text-xs text-ivoryWarm/80 mt-1">
             Une seule intelligence unifiée : routage automatique sécurisé (LLM locaux open-source + moteurs externes
@@ -181,7 +181,7 @@ export function MontyAIChatWorkspace() {
             className="accent-goldChampagne"
           />
           <Lock className="w-3.5 h-3.5 text-goldChampagne" />
-          <span>Mode Confidentiel Strict (Local uniquement)</span>
+          <span>Mode confidentiel (moteurs locaux uniquement)</span>
         </label>
       </div>
 
@@ -213,12 +213,33 @@ export function MontyAIChatWorkspace() {
               ))}
             </div>
 
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slateMuted">Pour commencer avec MON-AGENT</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "Estimer un bien", prompt: "Aide-moi à préparer une estimation immobilière argumentée avec les comparables disponibles.", task: "PRICE_EXPLANATION" as MontyAITaskType },
+                  { label: "Analyser un DPE", prompt: "Aide-moi à analyser ce DPE, ses conséquences et les points à vérifier.", task: "DOCUMENT_ANALYSIS" as MontyAITaskType },
+                  { label: "Rédiger une annonce", prompt: "Rédige une annonce immobilière attractive, précise et conforme, sans inventer de caractéristiques.", task: "WRITING" as MontyAITaskType },
+                  { label: "Préparer une visite", prompt: "Prépare une checklist de visite immobilière et les questions utiles à poser.", task: "CONVERSATION" as MontyAITaskType },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => { setPrompt(item.prompt); setTaskType(item.task); }}
+                    className="rounded-full border border-borderSubtle bg-ivoryWarm px-3 py-1.5 text-[11px] font-semibold text-emeraldDeep hover:border-emeraldDeep hover:bg-white"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <form onSubmit={handleSendPrompt} className="space-y-3 text-xs">
               <textarea
                 rows={4}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Demandez à Monty AI : analyser un dossier, préparer une relance vendeur, expliquer un prix DVF, rédiger un e-mail notaire..."
+                placeholder="Bonjour, je suis MON-AGENT. Comment puis-je vous aider dans votre projet immobilier ?"
                 className="w-full rounded-xl border border-borderSubtle bg-ivoryWarm p-3 text-sm focus:outline-none focus:border-emeraldDeep"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -234,7 +255,7 @@ export function MontyAIChatWorkspace() {
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
-                  {busy ? "Orchestration Monty AI..." : "Envoyer à Monty AI"}
+                  {busy ? "MON-AGENT réfléchit..." : "Envoyer à MON-AGENT"}
                 </button>
               </div>
             </form>
@@ -288,7 +309,7 @@ export function MontyAIChatWorkspace() {
           <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3">
             <h3 className="font-display font-bold text-sm text-emeraldDeep flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-goldAntique" />
-              Historique Monty AI ({conversations.length})
+              Historique avec MON-AGENT ({conversations.length})
             </h3>
             {conversations.length === 0 ? (
               <p className="text-xs text-slateMuted">Aucun échange enregistré sur cette session.</p>

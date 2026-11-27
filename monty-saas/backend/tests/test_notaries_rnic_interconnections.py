@@ -53,8 +53,10 @@ class _FakeDinumClient:
         self._status = status_code
         self._payload = payload or {}
         self._exc = raise_exc
+        self.last_params = None
 
     def get(self, url: str, params=None, timeout: float = 10.0):
+        self.last_params = params
         if self._exc:
             raise self._exc
         return _FakeHttpResp(self._status, self._payload)
@@ -71,6 +73,10 @@ class NotariesRnicAndInterconnectionsTests(unittest.TestCase):
 
     def test_dinum_notary_parsing_and_error_resilience(self) -> None:
         sample_payload = {
+            "total_results": 41,
+            "total_pages": 2,
+            "page": 2,
+            "per_page": 25,
             "results": [
                 {
                     "siren": "345678901",
@@ -104,13 +110,19 @@ class NotariesRnicAndInterconnectionsTests(unittest.TestCase):
         self.assertEqual(offices[0].department_code, "69")
         self.assertIn("notaires.fr", offices[0].csn_directory_url)
 
+        fake_client = _FakeDinumClient(200, sample_payload)
         res_live = search_french_notary_offices(
             query="Alcaix",
             postal_code="69003",
-            http_client=_FakeDinumClient(200, sample_payload),
+            page=2,
+            http_client=fake_client,
         )
         self.assertEqual(res_live["status"], "live")
         self.assertEqual(res_live["count"], 1)
+        self.assertEqual(res_live["total_results"], 41)
+        self.assertEqual(res_live["total_pages"], 2)
+        self.assertEqual(fake_client.last_params["page"], 2)
+        self.assertIn("Téléphone et e-mail", res_live["email_notice"])
 
         res_err = search_french_notary_offices(
             query="Lyon",
@@ -138,7 +150,16 @@ class NotariesRnicAndInterconnectionsTests(unittest.TestCase):
             city="Lyon",
         )
         self.assertTrue(saved.is_official_notaire_domain)
+        self.assertFalse(saved.email_verified)
         self.assertEqual(saved.department_code, "69")
+        verified = book.save_notary(
+            self.director,
+            office_name="Étude Notariale Verified",
+            email="contact@notaires.fr",
+            email_verified=True,
+            postal_code="34000",
+        )
+        self.assertTrue(verified.email_verified)
 
         subj, eml = build_notary_transmission_eml(
             from_email="agence@monty.fr",

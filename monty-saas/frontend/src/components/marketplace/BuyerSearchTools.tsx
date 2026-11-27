@@ -55,7 +55,6 @@ export function BuyerSearchTools({
   const [conciergeBusy, setConciergeBusy] = useState(false);
   const [conciergeError, setConciergeError] = useState<string | null>(null);
   const [conciergeSent, setConciergeSent] = useState(false);
-  const [conciergeSyncMode, setConciergeSyncMode] = useState<"api" | "local">("local");
 
   useEffect(() => {
     setConciergeCity(originAddress);
@@ -97,7 +96,7 @@ export function BuyerSearchTools({
       return;
     }
     if (!alertRgpd) {
-      setAlertFeedback("Cochez la case de consentement RGPD pour activer l'alerte.");
+      setAlertFeedback("Cochez la case pour autoriser l'enregistrement et le traitement de votre recherche.");
       return;
     }
     setAlertBusy(true);
@@ -137,8 +136,8 @@ export function BuyerSearchTools({
     setAlertEmail("");
     setAlertFeedback(
       syncedRemote
-        ? `Alerte enregistrée et transmise à votre conseiller Monty : ≤ ${maxMinutes} min (${transportMode}) de ${originAddress}.`
-        : `Alerte sauvegardée sur cet appareil : biens à ≤ ${maxMinutes} min (${transportMode}) de ${originAddress} jusqu'à ${maxPrice.toLocaleString("fr-FR")} €.`
+        ? `Recherche enregistrée et transmise à un conseiller MON-AGENT. Les notifications automatiques ne sont pas encore activées.`
+        : `Recherche conservée sur cet appareil uniquement. Aucune notification automatique ne sera envoyée tant que la synchronisation serveur n'est pas disponible.`
     );
   }
 
@@ -176,13 +175,12 @@ export function BuyerSearchTools({
         notes: conciergeNotes.trim(),
         rgpd_consent_granted: true,
       });
-      setConciergeSyncMode("api");
+      setConciergeSent(true);
     } catch {
-      setConciergeSyncMode("local");
+      setConciergeError("La demande n'a pas pu être transmise au serveur. Rien n'a été enregistré : réessayez lorsque la connexion sera rétablie.");
     } finally {
       setConciergeBusy(false);
     }
-    setConciergeSent(true);
   }
 
   return (
@@ -192,7 +190,7 @@ export function BuyerSearchTools({
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-display text-base font-bold text-emeraldDeep flex items-center gap-2">
               <Bell className="w-4 h-4 text-goldAntique" />
-              Activer une alerte sur cette recherche ({originAddress} • ≤ {maxMinutes} min {transportMode})
+              Enregistrer cette recherche ({originAddress} • ≤ {maxMinutes} min {transportMode})
             </h3>
             <button
               type="button"
@@ -220,14 +218,14 @@ export function BuyerSearchTools({
                 onChange={(e) => setAlertRgpd(e.target.checked)}
                 className="rounded border-borderSubtle"
               />
-              <span>J&apos;accepte de recevoir des alertes Monty (révocable à tout moment, Art. 6.1.a RGPD).</span>
+              <span>J&apos;autorise MON-AGENT à enregistrer ces critères et à transmettre ma demande à un conseiller. Les notifications automatiques ne sont pas garanties.</span>
             </label>
             <button
               type="submit"
               disabled={alertBusy}
               className="sm:col-span-2 px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-60 transition"
             >
-              {alertBusy ? "Envoi..." : "M'alerter"}
+              {alertBusy ? "Enregistrement..." : "Enregistrer"}
             </button>
           </form>
           {alertFeedback && (
@@ -239,7 +237,7 @@ export function BuyerSearchTools({
           {savedAlerts.length > 0 && (
             <div className="pt-2 border-t border-borderSubtle space-y-1.5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-slateMuted">
-                Mes recherches sauvegardées ({savedAlerts.length})
+                Mes recherches enregistrées ({savedAlerts.length})
               </p>
               <div className="flex flex-wrap gap-2">
                 {savedAlerts.map((alt) => (
@@ -254,7 +252,7 @@ export function BuyerSearchTools({
                     <button
                       type="button"
                       onClick={() => handleDeleteAlert(alt.id)}
-                      aria-label="Supprimer cette alerte"
+                      aria-label="Supprimer cette recherche"
                       className="text-slateMuted hover:text-rose-700"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -296,14 +294,12 @@ export function BuyerSearchTools({
           <div className="rounded-xl bg-emeraldSurface border border-goldAntique/50 p-4 space-y-2 text-xs">
             <p className="font-bold text-goldChampagne flex items-center gap-1.5 text-sm">
               <CheckCircle2 className="w-4 h-4" />
-              {conciergeSyncMode === "api"
-                ? "Demande enregistrée et transmise au CRM Monty Pro"
-                : "Demande de recherche personnalisée enregistrée (mode local)"}
+              Demande enregistrée et transmise au CRM MON-AGENT Pro
             </p>
             <p className="text-ivoryWarm/85">
               Critères transmis : <strong>{conciergeCity}</strong> • {conciergeRooms}+ pièces • budget max{" "}
               <strong>{conciergeBudget.toLocaleString("fr-FR")} €</strong> ({conciergeDelay}). Un récapitulatif sera
-              adressé à <strong>{conciergeEmail}</strong> dès qu&apos;un bien correspondant est qualifié.
+adressé à <strong>{conciergeEmail}</strong> après étude de votre demande par un conseiller.
             </p>
             <button
               type="button"

@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "estimation", label: "Estimation & Outils", phaseBadge: "6 Simulateurs", icon: Calculator },
   { key: "visits", label: "Visites", phaseBadge: "Phase 3", icon: CalendarCheck },
   { key: "transactions", label: "Transactions", phaseBadge: "Phase 3", icon: Handshake },
-  { key: "ai", label: "Intelligence artificielle", phaseBadge: "Phase 4", icon: Bot },
+  { key: "ai", label: "Assistant MON-AGENT", phaseBadge: "Phase 4", icon: Bot },
   { key: "marketplace", label: "Marketplace", phaseBadge: "Phase 5", icon: Store },
   { key: "automations", label: "Automatisations", phaseBadge: "Phase 2", icon: Workflow },
   { key: "documents", label: "Documents", phaseBadge: "Phase 3", icon: FileText },
@@ -84,7 +84,7 @@ export function MontyShell({
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-ivoryWarm text-obsidianInk">
       {/* Barre latérale Desktop */}
-      <aside className="hidden lg:flex lg:w-72 lg:flex-col bg-emeraldDeep text-ivoryWarm border-r border-emeraldMid shrink-0">
+      <aside className="hidden lg:flex lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:flex-col bg-emeraldDeep text-ivoryWarm border-r border-emeraldMid shrink-0 shadow-xl shadow-emeraldDeep/10">
         <div className="px-6 py-6 border-b border-emeraldMid">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-goldAntique/20 border border-goldAntique/60 flex items-center justify-center text-goldChampagne font-display font-bold text-lg">
@@ -92,7 +92,7 @@ export function MontyShell({
             </div>
             <div>
               <h1 className="font-display text-lg font-bold tracking-tight text-ivoryWarm">
-                MONTY SAAS
+                MON-AGENT PRO
               </h1>
               <p className="text-xs text-goldChampagne/90">
                 France • Portugal (Prêt)
@@ -126,7 +126,7 @@ export function MontyShell({
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav aria-label="Navigation principale professionnelle" className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
@@ -207,7 +207,7 @@ export function MontyShell({
             M
           </div>
           <div>
-            <p className="font-display font-bold text-sm">MONTY SAAS</p>
+            <p className="font-display font-bold text-sm">MON-AGENT PRO</p>
             <p className="text-[11px] text-goldChampagne">{role} • {agencyId}</p>
           </div>
         </div>
@@ -222,7 +222,7 @@ export function MontyShell({
       </header>
 
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-emeraldDeep text-ivoryWarm px-4 py-3 border-b border-emeraldMid grid grid-cols-2 gap-2">
+        <nav aria-label="Navigation mobile" className="lg:hidden bg-emeraldDeep text-ivoryWarm px-4 py-3 border-b border-emeraldMid grid grid-cols-2 gap-2">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
@@ -251,11 +251,11 @@ export function MontyShell({
             <Download className="w-4 h-4 shrink-0" />
             <span>Télécharger l&apos;application (APK)</span>
           </Link>
-        </div>
+        </nav>
       )}
 
       {/* Contenu principal */}
-      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
         {children}
       </main>
     </div>
