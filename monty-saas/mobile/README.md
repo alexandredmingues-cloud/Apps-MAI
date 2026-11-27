@@ -100,4 +100,4 @@ Pour chaque fonctionnalité, conserver :
 
 ## Première action bloquante
 
-L'historique de migration signale que les sources Kotlin originales ne sont pas présentes dans l'arborescence GitHub inspectée. Ne pas inventer leur comportement ni remplacer les modules par des écrans fictifs. Retrouver les sources et les données de référence avant de commencer le portage fonctionnel.
+La PR Flutter #4 mise à jour confirme que les sources Kotlin métier sont présentes dans l'arborescence GitHub actuelle (modèles, dépôts CRM/agences, services DVF, cartographie, IA, espace vendeur et interfaces Compose). Le préalable bloquant est donc leur inventaire exhaustif et la création de tests de caractérisation, pas leur récupération. Ne pas commencer le portage par des écrans fictifs : établir d'abord la matrice fonctionnalité → source Kotlin → API → modèle de données → écran Flutter → tests.
