@@ -35,6 +35,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Generate native platform scaffolding
+        run: flutter create --platforms=android,ios,web --project-name=mon_agent_mobile .
       - name: Flutter version
         run: flutter --version
       - name: Resolve dependencies
