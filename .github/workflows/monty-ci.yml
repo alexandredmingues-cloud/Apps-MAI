@@ -2,13 +2,21 @@ name: Monty CI — Tri-Platform Verification
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, audit/production-readiness-2026-11, brand/mon-agent-identity-2026]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, audit/production-readiness-2026-11]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monty-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend-python:
     name: Backend FastAPI & Domain Tests
+    needs: android-kotlin
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -18,15 +26,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: monty-saas/backend/requirements.txt
+      - name: Download Android APK built by CI
+        uses: actions/download-artifact@v4
+        with:
+          name: monty-debug-apk
+          path: app/build/outputs/apk/debug
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Compile Python sources & run unit tests
+      - name: Compile Python sources & run complete test suite
         env:
           ENVIRONMENT: development
           ENABLE_DEV_AUTH: "true"
         run: |
           python -m compileall -q app tests
-          python -m unittest discover -s tests -v
+          python -m pytest -q
 
   frontend-nextjs:
     name: Frontend Next.js Typecheck & Build
@@ -41,23 +56,40 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: monty-saas/frontend/package-lock.json
-      - name: Install & verify frontend
-        run: |
-          npm ci
-          npm run typecheck
-          npm run lint || true
-          NODE_ENV=production npm run build
+      - name: Install locked dependencies
+        run: npm ci
+      - name: TypeScript validation
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+        env:
+          NODE_ENV: production
 
   android-kotlin:
     name: Android Kotlin Compile & Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Robolectric API 36 requires JDK 21. JDK 17 causes
+      # DefaultSdkProvider.verifySupportedSdk() to throw UnsupportedOperationException.
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "17"
-      - name: Setup Gradle
+          java-version: "21"
+      - name: Setup pinned Gradle (project has no Gradle wrapper scripts)
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+      - name: Generate CI-only Android debug keystore
+        run: |
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
       - name: Compile Android & run JVM unit tests
-        run: gradle :app:testDebugUnitTest
+        run: gradle :app:assembleDebug :app:testDebugUnitTest
+      - name: Upload Android APK for backend release tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: monty-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

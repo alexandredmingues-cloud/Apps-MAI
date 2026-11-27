@@ -88,6 +88,20 @@ import kotlinx.coroutines.withContext
 
 private const val AUTH_TAG = "Auth"
 
+/**
+ * Google Services generates this resource from google-services.json.
+ * Resolve it dynamically so CI and local preview builds can compile without Firebase secrets.
+ */
+private fun googleWebClientId(context: Context): String? {
+    val resourceId = context.resources.getIdentifier(
+        "default_web_client_id",
+        "string",
+        context.packageName
+    )
+    if (resourceId == 0) return null
+    return runCatching { context.getString(resourceId).takeIf { it.isNotBlank() } }.getOrNull()
+}
+
 fun attemptAutoSignIn(
     context: Context,
     credentialManager: CredentialManager,
@@ -99,9 +113,7 @@ fun attemptAutoSignIn(
         onAuthSuccess()
         return
     }
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (_: Exception) {
+    val clientId = googleWebClientId(context) ?: run {
         onUnauthenticated()
         return
     }
@@ -138,10 +150,8 @@ fun onGoogleSignInClicked(
     scope: CoroutineScope,
     onAuthCancelled: () -> Unit = {}
 ) {
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (_: Exception) {
-        onAuthError("Configuration Google Sign-In manquante (default_web_client_id introuvable).")
+    val clientId = googleWebClientId(context) ?: run {
+        onAuthError("Configuration Google Sign-In manquante. Ajoutez le fichier google-services.json Firebase.")
         return
     }
     val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()

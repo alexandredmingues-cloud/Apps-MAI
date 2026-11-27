@@ -253,7 +253,12 @@ export default function MontySaasCockpitPage() {
     "documents",
     "admin",
   ];
-  const requiresProAuth = proRestrictedSections.includes(activeSection) && !isProSession;
+  const canAccessAgencyAdmin = Boolean(
+    session && ["SUPER_ADMIN", "DIRECTOR", "ADMIN"].includes(session.role)
+  );
+  const requiresAdminAuth = activeSection === "admin" && !canAccessAgencyAdmin;
+  const requiresProAuth =
+    proRestrictedSections.includes(activeSection) && activeSection !== "admin" && !isProSession;
 
   return (
     <MontyShell
@@ -301,7 +306,25 @@ export default function MontySaasCockpitPage() {
           </div>
         </div>
 
-        {requiresProAuth ? (
+        {requiresAdminAuth ? (
+          <section className="rounded-2xl bg-ivoryCard border border-amber-300 p-6 space-y-4" role="alert">
+            <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-xl">
+              <Shield className="w-5 h-5 text-amber-700" />
+              Accès administrateur requis
+            </div>
+            <p className="text-sm text-slateMuted">
+              La console d’administration est réservée aux comptes Super Admin, Directeur et Administrateur.
+              Connectez-vous avec un compte habilité. Les autorisations sont également contrôlées par l’API.
+            </p>
+            <button
+              type="button"
+              onClick={() => setActiveSection("dashboard")}
+              className="px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid"
+            >
+              Retour au tableau de bord
+            </button>
+          </section>
+        ) : requiresProAuth ? (
           <section className="rounded-2xl bg-ivoryCard border border-amber-300 p-6 space-y-4">
             <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-xl">
               <Shield className="w-5 h-5 text-amber-700" />

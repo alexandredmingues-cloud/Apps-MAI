@@ -73,8 +73,10 @@ export function MontyShell({
   const { locale, setLocale, t } = useMontyLocale();
 
   const flagMap = new Map((activeModuleFlags ?? []).map((f) => [f.module_key, f]));
+  const canSeeAdministration = ["SUPER_ADMIN", "DIRECTOR", "ADMIN"].includes(role);
   const visibleNavItems = NAV_ITEMS.filter((item) => {
-    if (item.key === "dashboard" || item.key === "admin") return true;
+    if (item.key === "dashboard") return true;
+    if (item.key === "admin") return canSeeAdministration;
     const flag = flagMap.get(item.key);
     return flag ? flag.visible : true;
   });
