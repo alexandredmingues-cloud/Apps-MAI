@@ -7,7 +7,8 @@ import pathlib
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
+from types import SimpleNamespace
 import zipfile
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -16,7 +17,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from fastapi import HTTPException  # noqa: E402
 from app.core.config import load_settings  # noqa: E402
-from app.api.v1.mobile_releases_router import _storage_for_environment  # noqa: E402
+from app.api.v1.mobile_releases_router import _persist_uploaded_mobile_release, _storage_for_environment  # noqa: E402
 from app.core.rbac import MontyRole, TenantContext  # noqa: E402
 from app.domain.mobile_releases_service import (  # noqa: E402
     MobileReleasesService,
@@ -86,6 +87,27 @@ class MobileReleasesAndApkTests(unittest.TestCase):
             settings = load_settings()
         storage = _storage_for_environment(settings)
         self.assertEqual(storage.active_backend, "local")
+
+    def test_local_object_storage_delete_is_idempotent(self) -> None:
+        clean = {
+            "ENVIRONMENT": "development",
+            "SUPABASE_URL": "",
+            "SUPABASE_SERVICE_ROLE_KEY": "",
+            "S3_ENDPOINT": "",
+            "S3_BUCKET": "",
+            "S3_ACCESS_KEY": "",
+            "S3_SECRET_KEY": "",
+        }
+        with patch.dict(os.environ, clean, clear=False):
+            settings = load_settings()
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = ObjectStorageAdapter(settings, local_root=pathlib.Path(tmp) / "uploads")
+            stored = storage.put_bytes(object_key="apk/test-release.apk", raw_bytes=b"test")
+            target = pathlib.Path(stored.local_path)
+            self.assertTrue(target.exists())
+            storage.delete_object(object_key="apk/test-release.apk")
+            storage.delete_object(object_key="apk/test-release.apk")
+            self.assertFalse(target.exists())
 
     def test_validate_apk_bytes_rejects_fake_corrupt_and_unsigned_files(self) -> None:
         ok, _ = validate_apk_bytes(b"not-an-apk" * 8000, "monty.txt")
@@ -176,6 +198,34 @@ class MobileReleasesAndApkTests(unittest.TestCase):
 
             public_list = svc.list_public_releases()
             self.assertTrue(all(r.id != rel.id for r in public_list))
+
+
+
+
+class MobileReleasePublicationCleanupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_database_failure_triggers_remote_apk_cleanup(self) -> None:
+        from unittest.mock import patch as local_patch
+
+        fake_storage = SimpleNamespace(
+            active_backend="supabase",
+            put_bytes=lambda **kwargs: SimpleNamespace(object_key=kwargs["object_key"]),
+            delete_object=Mock(),
+        )
+        fake_repo = SimpleNamespace(upsert_mobile_release=AsyncMock(side_effect=RuntimeError("database unavailable")))
+        release = SimpleNamespace(id="rel-test1234", file_name="release.apk", storage_path="")
+        with local_patch(
+            "app.api.v1.mobile_releases_router.PostgresV3OrchestratorRepository",
+            return_value=fake_repo,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await _persist_uploaded_mobile_release(
+                    release,
+                    raw_bytes=b"apk-bytes",
+                    storage=fake_storage,
+                    session_factory=object(),
+                )
+        self.assertEqual(raised.exception.status_code, 503)
+        fake_storage.delete_object.assert_called_once_with(object_key="apk/rel-test1234-release.apk")
 
 
 if __name__ == "__main__":
