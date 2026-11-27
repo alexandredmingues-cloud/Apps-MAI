@@ -111,6 +111,7 @@ class MobileReleasesAndApkTests(unittest.TestCase):
         storage = ObjectStorageAdapter(settings)
         response = MagicMock()
         response.headers = {"Content-Length": "12345"}
+        response.__enter__.return_value = response
         with patch("app.core.storage.urllib.request.urlopen", return_value=response) as urlopen:
             self.assertEqual(storage.get_object_size(object_key="apk/release 1.apk"), 12345)
         request = urlopen.call_args.args[0]
