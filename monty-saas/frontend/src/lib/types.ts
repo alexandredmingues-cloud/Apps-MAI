@@ -731,6 +731,10 @@ export interface NotarySearchResponse {
   source: string;
   email_notice: string;
   count?: number;
+  total_results?: number;
+  total_pages?: number;
+  page?: number;
+  per_page?: number;
   status_code?: number;
   error?: string;
   offices: OfficialNotaryOffice[];
