@@ -5,7 +5,9 @@ services:
     rootDir: monty-saas/backend
     plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: sh -c 'if [ -n "$DATABASE_URL" ]; then alembic upgrade head; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
+    # Fail the deployment if PostgreSQL is not configured or migrations fail.
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
     healthCheckPath: /api/v1/health
     disk:
       name: monty-storage
@@ -58,7 +60,7 @@ services:
     runtime: node
     rootDir: monty-saas/frontend
     plan: starter
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm run start -- --port ${PORT:-3000}
     envVars:
       - key: NODE_VERSION
