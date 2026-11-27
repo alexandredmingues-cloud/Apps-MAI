@@ -179,6 +179,7 @@ class SlidingWindowRateLimiter:
         redis_client: object | None = None,
         wall_clock: Callable[[], float] = time.time,
         key_prefix: str = "monty:rl:",
+        require_redis: bool = False,
     ) -> None:
         self._clock = clock
         self._wall_clock = wall_clock
@@ -186,6 +187,7 @@ class SlidingWindowRateLimiter:
         self._redis_client = redis_client
         self._redis_init_attempted = redis_client is not None
         self._key_prefix = key_prefix
+        self._require_redis = require_redis
         self._buckets: dict[str, deque[float]] = {}
         self._lock = Lock()
 
@@ -244,6 +246,10 @@ class SlidingWindowRateLimiter:
             decision = self._check_redis(client, key, max_requests, window_seconds)
             if decision is not None:
                 return decision
+        if self._require_redis:
+            # En production, une panne Redis ne doit jamais désactiver silencieusement
+            # la limitation distribuée entre workers et instances.
+            return RateLimitDecision(allowed=False, remaining=0, retry_after_seconds=30)
 
         now = self._clock()
         cutoff = now - window_seconds
