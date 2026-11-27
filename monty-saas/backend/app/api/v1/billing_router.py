@@ -442,6 +442,11 @@ async def stripe_webhook_handler(
             stripe_signature,
             settings.stripe_webhook_secret,
         )
+        if sf is None and settings.is_production:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Persistance des événements Stripe indisponible.",
+            )
         event_id = str(event.get("id", "")).strip()
         event_type = str(event.get("type", "")).strip()
         obj = event.get("data", {}).get("object", {})
