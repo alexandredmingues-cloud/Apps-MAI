@@ -144,7 +144,7 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          Assistant unifié Monty AI
+          Discuter avec Monty
         </button>
         <button
           type="button"
@@ -154,7 +154,7 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
           }`}
         >
           <Bot className="w-3.5 h-3.5" />
-          11 Agents &amp; Monty Scout
+          11 Agents spécialisés &amp; Monty Scout
         </button>
       </div>
 
