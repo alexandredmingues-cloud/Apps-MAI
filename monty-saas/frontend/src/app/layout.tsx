@@ -27,6 +27,10 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased bg-ivoryWarm text-obsidianInk">
         {children}
+        <footer className="border-t border-borderSubtle bg-ivoryCard px-4 py-4 text-center text-[11px] text-slateMuted">
+          MON-AGENT · Copyright © 2024–2026. Tous droits réservés sur les éléments originaux. Les composants et données tiers restent soumis à leurs licences respectives.
+          <a href="/publicite" className="ml-2 font-semibold text-emeraldDeep underline underline-offset-2">Devenir annonceur</a>
+        </footer>
       </body>
     </html>
   );
