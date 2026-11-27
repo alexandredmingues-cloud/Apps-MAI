@@ -15,7 +15,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP FUNCTION IF EXISTS monty_auth_firebase_exchange(varchar, citext, boolean, uuid);")
     op.execute("DROP FUNCTION IF EXISTS monty_auth_validate_session(uuid, uuid, varchar);")
+    op.execute("DROP INDEX IF EXISTS uq_users_firebase_uid;")
+    op.execute("ALTER TABLE users DROP COLUMN IF EXISTS firebase_uid;")
     op.execute("DROP POLICY IF EXISTS tenant_isolation_memberships ON agency_memberships;")
     op.execute("""
         CREATE POLICY tenant_isolation_memberships ON agency_memberships
