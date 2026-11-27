@@ -84,6 +84,7 @@ class SaveNotaryRequest(BaseModel):
     notary_name: str = Field(default="", max_length=160)
     email: str = Field(default="", max_length=160)
     phone: str = Field(default="", max_length=40)
+    email_verified: bool = False
     street_address: str = Field(default="", max_length=240)
     postal_code: str = Field(default="", max_length=16)
     city: str = Field(default="", max_length=100)
@@ -106,6 +107,7 @@ async def save_agency_notary(
                 notary_name=body.notary_name,
                 email=body.email,
                 phone=body.phone,
+                email_verified=body.email_verified,
                 street_address=body.street_address,
                 postal_code=body.postal_code,
                 city=body.city,
