@@ -85,6 +85,22 @@ Consigner pour chaque parcours le compte de test, le résultat attendu, le résu
 - Réaliser un test de charge progressif sur l'environnement de préproduction (trafic nominal puis pic), surveiller p50/p95/p99, erreurs 4xx/5xx, connexions PostgreSQL, Redis et mémoire.
 - Tester une restauration réelle et mesurer le RPO/RTO avant mise en production.
 
+### Objectifs mesurables d'efficience (seuils cibles, à confirmer en préproduction)
+
+Ces valeurs sont des budgets d'acceptation, pas des performances déjà garanties :
+
+- Web, sur mobile réel et données représentatives : LCP p75 <= 2,5 s, INP p75 <= 200 ms, CLS <= 0,1.
+- API métier hors appels fournisseurs externes : p95 <= 500 ms en lecture et <= 800 ms en écriture à 50 utilisateurs virtuels ; taux d'erreur serveur < 1 %.
+- Parcours clés : page initiale utilisable rapidement, recherche filtrée sans rechargement complet, formulaires sans perte de saisie et feedback immédiat.
+- Frontend : éviter les dépendances lourdes, charger cartes/graphes/éditeurs uniquement quand nécessaires, pagination côté serveur et images adaptées/responsives.
+- Backend : mesurer les requêtes SQL lentes et N+1, ajouter les index sur la base de requêtes observées, limiter les colonnes chargées et paginer les listes.
+- Cache : mettre en cache uniquement les données publiques ou explicitement partageables ; jamais de cache partagé entre agences pour des données privées.
+- IA : router les demandes simples vers le modèle le moins coûteux adapté, plafonner tokens et durée, ne pas appeler un modèle si une règle déterministe suffit, tracer coût et latence par fonctionnalité sans journaliser les données sensibles.
+- Infrastructure : suivre CPU, mémoire, connexions DB, Redis, latence et coûts ; définir des alertes avant saturation.
+- Android : mesurer démarrage à froid, taille APK, consommation mémoire/batterie et comportement sur réseau lent.
+
+Un seuil n'est déclaré conforme qu'avec un rapport daté indiquant environnement, version, volume, percentiles, taux d'erreur et outil de mesure. Le test CI du endpoint de santé ne remplace pas un test de charge sur les parcours métier.
+
 ## 6. Android — appareil physique
 
 Avant la recette :
