@@ -210,7 +210,7 @@ async def issue_dev_session(
 
 
 class RegisterAgencyRequest(BaseModel):
-    captcha_token: str = Field(min_length=1, max_length=2048)
+    captcha_token: str = Field(default="", max_length=2048)
     agency_name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=160)
     password: str = Field(min_length=8, max_length=128)
