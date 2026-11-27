@@ -858,6 +858,7 @@ export const montyApi = {
     notary_name?: string;
     email?: string;
     phone?: string;
+    email_verified?: boolean;
     street_address?: string;
     postal_code?: string;
     city?: string;
