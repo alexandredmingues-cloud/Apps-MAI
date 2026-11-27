@@ -4,7 +4,7 @@ import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebH
 import { NewsHubExperience } from "@/components/news/NewsHubExperience";
 
 export const metadata: Metadata = {
-  title: "Actualités Immobilières (France & Portugal) | Monty Particulier",
+  title: "Actualités immobilières (France & Portugal) | MON-AGENT",
   description:
     "Suivez les taux immobiliers, les tendances prix et délais par région, les nouvelles lois (DPE, Loi Le Meur, PTZ, IMT Portugal) avec des sources vérifiées.",
 };
