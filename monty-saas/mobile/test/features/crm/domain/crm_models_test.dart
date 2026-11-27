@@ -25,7 +25,7 @@ void main() {
         contactType: 'unexpected',
         priority: 'critical',
         budgetMax: 90000000,
-        notes: 'x' * 2600,
+        notes: List<String>.filled(2600, 'x').join(),
       );
       final payload = contact.toCreateMap();
       expect(payload['contactType'], 'Acquéreur');
