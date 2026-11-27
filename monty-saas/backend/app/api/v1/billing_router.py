@@ -240,7 +240,7 @@ async def verify_rnic_pass_status(
                 meta = sess.get("metadata", {}) or {}
                 if (
                     sess.get("id") == session_id
-                    and _is_paid_eur_checkout_session(sess, settings.rnic_particulier_price_euro)
+                    and _is_paid_eur_checkout_session(sess, int(meta.get("amount_euro") or 0))
                     and meta.get("pass_type") == "RNIC_PARTICULIER"
                     and bool(meta.get("pass_token"))
                     and (not ctx or str(meta.get("user_id") or "") == ctx.user_id)
