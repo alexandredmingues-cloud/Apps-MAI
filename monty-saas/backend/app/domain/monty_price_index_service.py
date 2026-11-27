@@ -434,6 +434,28 @@ class MontyPriceEngine:
         tier, reliability_score, confidence_label, display_badge = PriceConfidenceService.evaluate_confidence(stats, cfg)
 
         if not display_badge:
+            history_record: PriceIndexHistoryRecord | None = None
+            if record_history:
+                history_record = PriceIndexHistoryRecord(
+                    id=f"mpi-{uuid.uuid4().hex[:10]}",
+                    agency_id=agency_id,
+                    target_ref=InputSanitizer.sanitize_text(target_ref, 120),
+                    title=InputSanitizer.sanitize_text(title, 200),
+                    country_code=country_code.value,
+                    city=InputSanitizer.sanitize_text(city, 120),
+                    property_kind=InputSanitizer.sanitize_text(property_kind, 60),
+                    asking_price_euro=asking_price_euro,
+                    estimated_market_value=0,
+                    gap_percent=0.0,
+                    category=PriceIndexCategory.DONNEES_INSUFFISANTES.value,
+                    confidence_tier=tier.value,
+                    comparables_count=stats.comparables_retained_count,
+                    evaluated_by=user_id,
+                    created_at=calculated_at,
+                )
+                self._history.insert(0, history_record)
+                if len(self._history) > 300:
+                    self._history = self._history[:300]
             return {
                 "display_badge": False,
                 "category": PriceIndexCategory.DONNEES_INSUFFISANTES.value,
@@ -460,6 +482,7 @@ class MontyPriceEngine:
                 },
                 "calculated_at": calculated_at,
                 "estimation_disclaimer": PRICE_INDEX_DISCLAIMER,
+                "history_record_id": history_record.id if history_record else "",
                 "explanation_grounded": (
                     f"Indicateur masqué pour « {InputSanitizer.sanitize_text(title, 120)} » : "
                     f"seulement {stats.comparables_retained_count} comparable(s) retenu(s) "
