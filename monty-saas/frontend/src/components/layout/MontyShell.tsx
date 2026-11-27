@@ -92,7 +92,7 @@ export function MontyShell({
             </div>
             <div>
               <h1 className="font-display text-lg font-bold tracking-tight text-ivoryWarm">
-                MONTY SAAS
+                MON-AGENT PRO
               </h1>
               <p className="text-xs text-goldChampagne/90">
                 France • Portugal (Prêt)
@@ -207,7 +207,7 @@ export function MontyShell({
             M
           </div>
           <div>
-            <p className="font-display font-bold text-sm">MONTY SAAS</p>
+            <p className="font-display font-bold text-sm">MON-AGENT PRO</p>
             <p className="text-[11px] text-goldChampagne">{role} • {agencyId}</p>
           </div>
         </div>
