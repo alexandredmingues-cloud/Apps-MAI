@@ -35,23 +35,28 @@ async def _persist_uploaded_mobile_release(
     storage: ObjectStorageAdapter,
     session_factory: Any,
 ) -> MobileAppRelease:
+    repository = PostgresV3OrchestratorRepository(session_factory) if session_factory is not None else None
+    if repository is not None:
+        try:
+            await repository.assert_mobile_release_version_available(rel)
+        except MobileReleaseVersionConflict as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
     if storage.active_backend == "local":
-        if session_factory is not None:
-            return await PostgresV3OrchestratorRepository(session_factory).upsert_mobile_release(rel)
+        if repository is not None:
+            return await repository.upsert_mobile_release(rel)
         return rel
 
     object_key = f"apk/{rel.id}-{rel.file_name}"
     try:
-        if session_factory is not None:
-            await PostgresV3OrchestratorRepository(session_factory).assert_mobile_release_version_available(rel)
         stored = storage.put_bytes(
             object_key=object_key,
             raw_bytes=raw_bytes,
             content_type="application/vnd.android.package-archive",
         )
         rel.storage_path = stored.object_key
-        if session_factory is not None:
-            rel = await PostgresV3OrchestratorRepository(session_factory).upsert_mobile_release(rel)
+        if repository is not None:
+            rel = await repository.upsert_mobile_release(rel)
         return rel
     except Exception as exc:
         # L'upload peut avoir réussi alors que la signature d'URL ou l'écriture SQL échoue.
