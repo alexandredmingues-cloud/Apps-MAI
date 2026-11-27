@@ -510,43 +510,84 @@ def _verify_firebase_token_via_google(
 async def exchange_firebase_session(
     body: FirebaseExchangeRequest,
     settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> SessionResponse:
-    """Échange un Firebase ID Token vérifié contre un JWT SaaS Monty (convergence Mobile <-> SaaS)."""
+    """Échange Firebase contre une identité SaaS déjà provisionnée et membre d'une agence."""
     try:
         claims = _verify_firebase_token_via_google(body.id_token, settings=settings)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton Firebase invalide.") from exc
 
-    uid = str(claims.get("sub") or claims.get("user_id") or "")
-    email = str(claims.get("email") or "")
-    display_name = str(claims.get("name") or email.split("@")[0] or "Utilisateur Mobile")
-    has_staff_claim = bool(claims.get("staff") is True or claims.get("advisor") is True)
-    # Fail-closed sur l'élévation de rôle : seuls les claims staff/advisor vérifiés peuvent demander un rôle pro
-    if has_staff_claim and body.preferred_role in (MontyRole.AGENT, MontyRole.DIRECTOR, MontyRole.ADMIN_STAFF):
-        eff_role = body.preferred_role
-    elif body.preferred_role == MontyRole.SELLER:
-        eff_role = MontyRole.SELLER
-    else:
-        eff_role = MontyRole.BUYER
+    if sf is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="L'échange Firebase nécessite la base d'identités persistante.",
+        )
 
-    safe_agency = body.agency_id.strip() or "agency-france-reseau"
+    uid = str(claims.get("sub") or claims.get("user_id") or "").strip()
+    email = str(claims.get("email") or "").strip().lower()
+    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
+    agency_ref = body.agency_id.strip()
+    agency_uuid = None
+    if agency_ref and agency_ref != "agency-france-reseau":
+        try:
+            agency_uuid = uuid.UUID(agency_ref)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="L'agence doit être sélectionnée avec son identifiant UUID.",
+            ) from exc
+
+    try:
+        async with sf() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        text("""
+                            SELECT user_id, agency_id, role, agency_name, display_name, email, is_active
+                            FROM monty_auth_firebase_exchange(
+                                :firebase_uid, :email, :email_verified, :agency_id
+                            )
+                        """),
+                        {
+                            "firebase_uid": uid,
+                            "email": email or None,
+                            "email_verified": email_verified,
+                            "agency_id": agency_uuid,
+                        },
+                    )
+                ).mappings().first()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Impossible de vérifier l'appartenance Firebase à une agence.",
+        ) from exc
+
+    if row is None or not row["is_active"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Compte non associé à une appartenance active MON-AGENT. Contactez votre agence.",
+        )
+
+    effective_role = MontyRole(row["role"])
+    user_id = str(row["user_id"])
+    agency_id = str(row["agency_id"])
     token = create_access_token(
-        subject_user_id=f"fb:{uid}",
-        agency_id=safe_agency,
-        role=eff_role.value,
+        subject_user_id=user_id,
+        agency_id=agency_id,
+        role=effective_role.value,
         secret=settings.effective_jwt_secret,
         ttl_seconds=settings.jwt_ttl_minutes * 60,
     )
-    perms = sorted(p.value for p in ROLE_PERMISSIONS[eff_role])
     return SessionResponse(
         access_token=token,
-        user_id=f"fb:{uid}",
-        agency_id=safe_agency,
-        agency_name="Monty Connect Mobile",
-        display_name=display_name,
-        email=email,
-        role=eff_role,
-        permissions=perms,
+        user_id=user_id,
+        agency_id=agency_id,
+        agency_name=row["agency_name"],
+        display_name=row["display_name"],
+        email=row["email"],
+        role=effective_role,
+        permissions=sorted(p.value for p in ROLE_PERMISSIONS[effective_role]),
     )
 
 
