@@ -17,6 +17,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from fastapi import HTTPException  # noqa: E402
 from app.core.config import load_settings  # noqa: E402
+from app.core.storage import ObjectStorageAdapter  # noqa: E402
 from app.api.v1.mobile_releases_router import _persist_uploaded_mobile_release, _storage_for_environment  # noqa: E402
 from app.core.rbac import MontyRole, TenantContext  # noqa: E402
 from app.domain.mobile_releases_service import (  # noqa: E402
