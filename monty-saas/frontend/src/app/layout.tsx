@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+/* Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code. */
 import "./globals.css";
 
 export const metadata: Metadata = {
