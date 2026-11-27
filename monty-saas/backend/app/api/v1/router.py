@@ -81,6 +81,7 @@ class HealthResponse(BaseModel):
     database_configured: bool
     database_reachable: bool | None = None
     database_latency_ms: float | None = None
+    database_role_rls_safe: bool | None = None
     storage_mode: str
     dev_auth_enabled: bool
     redis_configured: bool
@@ -98,6 +99,7 @@ async def health_check(
 ) -> HealthResponse:
     db_reachable: bool | None = None
     db_latency_ms: float | None = None
+    db_role_rls_safe: bool | None = None
     redis_reachable: bool | None = None
     redis_latency_ms: float | None = None
     overall_status = "ok"
@@ -113,10 +115,23 @@ async def health_check(
         try:
             async with sf() as session:
                 await session.execute(text("SELECT 1"))
+                role_state = (
+                    await session.execute(
+                        text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
+                    )
+                ).mappings().first()
+                db_role_rls_safe = bool(
+                    role_state
+                    and not bool(role_state["rolsuper"])
+                    and not bool(role_state["rolbypassrls"])
+                )
             db_reachable = True
+            if settings.is_production and not db_role_rls_safe:
+                overall_status = "degraded"
             db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         except Exception:
             db_reachable = False
+            db_role_rls_safe = False
             db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
             overall_status = "degraded"
 
@@ -154,6 +169,7 @@ async def health_check(
         database_configured=bool(settings.database_url),
         database_reachable=db_reachable,
         database_latency_ms=db_latency_ms,
+        database_role_rls_safe=db_role_rls_safe,
         storage_mode=(
             "postgresql_rls" if sf is not None
             else "unavailable" if settings.is_production
