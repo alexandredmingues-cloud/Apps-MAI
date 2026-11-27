@@ -23,8 +23,11 @@ def _is_mobile_release_version_conflict(exc: Exception) -> bool:
     if not isinstance(exc, IntegrityError):
         return False
     original = getattr(exc, "orig", None)
-    diagnostic = getattr(original, "diag", None)
-    return getattr(diagnostic, "constraint_name", None) == "uq_mobile_app_releases_package_version"
+    constraint_name = getattr(original, "constraint_name", None)
+    if not constraint_name:
+        diagnostic = getattr(original, "diag", None)
+        constraint_name = getattr(diagnostic, "constraint_name", None)
+    return constraint_name == "uq_mobile_app_releases_package_version"
 
 
 def _storage_for_environment(settings: Settings) -> ObjectStorageAdapter:
