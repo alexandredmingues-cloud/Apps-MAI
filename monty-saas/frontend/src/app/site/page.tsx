@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebHeader";
 import { getPublicArticlesCatalog } from "@/lib/news-catalog";
+import { SponsoredBrandSlot } from "@/components/ads/SponsoredBrandSlot";
 
 export const metadata: Metadata = {
   title: "MON-AGENT — Plateforme immobilière intelligente (France & Portugal)",
@@ -142,6 +143,7 @@ export default function MontyPublicWebsitePage() {
       </section>
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-14 w-full">
+        <SponsoredBrandSlot placement="HOME" countryCode="FR" />
         {/* 2. PARCOURS PARTICULIERS : ACHETER, VENDRE & PUBLIER */}
         <section className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
