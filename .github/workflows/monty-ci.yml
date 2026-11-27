@@ -2,7 +2,7 @@ name: MON-AGENT CI — Tri-Platform Verification
 
 on:
   push:
-    branches: [main, develop, audit/production-readiness-2026-11, brand/mon-agent-identity-2026]
+    branches: [main, develop, audit/production-readiness-2026-11, brand/mon-agent-identity-2026, 'fix/**']
   pull_request:
     branches: [main, develop, audit/production-readiness-2026-11, brand/mon-agent-identity-2026]
 
