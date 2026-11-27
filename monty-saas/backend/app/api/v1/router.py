@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 
+from app.api.v1.ads_router import ads_router
 from app.api.v1.billing_router import billing_router
 from app.api.v1.crm_router import crm_router
 from app.api.v1.deps import (
@@ -53,6 +54,7 @@ from app.domain.real_estate_engines import (
 )
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(ads_router)
 router.include_router(news_router)
 router.include_router(crm_router)
 router.include_router(marketplace_router)
