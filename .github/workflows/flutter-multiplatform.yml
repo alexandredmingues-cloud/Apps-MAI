@@ -33,7 +33,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.41.2'
           cache: true
       - name: Generate native platform scaffolding
         run: flutter create --platforms=android,ios,web --project-name=mon_agent_mobile .
@@ -71,7 +71,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.41.2'
           cache: true
       - name: Resolve dependencies
         run: flutter pub get
