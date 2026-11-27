@@ -5,9 +5,87 @@
 :root {
   --font-playfair: "Playfair Display", Georgia, serif;
   --font-jakarta: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ma-emerald: #0B3B2E;
+  --ma-emerald-soft: #145746;
+  --ma-gold: #C6A15B;
+  --ma-ivory: #F7F6F2;
+  --ma-ink: #111615;
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+  background: var(--ma-ivory);
 }
 
 body {
-  background-color: #F7F6F2;
-  color: #111615;
+  min-height: 100vh;
+  background-color: var(--ma-ivory);
+  color: var(--ma-ink);
+  font-family: var(--font-jakarta);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  color: var(--ma-ivory);
+  background: var(--ma-emerald-soft);
+}
+
+:focus-visible {
+  outline: 3px solid var(--ma-gold);
+  outline-offset: 3px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(11, 59, 46, 0.35) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(11, 59, 46, 0.28);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(11, 59, 46, 0.48);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
