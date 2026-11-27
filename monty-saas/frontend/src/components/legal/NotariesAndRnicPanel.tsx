@@ -84,6 +84,7 @@ export function NotariesAndRnicPanel({
   const [bookNotaryName, setBookNotaryName] = useState("");
   const [bookEmail, setBookEmail] = useState("");
   const [bookPhone, setBookPhone] = useState("");
+  const [bookEmailVerified, setBookEmailVerified] = useState(false);
   const [bookStreet, setBookStreet] = useState("");
   const [bookPostal, setBookPostal] = useState("");
   const [bookCity, setBookCity] = useState("");
@@ -276,6 +277,7 @@ export function NotariesAndRnicPanel({
         notary_name: bookNotaryName.trim(),
         email: bookEmail.trim(),
         phone: bookPhone.trim(),
+        email_verified: bookEmailVerified,
         street_address: bookStreet.trim(),
         postal_code: bookPostal.trim(),
         city: bookCity.trim(),
@@ -288,6 +290,7 @@ export function NotariesAndRnicPanel({
       setBookNotaryName("");
       setBookEmail("");
       setBookPhone("");
+      setBookEmailVerified(false);
       setBookStreet("");
       setBookPostal("");
       setBookCity("");
@@ -510,6 +513,9 @@ export function NotariesAndRnicPanel({
                 Source : {notarySearchStatus} — {notaryNotice}
               </p>
             )}
+            <p className="text-[11px] text-slateMuted">
+              Le répertoire national permet de retrouver les études actives et leurs adresses. Pour les téléphones et e-mails, ouvrez la fiche CSN de chaque étude : ces coordonnées ne sont pas présentes dans l’API SIRENE. MON-AGENT ne complète jamais ces champs par déduction.
+            </p>
 
             {officialOffices.length > 0 && (
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slateMuted">
@@ -626,6 +632,15 @@ export function NotariesAndRnicPanel({
                       className="rounded-lg border border-borderSubtle bg-white px-2.5 py-1.5"
                     />
                   </div>
+                  <label className="flex items-start gap-2 text-[11px] text-slateMuted">
+                    <input
+                      type="checkbox"
+                      checked={bookEmailVerified}
+                      onChange={(e) => setBookEmailVerified(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>J’ai vérifié cette adresse e-mail sur la fiche officielle de l’office notarial (CSN).</span>
+                  </label>
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       type="text"
