@@ -96,15 +96,39 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
-      - name: Generate CI-only Android debug keystore
+      - name: Generate and verify CI-only Android signing keystores
+        shell: bash
         run: |
+          set -euo pipefail
+
+          # CI keys are disposable test credentials. Never use them to publish to Play Store.
           if [ ! -f debug.keystore ]; then
-            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            keytool -genkeypair -noprompt -v -storetype JKS \
+              -keystore debug.keystore -storepass android \
+              -alias androiddebugkey -keypass android -keyalg RSA \
+              -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
-          keytool -genkeypair -v -storetype JKS -keystore ci-release.keystore -storepass ci-release-store -alias upload -keypass ci-release-key -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=MON-AGENT CI,O=MON-AGENT,C=FR"
+
+          # Use one password for both JKS and private key. This avoids provider-dependent
+          # PKCS12/JKS password handling and makes the CI signing input deterministic.
+          rm -f ci-release.keystore
+          keytool -genkeypair -noprompt -v -storetype JKS \
+            -keystore ci-release.keystore -storepass ci-release-ci-only \
+            -alias upload -keypass ci-release-ci-only -keyalg RSA \
+            -keysize 2048 -validity 10000 \
+            -dname "CN=MON-AGENT CI,O=MON-AGENT,C=FR"
+
+          keytool -list -v -storetype JKS \
+            -keystore ci-release.keystore -storepass ci-release-ci-only \
+            | grep -Fq "Alias name: upload"
+          keytool -list -v -storetype JKS \
+            -keystore debug.keystore -storepass android \
+            | grep -Fq "Alias name: androiddebugkey"
+
       - name: Compile Android debug, unit tests and minified release APK
         run: gradle :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/ci-release.keystore
-          STORE_PASSWORD: ci-release-store
-          KEY_PASSWORD: ci-release-key
+          STORE_PASSWORD: ci-release-ci-only
+          KEY_PASSWORD: ci-release-ci-only
