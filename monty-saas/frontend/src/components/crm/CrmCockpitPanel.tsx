@@ -40,72 +40,6 @@ interface CrmCockpitPanelProps {
   initialTab?: "contacts" | "followups" | "web_leads" | "csv_rgpd";
 }
 
-const SEED_LOCAL_CONTACTS: CrmContact[] = [
-  {
-    id: "cnt-fr-1",
-    agency_id: "agency-france-reseau",
-    assigned_user_id: "usr-director",
-    country_code: "FR",
-    full_name: "Camille Laurent",
-    email: "camille.laurent@exemple.fr",
-    phone: "06 42 18 90 11",
-    role: "BUYER",
-    city: "Lyon",
-    budget_euro: 420000,
-    legal_basis: "MESURES_PRECONTRACTUELLES",
-    consent_granted: true,
-    retention_until: "2029-11-25",
-    created_at: "2026-10-25",
-    last_contact_at: "2026-11-20",
-    has_missing_docs: false,
-    pending_offer_days: 0,
-    last_visit_days_ago: 4,
-    is_anonymized: false,
-  },
-  {
-    id: "cnt-fr-2",
-    agency_id: "agency-france-reseau",
-    assigned_user_id: "usr-agent",
-    country_code: "FR",
-    full_name: "Thomas Mercier",
-    email: "thomas.mercier@exemple.fr",
-    phone: "06 77 31 04 55",
-    role: "SELLER",
-    city: "Bordeaux",
-    budget_euro: 540000,
-    legal_basis: "EXECUTION_MANDAT",
-    consent_granted: true,
-    retention_until: "2031-11-25",
-    created_at: "2026-10-10",
-    last_contact_at: "2026-11-15",
-    has_missing_docs: true,
-    pending_offer_days: 8,
-    last_visit_days_ago: null,
-    is_anonymized: false,
-  },
-  {
-    id: "cnt-pt-1",
-    agency_id: "agency-france-reseau",
-    assigned_user_id: "usr-director",
-    country_code: "PT",
-    full_name: "Inês Ferreira",
-    email: "ines.ferreira@exemplo.pt",
-    phone: "+351 912 345 678",
-    role: "BUYER",
-    city: "Lisboa",
-    budget_euro: 360000,
-    legal_basis: "CONSENTEMENT_EXPLICITE",
-    consent_granted: true,
-    retention_until: "2029-11-25",
-    created_at: "2026-11-04",
-    last_contact_at: "2026-11-22",
-    has_missing_docs: false,
-    pending_offer_days: 0,
-    last_visit_days_ago: null,
-    is_anonymized: false,
-  },
-];
-
 function sanitizeSpreadsheetCell(value: string | number): string {
   const s = String(value);
   if (/^[=+\-@]/.test(s)) return `'${s}`;
@@ -119,13 +53,13 @@ export function CrmCockpitPanel({
   initialTab = "contacts",
 }: CrmCockpitPanelProps) {
   const [tab, setTab] = useState<"contacts" | "followups" | "web_leads" | "csv_rgpd">(initialTab);
-  const [contacts, setContacts] = useState<CrmContact[]>(SEED_LOCAL_CONTACTS);
+  const [contacts, setContacts] = useState<CrmContact[]>([]);
   const [webLeads, setWebLeads] = useState<PublicInboundLead[]>([]);
   const [leadKeywords, setLeadKeywords] = useState<LeadKeywordRule[]>([]);
   const [kwCategory, setKwCategory] = useState("VENDEURS");
   const [kwText, setKwText] = useState("");
   const [kwGeo, setKwGeo] = useState("France entière");
-  const [selectedContactId, setSelectedContactId] = useState<string>(SEED_LOCAL_CONTACTS[0].id);
+  const [selectedContactId, setSelectedContactId] = useState<string>("");
   const [roleFilter, setRoleFilter] = useState<ContactRole | "ALL">(initialRoleFilter);
   const [countryFilter, setCountryFilter] = useState<"ALL" | CountryCode>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
