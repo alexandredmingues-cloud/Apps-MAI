@@ -15,16 +15,16 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
-import { MON-AGENTApi } from "@/lib/api-client";
+import { montyApi } from "@/lib/api-client";
 import type {
-  MON-AGENTAIChatResponse,
-  MON-AGENTAIConversationTurn,
-  MON-AGENTAIMemoryEntry,
-  MON-AGENTAIPendingAction,
-  MON-AGENTAITaskType,
+  MontyAIChatResponse,
+  MontyAIConversationTurn,
+  MontyAIMemoryEntry,
+  MontyAIPendingAction,
+  MontyAITaskType,
 } from "@/lib/types";
 
-const TASK_OPTIONS: { key: MON-AGENTAITaskType; label: string; hint: string }[] = [
+const TASK_OPTIONS: { key: MontyAITaskType; label: string; hint: string }[] = [
   { key: "CONVERSATION", label: "Assistant général", hint: "Questions métier, suivi client, conseil" },
   { key: "QUICK_SUMMARY", label: "Résumé rapide", hint: "Synthèse d'échange ou compte-rendu" },
   { key: "DOCUMENT_ANALYSIS", label: "Analyse document", hint: "PV AG, DPE, compromis ou fichier texte" },
@@ -33,17 +33,17 @@ const TASK_OPTIONS: { key: MON-AGENTAITaskType; label: string; hint: string }[] 
   { key: "COMPLEX_REASONING", label: "Raisonnement complexe", hint: "Stratégie négociation & fiscalité" },
 ];
 
-export function MON-AGENTAIChatWorkspace() {
-  const [taskType, setTaskType] = useState<MON-AGENTAITaskType>("CONVERSATION");
+export function MontyAIChatWorkspace() {
+  const [taskType, setTaskType] = useState<MontyAITaskType>("CONVERSATION");
   const [confidentialMode, setConfidentialMode] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
   const [attachedContent, setAttachedContent] = useState<string>("");
 
-  const [lastResponse, setLastResponse] = useState<MON-AGENTAIChatResponse | null>(null);
-  const [conversations, setConversations] = useState<MON-AGENTAIConversationTurn[]>([]);
-  const [memories, setMemories] = useState<MON-AGENTAIMemoryEntry[]>([]);
-  const [pendingActions, setPendingActions] = useState<MON-AGENTAIPendingAction[]>([]);
+  const [lastResponse, setLastResponse] = useState<MontyAIChatResponse | null>(null);
+  const [conversations, setConversations] = useState<MontyAIConversationTurn[]>([]);
+  const [memories, setMemories] = useState<MontyAIMemoryEntry[]>([]);
+  const [pendingActions, setPendingActions] = useState<MontyAIPendingAction[]>([]);
 
   // Ajout mémoire RGPD
   const [memScope, setMemScope] = useState<"USER" | "AGENCY">("AGENCY");
@@ -56,9 +56,9 @@ export function MON-AGENTAIChatWorkspace() {
   async function refreshAll() {
     try {
       const [convRes, memRes, actRes] = await Promise.all([
-        MON-AGENTApi.listMON-AGENTAiConversations(20),
-        MON-AGENTApi.listMON-AGENTAiMemories(),
-        MON-AGENTApi.listMON-AGENTAiActions(),
+        montyApi.listMontyAiConversations(20),
+        montyApi.listMontyAiMemories(),
+        montyApi.listMontyAiActions(),
       ]);
       setConversations(convRes.conversations);
       setMemories(memRes.memories);
@@ -96,7 +96,7 @@ export function MON-AGENTAIChatWorkspace() {
     setErrorMsg(null);
     setBusy(true);
     try {
-      const res = await MON-AGENTApi.MON-AGENTAiChat({
+      const res = await montyApi.MontyAiChat({
         prompt: prompt.trim(),
         task_type: taskType,
         confidential_mode: confidentialMode,
@@ -122,7 +122,7 @@ export function MON-AGENTAIChatWorkspace() {
     }
     setErrorMsg(null);
     try {
-      await MON-AGENTApi.upsertMON-AGENTAiMemory({
+      await montyApi.upsertMontyAiMemory({
         scope: memScope,
         title: memTitle.trim(),
         content: memContent.trim(),
@@ -139,7 +139,7 @@ export function MON-AGENTAIChatWorkspace() {
   async function handleDeleteMemory(id: string) {
     setErrorMsg(null);
     try {
-      await MON-AGENTApi.deleteMON-AGENTAiMemory(id);
+      await montyApi.deleteMontyAiMemory(id);
       await refreshAll();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Suppression refusée.");
@@ -149,7 +149,7 @@ export function MON-AGENTAIChatWorkspace() {
   async function handleDecideAction(id: string, approve: boolean) {
     setErrorMsg(null);
     try {
-      await MON-AGENTApi.decideMON-AGENTAiAction(id, approve);
+      await montyApi.decideMontyAiAction(id, approve);
       await refreshAll();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Impossible de traiter la validation.");
@@ -217,10 +217,10 @@ export function MON-AGENTAIChatWorkspace() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slateMuted">Pour commencer avec MON-AGENT</p>
               <div className="flex flex-wrap gap-2">
                 {[
-                  { label: "Estimer un bien", prompt: "Aide-moi à préparer une estimation immobilière argumentée avec les comparables disponibles.", task: "PRICE_EXPLANATION" as MON-AGENTAITaskType },
-                  { label: "Analyser un DPE", prompt: "Aide-moi à analyser ce DPE, ses conséquences et les points à vérifier.", task: "DOCUMENT_ANALYSIS" as MON-AGENTAITaskType },
-                  { label: "Rédiger une annonce", prompt: "Rédige une annonce immobilière attractive, précise et conforme, sans inventer de caractéristiques.", task: "WRITING" as MON-AGENTAITaskType },
-                  { label: "Préparer une visite", prompt: "Prépare une checklist de visite immobilière et les questions utiles à poser.", task: "CONVERSATION" as MON-AGENTAITaskType },
+                  { label: "Estimer un bien", prompt: "Aide-moi à préparer une estimation immobilière argumentée avec les comparables disponibles.", task: "PRICE_EXPLANATION" as MontyAITaskType },
+                  { label: "Analyser un DPE", prompt: "Aide-moi à analyser ce DPE, ses conséquences et les points à vérifier.", task: "DOCUMENT_ANALYSIS" as MontyAITaskType },
+                  { label: "Rédiger une annonce", prompt: "Rédige une annonce immobilière attractive, précise et conforme, sans inventer de caractéristiques.", task: "WRITING" as MontyAITaskType },
+                  { label: "Préparer une visite", prompt: "Prépare une checklist de visite immobilière et les questions utiles à poser.", task: "CONVERSATION" as MontyAITaskType },
                 ].map((item) => (
                   <button
                     key={item.label}
