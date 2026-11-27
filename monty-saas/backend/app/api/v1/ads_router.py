@@ -7,14 +7,16 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
 from app.api.v1.deps import get_db_session_factory, require_permission
 from app.core.rbac import Permission, TenantContext
+from app.core.security import SlidingWindowRateLimiter
 
 ads_router = APIRouter(prefix="/ads", tags=["Publicité de marques"])
+_ad_request_limiter = SlidingWindowRateLimiter(key_prefix="monagent:ads:")
 
 
 class AdRequest(BaseModel):
@@ -69,7 +71,11 @@ async def _session(sf):
 
 
 @ads_router.post("/public/requests", status_code=status.HTTP_201_CREATED)
-async def submit_ad_request(body: AdRequest, sf=Depends(get_db_session_factory)) -> dict:
+async def submit_ad_request(body: AdRequest, request: Request, sf=Depends(get_db_session_factory)) -> dict:
+    client_ip = request.client.host if request.client else "unknown"
+    rate = _ad_request_limiter.check_and_consume(f"request:{client_ip}", max_requests=5, window_seconds=3600)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=f"Trop de demandes publicitaires. Réessayez dans {rate.retry_after_seconds}s.")
     factory = await _session(sf)
     if not body.consent:
         raise HTTPException(status_code=400, detail="Consentement requis.")
