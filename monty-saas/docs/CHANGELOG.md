@@ -16,3 +16,10 @@
   - Mise à jour Next.js `^15.5.0` (CVE-2025-66478).
   - Support i18n complet `fr-FR`, `pt-PT`, `en-GB`.
   - Passerelle `POST /api/v1/auth/firebase-exchange` et `MontySaasApiClient.kt`.
+
+
+## Durcissement production — 27 novembre 2026
+- Migration PostgreSQL 0014 : RLS forcé sur les adhésions/invitations et isolation des campagnes publicitaires.
+- Compteurs publicitaires limités aux impressions/clics ; modération réservée au rôle SUPER_ADMIN.
+- Rate limiting distribué fail-closed en production si Redis est indisponible.
+- CI étendue à un PostgreSQL 16 vierge pour exécuter toutes les migrations Alembic avant les tests.
