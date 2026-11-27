@@ -1,4 +1,5 @@
 from __future__ import annotations
+# Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code.
 
 import base64
 from datetime import datetime, timezone
