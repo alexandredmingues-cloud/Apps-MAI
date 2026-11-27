@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Monty SaaS — Système d'exploitation immobilier multi-agences",
+  title: "MON-AGENT — Système d'exploitation immobilier multi-agences",
   description:
-    "L'humain avant tout. La technologie au service du conseiller immobilier.",
+    "L'humain avant tout. La technologie au service du immobilier.",
 };
 
 export default function RootLayout({
