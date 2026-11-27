@@ -99,7 +99,7 @@ private fun googleWebClientId(context: Context): String? {
         context.packageName
     )
     if (resourceId == 0) return null
-    return runCatching { context.getString(resourceId).takeIf(String::isNotBlank) }.getOrNull()
+    return runCatching { context.getString(resourceId).takeIf { it.isNotBlank() } }.getOrNull()
 }
 
 fun attemptAutoSignIn(
