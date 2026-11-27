@@ -170,6 +170,7 @@ export function InteractiveGeoMap({
         className="relative h-72 sm:h-80 rounded-xl overflow-hidden border border-emeraldDeep/20 bg-[#e8eee8] cursor-grab active:cursor-grabbing select-none"
         style={{ touchAction: "none" }}
         onPointerDown={startDrag}
+        onWheel={(event) => { event.preventDefault(); changeZoom(zoom + (event.deltaY < 0 ? 1 : -1)); }}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
