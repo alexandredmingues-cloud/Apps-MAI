@@ -22,6 +22,22 @@ _billing = BillingService()
 _seller_pack_orders: dict[str, dict] = {}
 
 
+def _is_paid_eur_checkout_session(session: dict, expected_amount_euro: int) -> bool:
+    """Return true only for a completed one-time EUR payment of the exact server-side price."""
+    try:
+        expected_cents = int(expected_amount_euro) * 100
+        actual_cents = int(session.get("amount_total") or 0)
+    except (TypeError, ValueError):
+        return False
+    return (
+        expected_cents > 0
+        and session.get("mode") == "payment"
+        and session.get("payment_status") == "paid"
+        and str(session.get("currency") or "").lower() == "eur"
+        and actual_cents == expected_cents
+    )
+
+
 @billing_router.get("/plans")
 async def list_saas_plans() -> dict:
     return {
@@ -224,10 +240,7 @@ async def verify_rnic_pass_status(
                 meta = sess.get("metadata", {}) or {}
                 if (
                     sess.get("id") == session_id
-                    and sess.get("mode") == "payment"
-                    and sess.get("payment_status") == "paid"
-                    and str(sess.get("currency") or "").lower() == "eur"
-                    and int(sess.get("amount_total") or 0) == settings.rnic_particulier_price_euro * 100
+                    and _is_paid_eur_checkout_session(sess, settings.rnic_particulier_price_euro)
                     and meta.get("pass_type") == "RNIC_PARTICULIER"
                     and bool(meta.get("pass_token"))
                     and (not ctx or str(meta.get("user_id") or "") == ctx.user_id)
@@ -402,10 +415,7 @@ async def verify_seller_pack_order(
                 meta = sess.get("metadata", {}) or {}
                 if (
                     sess.get("id") == session_id
-                    and sess.get("mode") == "payment"
-                    and sess.get("payment_status") == "paid"
-                    and str(sess.get("currency") or "").lower() == "eur"
-                    and int(sess.get("amount_total") or 0) == int(order.get("amount_euro") or 0) * 100
+                    and _is_paid_eur_checkout_session(sess, int(order.get("amount_euro") or 0))
                     and meta.get("order_type") == "SELLER_PACK"
                     and str(meta.get("order_id") or "") == order_id
                     and str(meta.get("dossier_id") or "") == str(order.get("dossier_id") or "")
@@ -455,7 +465,7 @@ async def stripe_webhook_handler(
         if metadata.get("order_type") == "SELLER_PACK":
             order_id = str(metadata.get("order_id") or "").strip()
             if event_type == "checkout.session.completed":
-                if obj.get("payment_status") != "paid" or obj.get("mode") != "payment" or str(obj.get("currency") or "").lower() != "eur":
+                if not _is_paid_eur_checkout_session(obj, int(metadata.get("amount_euro") or 0)):
                     return {"status": "payment_not_confirmed", "event_id": event_id}
                 if sf is not None:
                     stored_order = await PostgresV3OrchestratorRepository(sf).get_seller_pack_order(order_id)
@@ -520,11 +530,7 @@ async def stripe_webhook_handler(
                 except (TypeError, ValueError):
                     paid_amount = 0
                 if (
-                    obj.get("payment_status") != "paid"
-                    or obj.get("mode") != "payment"
-                    or str(obj.get("currency") or "").lower() != "eur"
-                    or paid_amount <= 0
-                    or int(obj.get("amount_total") or 0) != paid_amount * 100
+                    not _is_paid_eur_checkout_session(obj, paid_amount)
                     or not metadata.get("pass_token")
                 ):
                     return {"status": "payment_not_confirmed", "event_id": event_id}
