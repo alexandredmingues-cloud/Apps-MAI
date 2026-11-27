@@ -1,7 +1,7 @@
 {
-  "name": "Monty Immobilier & SaaS",
-  "short_name": "Monty Immo",
-  "description": "Plateforme immobilière particuliers et professionnels : recherche par trajet, Monty Price Index, Monty AI, copropriétés RNIC et simulateurs.",
+  "name": "MON-AGENT",
+  "short_name": "MON-AGENT",
+  "description": "Plateforme immobilière particuliers et professionnels : recherche par trajet, Mon-Agent Price Index, Mon-Agent AI, copropriétés RNIC et simulateurs.",
   "start_url": "/site",
   "display": "standalone",
   "background_color": "#FAF7F2",
