@@ -7,7 +7,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from types import SimpleNamespace
 import zipfile
 
@@ -109,10 +109,8 @@ class MobileReleasesAndApkTests(unittest.TestCase):
             is_production=False,
         )
         storage = ObjectStorageAdapter(settings)
-        response = Mock()
+        response = MagicMock()
         response.headers = {"Content-Length": "12345"}
-        response.__enter__ = Mock(return_value=response)
-        response.__exit__ = Mock(return_value=False)
         with patch("app.core.storage.urllib.request.urlopen", return_value=response) as urlopen:
             self.assertEqual(storage.get_object_size(object_key="apk/release 1.apk"), 12345)
         request = urlopen.call_args.args[0]
