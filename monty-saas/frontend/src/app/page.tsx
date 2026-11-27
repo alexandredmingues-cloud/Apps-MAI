@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, Calculator, CalendarDays, CheckCircle2, Database, Download, Globe2, Newspaper, Server, Shield, TrendingUp } from "lucide-react";
 import { LogOut } from "lucide-react";
 import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
+import { SponsoredBrandSlot } from "@/components/ads/SponsoredBrandSlot";
 import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
 import { RealEstateSimulatorsSuite } from "@/components/calculators/RealEstateSimulatorsSuite";
 import { CrmCockpitPanel } from "@/components/crm/CrmCockpitPanel";
@@ -269,6 +270,7 @@ export default function MontySaasCockpitPage() {
       activeModuleFlags={moduleFlags}
     >
       <div className="space-y-6">
+        <SponsoredBrandSlot placement="PRO" countryCode="FR" />
         {/* Barre d'accès rapide Site Web Public & Double Public */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-ivoryCard border border-borderSubtle px-4 py-3 text-xs">
           <span className="font-semibold text-emeraldDeep">
