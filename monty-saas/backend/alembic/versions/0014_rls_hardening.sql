@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_brand_ads_public_active
   WHERE status = 'APPROVED';
 
 -- Public tracking endpoints may change only one aggregate counter per request.
-CREATE OR REPLACE FUNCTION guard_brand_ad_public_update() RETURNS trigger AS $
+CREATE OR REPLACE FUNCTION guard_brand_ad_public_update() RETURNS trigger AS $func$
 BEGIN
   IF current_setting('app.current_role', true) IS DISTINCT FROM 'SUPER_ADMIN' THEN
     IF (to_jsonb(NEW) - 'impressions' - 'clicks') IS DISTINCT FROM (to_jsonb(OLD) - 'impressions' - 'clicks')
@@ -47,7 +47,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$func$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_guard_brand_ad_public_update ON brand_ad_campaigns;
 CREATE TRIGGER trg_guard_brand_ad_public_update
