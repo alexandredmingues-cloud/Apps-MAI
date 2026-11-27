@@ -112,52 +112,6 @@ class ComparableTransactionService:
             source_label = f"Base DVF officielle (secteur {postal_code})"
 
         if not pool:
-            combined_loc = f"{city} {sector_label}".lower()
-            for sec in MONTPELLIER_SECTORS:
-                short = sec.name.split(" (")[0].lower()
-                if short in combined_loc:
-                    base_m2 = (sec.price_m2_house or sec.price_m2_apartment) if "maison" in property_kind.lower() else sec.price_m2_apartment
-                    pool = [
-                        DvfComparable(
-                            mutation_id=f"sec-{short[:6]}-{i}",
-                            date_mutation=f"2026-0{(i % 6) + 1}-12",
-                            year=2026,
-                            price_euro=round((base_m2 + (i - 2) * 110) * max(20, surface_m2)),
-                            surface_m2=max(20, surface_m2),
-                            property_type=property_kind,
-                            distance_meters=180 + i * 160,
-                        )
-                        for i in range(6)
-                    ]
-                    source_label = f"Référentiel marché local Monty ({sec.name})"
-                    break
-
-        # Référentiel national FR/PT par ville connue
-        if not pool:
-            city_key = city.strip().lower()
-            matched_city = next((k for k in CITY_COORDINATES if k in city_key), None)
-            if matched_city:
-                _lat, _lon, c_code, region, ref_m2 = CITY_COORDINATES[matched_city]
-                adj_m2 = round(ref_m2 * (1.07 if "maison" in property_kind.lower() else 1.0))
-                pool = [
-                    DvfComparable(
-                        mutation_id=f"city-{matched_city}-{i}",
-                        date_mutation=f"2026-0{(i % 6) + 1}-10",
-                        year=2026,
-                        price_euro=round((adj_m2 + (i - 2) * 125) * max(20, surface_m2)),
-                        surface_m2=max(20, surface_m2),
-                        property_type=property_kind,
-                        distance_meters=350 + i * 240,
-                    )
-                    for i in range(5)
-                ]
-                source_label = (
-                    f"Référentiel marché Portugal ({matched_city.title()}, {region})"
-                    if c_code == CountryCode.PT
-                    else f"Repères DVF / marché ({matched_city.title()}, {region})"
-                )
-
-        if not pool:
             return ComparableStats(
                 comparables_found_count=0,
                 comparables_retained_count=0,
