@@ -151,6 +151,7 @@ class ComparableTransactionService:
             if c.distance_meters <= config.max_comparable_distance_m
             and kind_lower
             and c.property_type.strip().lower() == kind_lower
+            and 0.5 <= (c.surface_m2 / max(1, surface_m2)) <= 2.0
         ]
         if not working:
             return ComparableStats(
