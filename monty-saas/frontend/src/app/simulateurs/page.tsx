@@ -4,7 +4,7 @@ import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebH
 import { RealEstateSimulatorsSuite } from "@/components/calculators/RealEstateSimulatorsSuite";
 
 export const metadata: Metadata = {
-  title: "6 Simulateurs Immobiliers Gratuits (France & Portugal) | Monty",
+  title: "Simulateurs immobiliers gratuits (France & Portugal) | MON-AGENT",
   description:
     "Calculez vos mensualités, capacité d'emprunt HCSF 35 %, frais de notaire ou IMT Portugal, rendement locatif, estimation indicative et plus-value immobilière.",
 };
