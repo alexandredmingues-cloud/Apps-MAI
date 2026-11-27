@@ -6,7 +6,7 @@
 
 Plateforme immobilière intelligente multi-pays (France active • Portugal isolé & prêt) composée de :
 - **Application Android (`app/`)** : Jetpack Compose, Room hors-ligne, Cloud Firestore + App Check, Google Sign-In (`CredentialManager`), Firebase AI Logic (`MontyAiModelConfig.AI_MODEL_NAME`) et convergence SaaS (`MontySaasApiClient`).
-- **Backend SaaS (`monty-saas/backend/`)** : FastAPI, PostgreSQL 16 + RLS (`0001` à `0012`), Redis (`SlidingWindowRateLimiter` + ARQ), `Mon-Agent AI Core` multi-moteurs, ADEME Open Data DPE, Mon-Agent Price Index 6 paliers, Stripe Checkout & Webhooks (abonnements, Pass RNIC, Pack Vendeur), et Stockage Objet S3/R2/Supabase.
+- **Backend SaaS (`monty-saas/backend/`)** : FastAPI, PostgreSQL 16 + RLS (`0001` à `0014`), Redis (`SlidingWindowRateLimiter` + ARQ), `Mon-Agent AI Core` multi-moteurs, ADEME Open Data DPE, Mon-Agent Price Index 6 paliers, Stripe Checkout & Webhooks (abonnements, Pass RNIC, Pack Vendeur), et Stockage Objet S3/R2/Supabase.
 - **Frontend Web (`monty-saas/frontend/`)** : Next.js 15.5+ / React 19, i18n (`fr-FR`, `pt-PT`, `en-GB`), espace pro SaaS + portail public + téléchargement APK vérifié SHA-256.
 
 Voir l'app dans AI Studio : https://ai.studio/apps/cd75241a-b5fc-44ff-a2a6-4ccc33fec8d3
