@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { Briefcase, Building2, Calculator, Download, Globe2, Home, Newspaper, PlusCircle, ShieldCheck, UserCircle } from "lucide-react";
 import { SUPPORTED_LOCALES, useMontyLocale, type UiLocaleCode } from "@/lib/i18n";
+import { MonAgentAssistantWidget } from "@/components/ai/MonAgentAssistantWidget";
 
 interface PublicWebHeaderProps {
   activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs" | "coproprietes" | "telecharger" | "mon-compte";
@@ -184,6 +185,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
 export function PublicWebFooter() {
   const { t } = useMontyLocale();
   return (
+    <>
     <footer className="bg-emeraldDeep text-ivoryWarm/85 border-t border-goldAntique/30 mt-14">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-xs">
         <div className="space-y-2">
@@ -214,5 +216,7 @@ export function PublicWebFooter() {
         </div>
       </div>
     </footer>
+    <MonAgentAssistantWidget authenticated={false} />
+    </>
   );
 }
