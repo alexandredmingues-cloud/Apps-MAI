@@ -547,7 +547,7 @@ export function NotariesAndRnicPanel({
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-borderSubtle text-emeraldDeep font-semibold hover:border-emeraldDeep"
                       >
                         <ExternalLink className="w-3 h-3" />
-                        Annuaire CSN notaires.fr
+                        Fiche CSN · téléphone / e-mail
                       </a>
                       {mode === "pro" && (
                         <button
