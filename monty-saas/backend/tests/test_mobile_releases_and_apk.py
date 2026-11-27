@@ -18,6 +18,10 @@ if str(BACKEND_DIR) not in sys.path:
 from fastapi import HTTPException  # noqa: E402
 from app.core.config import load_settings  # noqa: E402
 from app.core.storage import ObjectStorageAdapter  # noqa: E402
+from app.db.postgres_v3_orchestrator_repository import (  # noqa: E402
+    MobileReleaseVersionConflict,
+    PostgresV3OrchestratorRepository,
+)
 from app.api.v1.mobile_releases_router import _persist_uploaded_mobile_release, _storage_for_environment  # noqa: E402
 from app.core.rbac import MontyRole, TenantContext  # noqa: E402
 from app.domain.mobile_releases_service import (  # noqa: E402
@@ -203,7 +207,36 @@ class MobileReleasesAndApkTests(unittest.TestCase):
 
 
 
+class _FakeAsyncSession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def begin(self):
+        return self
+
+    async def execute(self, statement, params=None):
+        return SimpleNamespace(scalar_one_or_none=lambda: "existing-release")
+
+
+class _FakeSessionFactory:
+    def __call__(self):
+        return _FakeAsyncSession()
+
+
 class MobileReleasePublicationCleanupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_duplicate_package_version_is_rejected_before_upload(self) -> None:
+        repo = PostgresV3OrchestratorRepository(_FakeSessionFactory())
+        release = SimpleNamespace(
+            id="new-release",
+            package_id="com.example.app",
+            version_code=42,
+        )
+        with self.assertRaises(MobileReleaseVersionConflict):
+            await repo.assert_mobile_release_version_available(release)
+
     async def test_database_failure_triggers_remote_apk_cleanup(self) -> None:
         from unittest.mock import patch as local_patch
 
