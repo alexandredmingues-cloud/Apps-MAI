@@ -17,6 +17,17 @@ from app.domain.mobile_releases_service import MobileAppRelease, mobile_releases
 mobile_releases_router = APIRouter(tags=["Phase 28 — Distribution APK Mobile"])
 
 
+def _storage_for_environment(settings: Settings) -> ObjectStorageAdapter:
+    storage = ObjectStorageAdapter(settings)
+    if settings.is_production and storage.active_backend == "local":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stockage objet distant non configuré pour la distribution mobile.",
+            headers={"Retry-After": "60"},
+        )
+    return storage
+
+
 def _release_dto(rel: MobileAppRelease, *, storage: ObjectStorageAdapter | None = None) -> dict[str, Any]:
     dto: dict[str, Any] = {
         "id": rel.id,
@@ -53,14 +64,15 @@ async def get_latest_mobile_release(
     storage = ObjectStorageAdapter(settings)
     if sf is not None:
         pg_items = await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=True)
-        if pg_items:
-            recommended = [r for r in pg_items if r.is_recommended]
-            rel = (recommended or pg_items)[0]
-            return {
-                "available": True,
-                "message": "APK Android signé et vérifié disponible au téléchargement.",
-                "release": _release_dto(rel, storage=storage),
-            }
+        if not pg_items:
+            return {"available": False, "message": "Aucune version Android signée n'est actuellement publiée.", "release": None}
+        recommended = [r for r in pg_items if r.is_recommended]
+        rel = (recommended or pg_items)[0]
+        return {
+            "available": True,
+            "message": "APK Android signé et vérifié disponible au téléchargement.",
+            "release": _release_dto(rel, storage=storage),
+        }
     rel = mobile_releases_service.get_latest_published()
     if rel is None:
         return {
@@ -143,8 +155,8 @@ async def admin_list_mobile_releases(
     items = (
         await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=False)
         if sf is not None
-        else []
-    ) or mobile_releases_service.admin_list_releases(ctx)
+        else mobile_releases_service.admin_list_releases(ctx)
+    )
     return {
         "count": len(items),
         "total_downloads": sum(r.download_count for r in items),
