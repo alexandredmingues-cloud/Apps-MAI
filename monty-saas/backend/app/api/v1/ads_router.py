@@ -155,10 +155,12 @@ async def list_ad_requests(
 ) -> dict:
     factory = await _session(sf)
     async with factory() as session:
-        result = await session.execute(text("""SELECT id, advertiser_name, brand_name, contact_email,
-            website_url, creative_image_url, target_url, placement, country_code, city, headline,
-            description, campaign_budget_euro, status, starts_at, ends_at, impressions, clicks, created_at
-            FROM brand_ad_campaigns ORDER BY created_at DESC LIMIT 200"""))
+        async with session.begin():
+            await session.execute(text("SELECT set_config('app.current_role', 'SUPER_ADMIN', true)"))
+            result = await session.execute(text("""SELECT id, advertiser_name, brand_name, contact_email,
+                website_url, creative_image_url, target_url, placement, country_code, city, headline,
+                description, campaign_budget_euro, status, starts_at, ends_at, impressions, clicks, created_at
+                FROM brand_ad_campaigns ORDER BY created_at DESC LIMIT 200"""))
         rows = [dict(row) for row in result.mappings().all()]
     return {"requests": [{**row, "id": str(row["id"])} for row in rows]}
 
@@ -174,6 +176,7 @@ async def review_ad_request(
     factory = await _session(sf)
     async with factory() as session:
         async with session.begin():
+            await session.execute(text("SELECT set_config('app.current_role', 'SUPER_ADMIN', true)"))
             result = await session.execute(text("""UPDATE brand_ad_campaigns SET status = :status,
                 starts_at = COALESCE(:starts_at, starts_at), ends_at = COALESCE(:ends_at, ends_at),
                 reviewed_at = now(), updated_at = now() WHERE id = :id RETURNING id, status"""),
