@@ -21,6 +21,7 @@ from app.api.v1.crm_router import crm_router
 from app.api.v1.deps import (
     get_current_tenant,
     get_db_session_factory,
+    get_db_session_factory_unchecked,
     get_settings,
     require_permission,
 )
@@ -95,7 +96,7 @@ class HealthResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check(
     settings: Settings = Depends(get_settings),
-    sf=Depends(get_db_session_factory),
+    sf=Depends(get_db_session_factory_unchecked),
 ) -> HealthResponse:
     db_reachable: bool | None = None
     db_latency_ms: float | None = None
@@ -171,7 +172,8 @@ async def health_check(
         database_latency_ms=db_latency_ms,
         database_role_rls_safe=db_role_rls_safe,
         storage_mode=(
-            "postgresql_rls" if sf is not None
+            "postgresql_rls" if sf is not None and (not settings.is_production or db_role_rls_safe)
+            else "unsafe_postgresql_role" if sf is not None
             else "unavailable" if settings.is_production
             else "in_memory_fallback"
         ),
