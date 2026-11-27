@@ -16,6 +16,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { NotariesAndRnicPanel } from "@/components/legal/NotariesAndRnicPanel";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import type { SavedSearchAlert } from "@/components/marketplace/BuyerSearchTools";
 import { loadPersistedSession, montyApi, persistSession } from "@/lib/api-client";
 import type {
@@ -49,6 +50,8 @@ export function ClientPortalView() {
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   const [activeTab, setActiveTab] = useState<"favorites" | "alerts" | "documents" | "seller" | "rnic">("favorites");
   const [favorites, setFavorites] = useState<ClientFavorite[]>([]);
@@ -122,6 +125,10 @@ export function ClientPortalView() {
       setAuthError("Le mot de passe doit contenir au moins 8 caractères.");
       return;
     }
+    if (!captchaToken) {
+      setAuthError("Veuillez valider le contrôle anti-robot avant de continuer.");
+      return;
+    }
     if (authMode === "register" && authName.trim().length < 2) {
       setAuthError("Saisissez votre nom complet (au moins 2 caractères).");
       return;
@@ -132,13 +139,14 @@ export function ClientPortalView() {
       const issued =
         authMode === "register"
           ? await montyApi.registerClient({
+              captcha_token: captchaToken,
               email: cleanEmail,
               password: authPassword,
               display_name: authName.trim(),
               role: authRole,
               country_code: authCountry,
             })
-          : await montyApi.login({ email: cleanEmail, password: authPassword });
+          : await montyApi.login({ email: cleanEmail, password: authPassword, captcha_token: captchaToken });
 
       persistSession(issued);
       setSession(issued);
@@ -148,6 +156,8 @@ export function ClientPortalView() {
       setAuthError(err instanceof Error ? err.message : "Échec de connexion au portail particulier.");
     } finally {
       setAuthBusy(false);
+      setCaptchaToken("");
+      setCaptchaReset((value) => value + 1);
     }
   }
 
@@ -370,9 +380,12 @@ export function ClientPortalView() {
               placeholder="Mot de passe (≥ 8 caractères)"
               className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2.5"
             />
+            <div className="sm:col-span-2 lg:col-span-4">
+              <TurnstileWidget onVerify={setCaptchaToken} resetKey={captchaReset} />
+            </div>
             <button
               type="submit"
-              disabled={authBusy}
+              disabled={authBusy || !captchaToken}
               className="px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-50"
             >
               {authBusy ? "Validation..." : authMode === "register" ? "Créer mon compte" : "Me connecter"}
