@@ -17,6 +17,7 @@ from app.domain.real_estate_engines import DvfComparable, MONTPELLIER_SECTORS
 
 
 class PriceIndexCategory(str, Enum):
+    EXCELLENTE_AFFAIRE = "EXCELLENTE_AFFAIRE"
     TRES_BONNE_AFFAIRE = "TRES_BONNE_AFFAIRE"
     BONNE_AFFAIRE = "BONNE_AFFAIRE"
     PRIX_COHERENT = "PRIX_COHERENT"
@@ -35,6 +36,7 @@ class PriceConfidenceTier(str, Enum):
 @dataclass
 class PriceIndexConfig:
     agency_id: str
+    excellent_deal_pct: float = -15.0
     very_good_deal_pct: float = -10.0
     good_deal_pct: float = -5.0
     above_market_pct: float = 5.0
@@ -44,6 +46,12 @@ class PriceIndexConfig:
     max_comparable_age_months: int = 24
     updated_by: str = "system"
     updated_at: str = ""
+
+
+PRICE_INDEX_DISCLAIMER = (
+    "Indicateur automatisé non contractuel établi à partir de transactions comparables "
+    "et de critères déclaratifs. Ne constitue pas une expertise immobilière certifiée."
+)
 
 
 @dataclass(frozen=True)
@@ -277,9 +285,10 @@ class MarketDataService:
 
 
 class PriceClassificationService:
-    """Classe le positionnement prix dans les 5 catégories configurables Monty Price Index."""
+    """Classe le positionnement prix dans les 6 catégories configurables Monty Price Index."""
 
     LABELS: dict[PriceIndexCategory, str] = {
+        PriceIndexCategory.EXCELLENTE_AFFAIRE: "Excellente affaire",
         PriceIndexCategory.TRES_BONNE_AFFAIRE: "Très bonne affaire",
         PriceIndexCategory.BONNE_AFFAIRE: "Bonne affaire",
         PriceIndexCategory.PRIX_COHERENT: "Prix cohérent",
@@ -290,7 +299,9 @@ class PriceClassificationService:
 
     @classmethod
     def classify(cls, gap_percent: float, cfg: PriceIndexConfig) -> tuple[PriceIndexCategory, str]:
-        if gap_percent < cfg.very_good_deal_pct:
+        if gap_percent < cfg.excellent_deal_pct:
+            cat = PriceIndexCategory.EXCELLENTE_AFFAIRE
+        elif gap_percent < cfg.very_good_deal_pct:
             cat = PriceIndexCategory.TRES_BONNE_AFFAIRE
         elif gap_percent < cfg.good_deal_pct:
             cat = PriceIndexCategory.BONNE_AFFAIRE
@@ -363,6 +374,7 @@ class MontyPriceEngine:
         self,
         ctx: TenantContext,
         *,
+        excellent_deal_pct: float | None = None,
         very_good_deal_pct: float,
         good_deal_pct: float,
         above_market_pct: float,
@@ -373,10 +385,18 @@ class MontyPriceEngine:
     ) -> PriceIndexConfig:
         if not ctx.has_permission(Permission.AGENCY_MANAGE):
             raise PermissionError("Seul un administrateur peut modifier les seuils Monty Price Index.")
-        if not (very_good_deal_pct < good_deal_pct < above_market_pct < overpriced_pct):
-            raise ValueError("Les seuils doivent être strictement croissants (Très bonne affaire < Bonne affaire < Au-dessus < Trop cher).")
+        eff_excellent = round(
+            float(excellent_deal_pct) if excellent_deal_pct is not None else min(-15.0, float(very_good_deal_pct) - 5.0),
+            2,
+        )
+        if not (eff_excellent < very_good_deal_pct < good_deal_pct < above_market_pct < overpriced_pct):
+            raise ValueError(
+                "Les seuils doivent être strictement croissants "
+                "(Excellente affaire < Très bonne affaire < Bonne affaire < Au-dessus < Trop cher)."
+            )
         cfg = PriceIndexConfig(
             agency_id=ctx.agency_id,
+            excellent_deal_pct=eff_excellent,
             very_good_deal_pct=round(float(very_good_deal_pct), 2),
             good_deal_pct=round(float(good_deal_pct), 2),
             above_market_pct=round(float(above_market_pct), 2),
@@ -411,11 +431,13 @@ class MontyPriceEngine:
         estimated_works_euro: int = 0,
         explicit_comparables: list[DvfComparable] | None = None,
         record_history: bool = True,
+        config_override: PriceIndexConfig | None = None,
     ) -> dict[str, Any]:
-        cfg = self.get_config(agency_id)
+        cfg = config_override or self.get_config(agency_id)
         if asking_price_euro <= 0 or surface_m2 <= 0:
             raise ValueError("Prix affiché et surface habitable (> 0) requis.")
 
+        calculated_at = datetime.now(timezone.utc).isoformat()
         stats = self._comp_service.collect_comparables(
             country_code=country_code,
             city=city,
@@ -447,11 +469,14 @@ class MontyPriceEngine:
                 "comparables": stats.__dict__,
                 "adjustment_factors": [],
                 "thresholds": {
+                    "excellent_deal_pct": cfg.excellent_deal_pct,
                     "very_good_deal_pct": cfg.very_good_deal_pct,
                     "good_deal_pct": cfg.good_deal_pct,
                     "above_market_pct": cfg.above_market_pct,
                     "overpriced_pct": cfg.overpriced_pct,
                 },
+                "calculated_at": calculated_at,
+                "estimation_disclaimer": PRICE_INDEX_DISCLAIMER,
                 "explanation_grounded": (
                     f"Indicateur masqué pour « {InputSanitizer.sanitize_text(title, 120)} » : "
                     f"seulement {stats.comparables_retained_count} comparable(s) retenu(s) "
@@ -491,6 +516,7 @@ class MontyPriceEngine:
             f"{gap_pct:+.1f} % ({_fmt_signed_eur(gap_euro)} €), classant le bien en « {category_label} »."
         )
 
+        history_record: PriceIndexHistoryRecord | None = None
         if record_history:
             rec = PriceIndexHistoryRecord(
                 id=f"mpi-{uuid.uuid4().hex[:10]}",
@@ -507,8 +533,9 @@ class MontyPriceEngine:
                 confidence_tier=tier.value,
                 comparables_count=stats.comparables_retained_count,
                 evaluated_by=user_id,
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=calculated_at,
             )
+            history_record = rec
             self._history.insert(0, rec)
             if len(self._history) > 300:
                 self._history = self._history[:300]
@@ -531,12 +558,16 @@ class MontyPriceEngine:
             "comparables": stats.__dict__,
             "adjustment_factors": factors,
             "thresholds": {
+                "excellent_deal_pct": cfg.excellent_deal_pct,
                 "very_good_deal_pct": cfg.very_good_deal_pct,
                 "good_deal_pct": cfg.good_deal_pct,
                 "above_market_pct": cfg.above_market_pct,
                 "overpriced_pct": cfg.overpriced_pct,
             },
+            "calculated_at": calculated_at,
+            "estimation_disclaimer": PRICE_INDEX_DISCLAIMER,
             "explanation_grounded": explanation,
+            "history_record_id": history_record.id if history_record else "",
         }
 
     def list_history(self, ctx: TenantContext, limit: int = 50) -> list[PriceIndexHistoryRecord]:

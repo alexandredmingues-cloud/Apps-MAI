@@ -392,22 +392,33 @@ class SellerRepository(
         paymentMethodLabel: String,
         markPaidImmediately: Boolean
     ): Result<SellerPropertyDossier> {
+        // SÉCURITÉ : le client ne doit JAMAIS écrire un statut "PAID" ou "DELIVERED" en base Firestore.
+        // Le paramètre markPaidImmediately n'a aucun effet sur le statut stocké ; la confirmation
+        // passe exclusivement par le webhook Stripe serveur (/api/v1/billing/webhook).
+        val existingPending = dossier.buyerOrders.firstOrNull {
+            it.buyerClientId == buyerClientId && it.status == "PENDING_PAYMENT"
+        }
+        if (existingPending != null) {
+            return Result.success(dossier)
+        }
         val nowLabel = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.FRANCE).format(Date())
+        val method = if (markPaidImmediately && paymentMethodLabel.isBlank()) {
+            "Stripe Checkout (en attente)"
+        } else {
+            paymentMethodLabel.ifBlank { "Stripe Checkout (en attente)" }
+        }
         val order = BuyerDocumentOrder(
             orderId = "ord_${UUID.randomUUID().toString().take(8)}",
             buyerClientId = buyerClientId,
             buyerName = buyerName.trim(),
             buyerEmail = buyerEmail.trim(),
             amountEuro = dossier.packPriceEuro,
-            status = if (markPaidImmediately) "PAID" else "PENDING_PAYMENT",
-            paymentMethodLabel = paymentMethodLabel,
+            status = "PENDING_PAYMENT",
+            paymentMethodLabel = method,
             createdAtLabel = nowLabel,
-            deliveredAtLabel = if (markPaidImmediately) nowLabel else ""
+            deliveredAtLabel = ""
         )
-        val filtered = dossier.buyerOrders.filterNot {
-            it.buyerClientId == buyerClientId && it.status == "PENDING_PAYMENT"
-        }
-        val next = dossier.copy(buyerOrders = (listOf(order) + filtered).take(50))
+        val next = dossier.copy(buyerOrders = (listOf(order) + dossier.buyerOrders).take(50))
         return saveDossier(userId, next, property)
     }
 
@@ -415,12 +426,22 @@ class SellerRepository(
         userId: String,
         dossier: SellerPropertyDossier,
         property: PropertyItem?,
-        orderId: String
+        orderId: String,
+        apiClient: com.example.data.remote.MontySaasApiClient = com.example.data.remote.MontySaasApiClient()
     ): Result<SellerPropertyDossier> {
+        val verification = apiClient.verifySellerPackOrder(orderId)
+        val isVerifiedPaid = verification.getOrNull()?.paid == true
+        if (!isVerifiedPaid) {
+            return Result.failure(
+                IllegalStateException(
+                    "Paiement Stripe non confirmé côté serveur. La livraison du Pack Vendeur est déclenchée uniquement après validation du webhook Stripe."
+                )
+            )
+        }
         val nowLabel = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.FRANCE).format(Date())
         val nextOrders = dossier.buyerOrders.map { ord ->
             if (ord.orderId == orderId) {
-                ord.copy(status = "DELIVERED", deliveredAtLabel = nowLabel)
+                ord.copy(status = "PAID", deliveredAtLabel = nowLabel)
             } else {
                 ord
             }

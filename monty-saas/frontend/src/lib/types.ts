@@ -36,7 +36,7 @@ export type NewsCategory =
 export type AudienceScope = "BOTH" | "PRO_ONLY" | "PUBLIC_ONLY";
 
 export type CountryCode = "FR" | "PT";
-export type LocaleCode = "fr-FR" | "pt-PT";
+export type LocaleCode = "fr-FR" | "pt-PT" | "en-GB";
 
 export interface CountryJurisdictionPack {
   country_code: CountryCode;
@@ -1107,14 +1107,38 @@ export interface LatestMobileReleaseResponse {
   release: MobileAppRelease | null;
 }
 
-// Phase 29 — Monty Price Index
+// Phase 29 — Monty Price Index & ADEME Open Data DPE
 export type PriceIndexCategory =
+  | "EXCELLENTE_AFFAIRE"
   | "TRES_BONNE_AFFAIRE"
   | "BONNE_AFFAIRE"
   | "PRIX_COHERENT"
   | "AU_DESSUS_DU_MARCHE"
   | "TROP_CHER"
   | "DONNEES_INSUFFISANTES";
+
+export interface AdemeDpeRecord {
+  dpe_number: string;
+  dpe_label: string;
+  ges_label: string;
+  conso_kwh_m2_an: number | null;
+  emission_ges_kg_m2_an: number | null;
+  city: string;
+  postal_code: string;
+  surface_m2: number | null;
+  construction_year: number | null;
+  issued_date: string;
+  source: string;
+}
+
+export interface AdemeDpeLookupResponse {
+  source: string;
+  cached: boolean;
+  reachable?: boolean;
+  count: number;
+  records: AdemeDpeRecord[];
+  warning?: string;
+}
 
 export interface MontyPriceIndexResult {
   display_badge: boolean;
@@ -1146,16 +1170,20 @@ export interface MontyPriceIndexResult {
   };
   adjustment_factors: { factor: string; impact: string }[];
   thresholds: {
+    excellent_deal_pct?: number;
     very_good_deal_pct: number;
     good_deal_pct: number;
     above_market_pct: number;
     overpriced_pct: number;
   };
+  calculated_at?: string;
+  estimation_disclaimer?: string;
   explanation_grounded: string;
 }
 
 export interface PriceIndexConfig {
   agency_id: string;
+  excellent_deal_pct?: number;
   very_good_deal_pct: number;
   good_deal_pct: number;
   above_market_pct: number;

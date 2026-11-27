@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
+import json
 import time
+from typing import Any, Callable
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
@@ -430,6 +436,105 @@ async def list_team_members(
     else:
         members = _auth_service.list_team_members(ctx)
     return {"count": len(members), "members": members}
+
+
+class FirebaseExchangeRequest(BaseModel):
+    id_token: str = Field(min_length=20, max_length=8192)
+    preferred_role: MontyRole = MontyRole.BUYER
+    agency_id: str = Field(default="agency-france-reseau", max_length=128)
+
+
+def _decode_jwt_payload_unverified(token: str) -> dict[str, Any]:
+    parts = token.strip().split(".")
+    if len(parts) != 3:
+        raise ValueError("Format JWT Firebase invalide.")
+    payload_b64 = parts[1] + ("=" * ((4 - len(parts[1]) % 4) % 4))
+    raw = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
+    data = json.loads(raw.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Payload JWT invalide.")
+    return data
+
+
+def _verify_firebase_token_via_google(
+    id_token: str,
+    *,
+    settings: Settings,
+    transport: Callable[[str, float], tuple[int, dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    def _default_get(url: str, timeout_s: float) -> tuple[int, dict[str, Any]]:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"}, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+                raw = resp.read().decode("utf-8")
+                return int(getattr(resp, "status", 200)), json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as err:
+            return int(err.code), {}
+
+    getter = transport or _default_get
+    qs = urllib.parse.urlencode({"id_token": id_token.strip()})
+    code, claims = getter(f"https://oauth2.googleapis.com/tokeninfo?{qs}", 6.0)
+    if code != 200 or not isinstance(claims, dict):
+        raise ValueError("Jeton Firebase/Google rejeté lors de la vérification.")
+
+    sub = str(claims.get("sub") or claims.get("user_id") or "").strip()
+    if not sub:
+        raise ValueError("Identifiant utilisateur Firebase (sub) absent.")
+
+    exp_raw = claims.get("exp")
+    if exp_raw is not None and int(exp_raw) < int(time.time()):
+        raise ValueError("Jeton Firebase expiré.")
+
+    if settings.firebase_project_id:
+        aud = str(claims.get("aud") or "").strip()
+        iss = str(claims.get("iss") or "").strip()
+        if aud != settings.firebase_project_id and settings.firebase_project_id not in iss:
+            raise ValueError("Jeton émis pour un autre projet Firebase.")
+    return claims
+
+
+@router.post("/auth/firebase-exchange", response_model=SessionResponse, tags=["Auth"])
+async def exchange_firebase_session(
+    body: FirebaseExchangeRequest,
+    settings: Settings = Depends(get_settings),
+) -> SessionResponse:
+    """Échange un Firebase ID Token vérifié contre un JWT SaaS Monty (convergence Mobile <-> SaaS)."""
+    try:
+        claims = _verify_firebase_token_via_google(body.id_token, settings=settings)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+    uid = str(claims.get("sub") or claims.get("user_id") or "")
+    email = str(claims.get("email") or "")
+    display_name = str(claims.get("name") or email.split("@")[0] or "Utilisateur Mobile")
+    has_staff_claim = bool(claims.get("staff") is True or claims.get("advisor") is True)
+    # Fail-closed sur l'élévation de rôle : seuls les claims staff/advisor vérifiés peuvent demander un rôle pro
+    if has_staff_claim and body.preferred_role in (MontyRole.AGENT, MontyRole.DIRECTOR, MontyRole.ADMIN_STAFF):
+        eff_role = body.preferred_role
+    elif body.preferred_role == MontyRole.SELLER:
+        eff_role = MontyRole.SELLER
+    else:
+        eff_role = MontyRole.BUYER
+
+    safe_agency = body.agency_id.strip() or "agency-france-reseau"
+    token = create_access_token(
+        subject_user_id=f"fb:{uid}",
+        agency_id=safe_agency,
+        role=eff_role.value,
+        secret=settings.effective_jwt_secret,
+        ttl_seconds=settings.jwt_ttl_minutes * 60,
+    )
+    perms = sorted(p.value for p in ROLE_PERMISSIONS[eff_role])
+    return SessionResponse(
+        access_token=token,
+        user_id=f"fb:{uid}",
+        agency_id=safe_agency,
+        agency_name="Monty Connect Mobile",
+        display_name=display_name,
+        email=email,
+        role=eff_role,
+        permissions=perms,
+    )
 
 
 @router.get("/auth/me", tags=["Auth"])

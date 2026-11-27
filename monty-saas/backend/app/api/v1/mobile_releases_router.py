@@ -7,15 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.api.v1.deps import require_permission
+from app.api.v1.deps import get_db_session_factory, get_settings, require_permission
+from app.core.config import Settings
 from app.core.rbac import Permission, TenantContext
+from app.core.storage import ObjectStorageAdapter
+from app.db.postgres_v3_orchestrator_repository import PostgresV3OrchestratorRepository
 from app.domain.mobile_releases_service import MobileAppRelease, mobile_releases_service
 
 mobile_releases_router = APIRouter(tags=["Phase 28 — Distribution APK Mobile"])
 
 
-def _release_dto(rel: MobileAppRelease) -> dict[str, Any]:
-    return {
+def _release_dto(rel: MobileAppRelease, *, storage: ObjectStorageAdapter | None = None) -> dict[str, Any]:
+    dto: dict[str, Any] = {
         "id": rel.id,
         "version_name": rel.version_name,
         "version_code": rel.version_code,
@@ -36,10 +39,31 @@ def _release_dto(rel: MobileAppRelease) -> dict[str, Any]:
         "updated_at": rel.updated_at,
         "download_path": f"/api/v1/mobile/releases/{rel.id}/download",
     }
+    if storage is not None and storage.active_backend != "local":
+        info = storage.issue_signed_url(object_key=f"apk/{rel.id}-{rel.file_name}", method="GET")
+        dto["storage_backend"] = info.backend
+        dto["signed_download_url"] = info.signed_url
+    else:
+        dto["storage_backend"] = "local"
+    return dto
 
 
 @mobile_releases_router.get("/mobile/releases/latest")
-async def get_latest_mobile_release() -> dict[str, Any]:
+async def get_latest_mobile_release(
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
+) -> dict[str, Any]:
+    storage = ObjectStorageAdapter(settings)
+    if sf is not None:
+        pg_items = await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=True)
+        if pg_items:
+            recommended = [r for r in pg_items if r.is_recommended]
+            rel = (recommended or pg_items)[0]
+            return {
+                "available": True,
+                "message": "APK Android signé et vérifié disponible au téléchargement.",
+                "release": _release_dto(rel, storage=storage),
+            }
     rel = mobile_releases_service.get_latest_published()
     if rel is None:
         return {
@@ -50,22 +74,35 @@ async def get_latest_mobile_release() -> dict[str, Any]:
     return {
         "available": True,
         "message": "APK Android signé et vérifié disponible au téléchargement.",
-        "release": _release_dto(rel),
+        "release": _release_dto(rel, storage=storage),
     }
 
 
 @mobile_releases_router.get("/mobile/releases")
-async def list_public_mobile_releases() -> dict[str, Any]:
-    items = mobile_releases_service.list_public_releases()
-    return {"count": len(items), "releases": [_release_dto(r) for r in items]}
+async def list_public_mobile_releases(
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
+) -> dict[str, Any]:
+    storage = ObjectStorageAdapter(settings)
+    items = (
+        await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=True)
+        if sf is not None
+        else []
+    ) or mobile_releases_service.list_public_releases()
+    return {"count": len(items), "releases": [_release_dto(r, storage=storage) for r in items]}
 
 
 @mobile_releases_router.get("/mobile/releases/{release_id}/download")
-async def download_mobile_apk(release_id: str) -> FileResponse:
+async def download_mobile_apk(
+    release_id: str,
+    sf=Depends(get_db_session_factory),
+) -> FileResponse:
     try:
         rel, path = mobile_releases_service.resolve_download_file(release_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if sf is not None:
+        await PostgresV3OrchestratorRepository(sf).increment_mobile_download(release_id)
     return FileResponse(
         path=str(path),
         media_type="application/vnd.android.package-archive",
@@ -81,12 +118,19 @@ async def download_mobile_apk(release_id: str) -> FileResponse:
 @mobile_releases_router.get("/admin/mobile/releases")
 async def admin_list_mobile_releases(
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
-    items = mobile_releases_service.admin_list_releases(ctx)
+    storage = ObjectStorageAdapter(settings)
+    items = (
+        await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=False)
+        if sf is not None
+        else []
+    ) or mobile_releases_service.admin_list_releases(ctx)
     return {
         "count": len(items),
         "total_downloads": sum(r.download_count for r in items),
-        "releases": [_release_dto(r) for r in items],
+        "releases": [_release_dto(r, storage=storage) for r in items],
     }
 
 
@@ -106,6 +150,8 @@ class UploadApkBase64Request(BaseModel):
 async def admin_upload_mobile_apk(
     body: UploadApkBase64Request,
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     try:
         raw_bytes = base64.b64decode(body.content_base64, validate=True)
@@ -129,7 +175,17 @@ async def admin_upload_mobile_apk(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return _release_dto(rel)
+
+    storage = ObjectStorageAdapter(settings)
+    if storage.active_backend != "local":
+        storage.put_bytes(
+            object_key=f"apk/{rel.id}-{rel.file_name}",
+            raw_bytes=raw_bytes,
+            content_type="application/vnd.android.package-archive",
+        )
+    if sf is not None:
+        rel = await PostgresV3OrchestratorRepository(sf).upsert_mobile_release(rel)
+    return _release_dto(rel, storage=storage)
 
 
 @mobile_releases_router.post("/admin/mobile/releases/upload-binary", status_code=status.HTTP_201_CREATED)
@@ -143,6 +199,8 @@ async def admin_upload_mobile_apk_binary(
     publish_now: bool = True,
     mark_recommended: bool = True,
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     raw_bytes = await request.body()
     try:
@@ -161,7 +219,17 @@ async def admin_upload_mobile_apk_binary(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return _release_dto(rel)
+
+    storage = ObjectStorageAdapter(settings)
+    if storage.active_backend != "local":
+        storage.put_bytes(
+            object_key=f"apk/{rel.id}-{rel.file_name}",
+            raw_bytes=raw_bytes,
+            content_type="application/vnd.android.package-archive",
+        )
+    if sf is not None:
+        rel = await PostgresV3OrchestratorRepository(sf).upsert_mobile_release(rel)
+    return _release_dto(rel, storage=storage)
 
 
 class UpdateMobileReleaseRequest(BaseModel):
@@ -175,6 +243,8 @@ async def admin_update_mobile_release(
     release_id: str,
     body: UpdateMobileReleaseRequest,
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     try:
         rel = mobile_releases_service.admin_update_release(
@@ -188,4 +258,6 @@ async def admin_update_mobile_release(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return _release_dto(rel)
+    if sf is not None:
+        rel = await PostgresV3OrchestratorRepository(sf).upsert_mobile_release(rel)
+    return _release_dto(rel, storage=ObjectStorageAdapter(settings))

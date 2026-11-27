@@ -117,4 +117,14 @@ export const UI_I18N: Record<LocaleCode, UiDictionary> = {
     jurisdictionNotice: "Regras fiscais, crédito e fontes oficiais isoladas por jurisdição nacional.",
     legalNote: "Informação geral indicativa — não substitui aconselhamento jurídico ou fiscal oficial.",
   },
+  "en-GB": {
+    brandTagline: "People first. Technology empowering the real estate advisor.",
+    publicSpace: "Private Client Space",
+    proSpace: "Pro SaaS Workspace",
+    simulators: "Calculators",
+    newsHub: "News",
+    websiteNav: "Website",
+    jurisdictionNotice: "Tax rules, credit limits and official sources isolated per national jurisdiction.",
+    legalNote: "General indicative information — does not replace official legal or tax advice.",
+  },
 };

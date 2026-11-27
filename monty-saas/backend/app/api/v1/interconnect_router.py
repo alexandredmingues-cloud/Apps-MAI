@@ -7,12 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.v1.crm_router import _crm, _leads_service
-from app.api.v1.deps import get_current_tenant, get_db_session_factory, require_permission
+from app.api.v1.deps import get_current_tenant, get_db_session_factory, get_settings, require_permission
 from app.api.v1.legal_agents_router import _agents_service
 from app.api.v1.marketplace_router import _market
 from app.api.v1.portfolio_router import _portfolio_service
+from app.core.config import Settings
 from app.core.rbac import Permission, TenantContext
+from app.core.storage import ObjectStorageAdapter
 from app.db.postgres_interconnections_repository import PostgresInterconnectionsRepository
+from app.db.postgres_v3_orchestrator_repository import PostgresV3OrchestratorRepository, is_valid_uuid
 from app.domain.interconnections_service import interconnections_service
 
 interconnect_router = APIRouter(tags=["Interconnexions, Portail Particulier & Gouvernance"])
@@ -207,6 +210,7 @@ async def remove_portal_favorite(
 @interconnect_router.get("/portal/documents")
 async def list_portal_documents(
     ctx: TenantContext = Depends(get_current_tenant),
+    settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     _require_portal_or_pro(ctx)
@@ -214,7 +218,15 @@ async def list_portal_documents(
         docs = await PostgresInterconnectionsRepository(sf).list_client_documents(ctx)
     else:
         docs = interconnections_service.list_client_documents(ctx)
-    return {"count": len(docs), "documents": [d.__dict__ for d in docs]}
+    storage = ObjectStorageAdapter(settings)
+    enriched: list[dict[str, Any]] = []
+    for d in docs:
+        item = dict(d.__dict__)
+        info = storage.issue_signed_url(object_key=f"portal/{ctx.agency_id}/{d.id}-{d.file_name}", method="GET")
+        item["storage_backend"] = info.backend
+        item["signed_url"] = info.signed_url
+        enriched.append(item)
+    return {"count": len(enriched), "documents": enriched}
 
 
 class AddClientDocumentRequest(BaseModel):
@@ -230,6 +242,7 @@ class AddClientDocumentRequest(BaseModel):
 async def add_portal_document(
     body: AddClientDocumentRequest,
     ctx: TenantContext = Depends(get_current_tenant),
+    settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     _require_portal_or_pro(ctx)
@@ -256,7 +269,12 @@ async def add_portal_document(
             )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return doc.__dict__
+    storage = ObjectStorageAdapter(settings)
+    info = storage.issue_signed_url(object_key=f"portal/{ctx.agency_id}/{doc.id}-{doc.file_name}", method="PUT")
+    out = dict(doc.__dict__)
+    out["storage_backend"] = info.backend
+    out["upload_signed_url"] = info.signed_url
+    return out
 
 
 @interconnect_router.get("/portal/seller-listings")
@@ -417,16 +435,24 @@ async def update_agency_feature_flags(
 @interconnect_router.get("/module-flags/active")
 async def get_active_module_flags(
     agency_id: str = Query(default="agency-france-reseau", max_length=128),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
-    flags = interconnections_service.list_module_flags(agency_id)
+    if sf is not None and is_valid_uuid(agency_id):
+        flags = await PostgresV3OrchestratorRepository(sf).list_module_flags(agency_id)
+    else:
+        flags = interconnections_service.list_module_flags(agency_id)
     return {"agency_id": agency_id, "modules": [f.__dict__ for f in flags]}
 
 
 @interconnect_router.get("/admin/module-flags")
 async def admin_list_module_flags(
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
-    flags = interconnections_service.list_module_flags(ctx.agency_id)
+    if sf is not None and is_valid_uuid(ctx.agency_id):
+        flags = await PostgresV3OrchestratorRepository(sf).list_module_flags(ctx.agency_id, ctx)
+    else:
+        flags = interconnections_service.list_module_flags(ctx.agency_id)
     return {"count": len(flags), "modules": [f.__dict__ for f in flags]}
 
 
@@ -440,14 +466,23 @@ async def admin_update_module_flag(
     module_key: str,
     body: UpdateModuleFlagRequest,
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     try:
-        updated = interconnections_service.update_module_flag(
-            ctx,
-            module_key=module_key,
-            status=body.status,
-            visible=body.visible,
-        )
+        if sf is not None and is_valid_uuid(ctx.agency_id):
+            updated = await PostgresV3OrchestratorRepository(sf).upsert_module_flag(
+                ctx,
+                module_key=module_key,
+                status=body.status,
+                visible=body.visible,
+            )
+        else:
+            updated = interconnections_service.update_module_flag(
+                ctx,
+                module_key=module_key,
+                status=body.status,
+                visible=body.visible,
+            )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
@@ -458,8 +493,12 @@ async def admin_update_module_flag(
 @interconnect_router.post("/admin/module-flags/restore")
 async def admin_restore_module_flags(
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
-    flags = interconnections_service.restore_default_module_flags(ctx)
+    if sf is not None and is_valid_uuid(ctx.agency_id):
+        flags = await PostgresV3OrchestratorRepository(sf).restore_default_module_flags(ctx)
+    else:
+        flags = interconnections_service.restore_default_module_flags(ctx)
     return {"count": len(flags), "modules": [f.__dict__ for f in flags]}
 
 

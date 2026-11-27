@@ -3,10 +3,14 @@ services:
     name: monty-saas-api
     runtime: python
     rootDir: monty-saas/backend
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: sh -c 'if [ -n "$DATABASE_URL" ]; then alembic upgrade head; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
     healthCheckPath: /api/v1/health
+    disk:
+      name: monty-storage
+      mountPath: /opt/render/project/src/monty-saas/backend/storage
+      sizeGB: 2
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -18,12 +22,42 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         value: https://apps-mai-1.onrender.com,https://monty-site.onrender.com
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL_SONNET
+        value: claude-sonnet-4-6
+      - key: ANTHROPIC_MODEL_HAIKU
+        value: claude-haiku-4-5
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: monty-vault
+      - key: PLATFORM_ADMIN_USER_IDS
+        sync: false
+      - key: LOCAL_LLM_ALLOW_PRIVATE_HOSTS
+        value: "false"
 
   - type: web
     name: monty-site
     runtime: node
     rootDir: monty-saas/frontend
-    plan: free
+    plan: starter
     buildCommand: npm install && npm run build
     startCommand: npm run start -- --port ${PORT:-3000}
     envVars:

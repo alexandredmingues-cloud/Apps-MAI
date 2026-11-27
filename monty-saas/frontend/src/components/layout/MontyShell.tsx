@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { SUPPORTED_LOCALES, useMontyLocale, type UiLocaleCode } from "@/lib/i18n";
 import type { ModuleFeatureFlag, MontyRole, NavSectionKey } from "@/lib/types";
 
 interface NavItem {
@@ -69,6 +70,7 @@ export function MontyShell({
   children,
 }: MontyShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { locale, setLocale, t } = useMontyLocale();
 
   const flagMap = new Map((activeModuleFlags ?? []).map((f) => [f.module_key, f]));
   const visibleNavItems = NAV_ITEMS.filter((item) => {
@@ -97,12 +99,28 @@ export function MontyShell({
           </div>
           <div className="mt-4 rounded-xl bg-emeraldMid/90 border border-goldAntique/30 px-3 py-2 text-xs">
             <div className="flex items-center justify-between text-goldChampagne">
-              <span className="font-semibold">Tenant actif</span>
+              <span className="font-semibold">{t.activeTenant}</span>
               <span className="inline-flex items-center gap-1 rounded bg-emeraldSurface px-1.5 py-0.5 text-[10px] font-semibold">
                 <ShieldCheck className="w-3 h-3" /> {role}
               </span>
             </div>
             <p className="mt-1 text-ivoryWarm/80 truncate">{agencyId}</p>
+            <div className="mt-2 flex items-center gap-1">
+              {SUPPORTED_LOCALES.map((loc) => (
+                <button
+                  key={loc.code}
+                  type="button"
+                  onClick={() => setLocale(loc.code as UiLocaleCode)}
+                  className={`flex-1 py-0.5 rounded text-[10px] font-bold transition ${
+                    locale === loc.code
+                      ? "bg-goldAntique text-emeraldDeep"
+                      : "bg-emeraldDeep/60 text-ivoryWarm/75 hover:text-goldChampagne"
+                  }`}
+                >
+                  {loc.short}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -154,27 +172,27 @@ export function MontyShell({
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-goldAntique text-emeraldDeep font-bold hover:bg-goldChampagne transition"
           >
             <Download className="w-4 h-4 shrink-0" />
-            <span>Télécharger l&apos;application</span>
+            <span>{t.navDownloadFull}</span>
           </Link>
           <Link
             href="/site"
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-goldAntique/15 border border-goldAntique/40 text-goldChampagne font-semibold hover:bg-goldAntique/25 transition"
           >
             <Globe2 className="w-4 h-4 shrink-0" />
-            <span>Site Web Public</span>
+            <span>{t.navPublicSite}</span>
           </Link>
           <div className="grid grid-cols-2 gap-1.5">
             <Link
               href="/actualites"
               className="text-center px-2 py-1.5 rounded-lg bg-emeraldMid/70 text-ivoryWarm/85 hover:text-goldChampagne"
             >
-              Actus Public
+              {t.navPublicNewsShort}
             </Link>
             <Link
               href="/simulateurs"
               className="text-center px-2 py-1.5 rounded-lg bg-emeraldMid/70 text-ivoryWarm/85 hover:text-goldChampagne"
             >
-              Simulateurs
+              {t.navSimulatorsShort}
             </Link>
           </div>
         </div>

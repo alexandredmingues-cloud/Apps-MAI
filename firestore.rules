@@ -59,9 +59,13 @@ service cloud.firestore {
              get(/databases/$(database)/documents/agencies/$(agencyId)/members/$(request.auth.uid)).data.role in ['DIRECTOR', 'ADMIN'];
     }
 
-    // Claim custom `staff` posé uniquement via Admin SDK (modération des annonces).
+    // Claims custom posés via Admin SDK : `staff` (modération) ou `advisor` (conseiller/agence certifié).
     function isStaff() {
       return isSignedIn() && request.auth.token.get('staff', false) == true;
+    }
+
+    function isAdvisorOrStaff() {
+      return isStaff() || (isSignedIn() && request.auth.token.get('advisor', false) == true);
     }
 
     function agencyDirectorUids(agencyId) {
@@ -72,11 +76,13 @@ service cloud.firestore {
       return getAfter(/databases/$(database)/documents/agencies/$(agencyId)).data.directorUids;
     }
 
-    // Une annonce de Particulier ne peut pas être PUBLIEE sans validation staff.
-    function propertyPublicationAllowed(d) {
+    // Une annonce AGENCE exige un claim serveur `advisor` ou `staff` ;
+    // une annonce PARTICULIER ne peut pas être PUBLIEE sans validation `staff`.
+    function propertyPublicationAllowed() {
+      let d = request.resource.data;
       return request.auth.token.get('staff', false) == true ||
-             d.get('publisherType', 'AGENCE') != 'PARTICULIER' ||
-             d.get('publicationStatus', 'PUBLIEE') != 'PUBLIEE';
+             (d.get('publisherType', 'AGENCE') == 'AGENCE' && request.auth.token.get('advisor', false) == true) ||
+             (d.get('publisherType', 'AGENCE') == 'PARTICULIER' && d.get('publicationStatus', 'PUBLIEE') != 'PUBLIEE');
     }
 
     function isValidClient(d) {
@@ -126,79 +132,38 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.title is string && d.title.size() >= 1 && d.title.size() <= 160 &&
              d.sector is string && d.sector.size() >= 1 && d.sector.size() <= 100 &&
-             d.get('address', '') is string &&
              d.type is string && d.type.size() >= 1 && d.type.size() <= 60 &&
              d.price is int && d.price >= 10000 && d.price <= 50000000 &&
              d.surface is int && d.surface >= 5 && d.surface <= 5000 &&
-             (!('rooms' in d) || (d.rooms is int && d.rooms >= 1 && d.rooms <= 50)) &&
+             d.get('rooms', 1) is int && d.get('rooms', 1) >= 1 && d.get('rooms', 1) <= 50 &&
              d.bedrooms is int && d.bedrooms >= 0 && d.bedrooms <= 30 &&
-             d.get('floor', '') is string &&
              d.dpe is string && d.dpe.size() >= 1 && d.dpe.size() <= 5 &&
-             d.get('ges', '') is string &&
              d.createdAt is timestamp && d.createdAt <= request.time &&
              d.updatedAt is timestamp && d.updatedAt <= request.time;
     }
 
-    function isValidPropertyDetails() {
-      let d = request.resource.data;
-      return d.get('monthlyCharges', 0) is int &&
-             d.get('propertyTax', 0) is int &&
-             d.get('estimatedWorks', 0) is int &&
-             d.get('listingStatus', '') is string &&
-             d.get('source', '') is string &&
-             d.get('exterior', '') is string &&
-             d.get('parking', '') is string &&
-             d.get('environment', '') is string &&
-             d.get('transports', '') is string &&
-             d.get('schoolsShops', '') is string &&
-             d.get('generalCondition', '') is string &&
-             (!('strengths' in d) || (d.strengths is list && d.strengths.size() <= 15)) &&
-             (!('weaknesses' in d) || (d.weaknesses is list && d.weaknesses.size() <= 15)) &&
-             (!('description' in d) || (d.description is string && d.description.size() <= 1500));
-    }
-
-    function isValidPropertyMandateDvf() {
-      let d = request.resource.data;
-      return d.get('mandateRef', '') is string &&
-             d.get('mandateType', '') is string &&
-             d.get('mandateDate', '') is string &&
-             (!('agencyFeePercent' in d) || (d.agencyFeePercent is number && d.agencyFeePercent >= 0 && d.agencyFeePercent <= 25)) &&
-             (!('listingUrl' in d) || (d.listingUrl is string && d.listingUrl.size() <= 500)) &&
-             d.get('listingPortal', '') is string &&
-             d.get('dvfEstimatedEuro', 0) is int &&
-             d.get('dvfEstimatedLowEuro', 0) is int &&
-             d.get('dvfEstimatedHighEuro', 0) is int &&
-             (!('dvfScore' in d) || (d.dvfScore is int && d.dvfScore >= 0 && d.dvfScore <= 100)) &&
-             d.get('dvfCriteriaSummary', '') is string &&
-             (!('advisorValuationNotes' in d) || (d.advisorValuationNotes is string && d.advisorValuationNotes.size() <= 1500));
-    }
-
-    function isValidPropertyPublication() {
+    function isValidPropertyBounded() {
       let d = request.resource.data;
       return d.get('publisherType', 'AGENCE') in ['AGENCE', 'PARTICULIER'] &&
              d.get('publicationStatus', 'PUBLIEE') in ['BROUILLON', 'A_VERIFIER', 'PUBLIEE'] &&
-             d.get('publisherName', '') is string &&
+             d.get('agencyFeePercent', 0) is number && d.get('agencyFeePercent', 0) >= 0 && d.get('agencyFeePercent', 0) <= 25 &&
+             d.get('listingUrl', '') is string && d.get('listingUrl', '').size() <= 500 &&
+             d.get('dvfScore', 0) is int && d.get('dvfScore', 0) >= 0 && d.get('dvfScore', 0) <= 100 &&
+             d.get('description', '') is string && d.get('description', '').size() <= 1500 &&
+             d.get('advisorValuationNotes', '') is string && d.get('advisorValuationNotes', '').size() <= 1500 &&
+             d.get('strengths', []) is list && d.get('strengths', []).size() <= 15 &&
+             d.get('weaknesses', []) is list && d.get('weaknesses', []).size() <= 15 &&
+             d.get('photoVaultPaths', []) is list && d.get('photoVaultPaths', []).size() <= 6 &&
+             d.get('photoCount', 0) is int && d.get('photoCount', 0) >= 0 && d.get('photoCount', 0) <= 6 &&
+             d.get('latitude', 0) is number && d.get('latitude', 0) >= -90 && d.get('latitude', 0) <= 90 &&
+             d.get('longitude', 0) is number && d.get('longitude', 0) >= -180 && d.get('longitude', 0) <= 180 &&
              d.get('hideExactAddress', false) is bool &&
              d.get('ownerConfirmedAccuracy', true) is bool &&
-             d.get('legalPublicationConsent', true) is bool &&
-             (!('latitude' in d) || (d.latitude is number && d.latitude >= -90 && d.latitude <= 90)) &&
-             (!('longitude' in d) || (d.longitude is number && d.longitude >= -180 && d.longitude <= 180)) &&
-             (!('photoVaultPaths' in d) || (d.photoVaultPaths is list && d.photoVaultPaths.size() <= 6)) &&
-             d.get('photoCount', 0) in [0, 1, 2, 3, 4, 5, 6] &&
-             d.get('saleDelayMinDays', 0) is int &&
-             d.get('saleDelayLikelyDays', 0) is int &&
-             d.get('saleDelayMaxDays', 0) is int &&
-             d.get('saleDelayConfidence', '') is string &&
-             d.get('saleDelaySummary', '') is string &&
-             d.get('cadastralRef', '') is string &&
-             d.get('pluZone', '') is string;
+             d.get('legalPublicationConsent', true) is bool;
     }
 
     function isValidProperty() {
-      return isValidPropertyCore() &&
-             isValidPropertyPublication() &&
-             isValidPropertyMandateDvf() &&
-             isValidPropertyDetails();
+      return isValidPropertyCore() && isValidPropertyBounded();
     }
 
     function isValidVisit(data) {
@@ -363,6 +328,28 @@ service cloud.firestore {
              d.updatedAt is timestamp && d.updatedAt <= request.time;
     }
 
+    function isPendingBuyerOrder(o) {
+      return o is map && o.get('status', '') == 'PENDING_PAYMENT';
+    }
+
+    // Le statut PAID/DELIVERED du pack vendeur ne peut jamais être écrit côté client sans validation serveur/staff.
+    function sellerBuyerOrdersAllowedOnCreate(d) {
+      return isStaff() || d.get('buyerOrders', []).size() == 0;
+    }
+
+    function sellerBuyerOrdersAllowedOnUpdate(nextData, prevData) {
+      return isStaff() ||
+             nextData.get('buyerOrders', []) == prevData.get('buyerOrders', []) ||
+             (
+               nextData.get('buyerOrders', []).size() == prevData.get('buyerOrders', []).size() + 1 &&
+               isPendingBuyerOrder(nextData.buyerOrders[0]) &&
+               (
+                 prevData.get('buyerOrders', []).size() == 0 ||
+                 nextData.buyerOrders[1:nextData.buyerOrders.size()] == prevData.buyerOrders
+               )
+             );
+    }
+
     function isValidAgencyAuditLog(data) {
       return isBoundedString(data.agencyId, 1, 128) &&
              isBoundedString(data.actorUid, 1, 128) &&
@@ -447,7 +434,7 @@ service cloud.firestore {
         allow create: if isOwner(userId) &&
                          isValidId(propertyId) &&
                          incoming().userId == request.auth.uid &&
-                         propertyPublicationAllowed(incoming()) &&
+                         propertyPublicationAllowed() &&
                          incoming().keys().hasOnly([
                            'userId', 'title', 'sector', 'address', 'type', 'price', 'surface', 'rooms',
                            'bedrooms', 'floor', 'dpe', 'ges', 'monthlyCharges', 'propertyTax', 'estimatedWorks',
@@ -465,38 +452,42 @@ service cloud.firestore {
                            'createdAt', 'updatedAt'
                          ]) &&
                          isValidProperty();
-        allow update: if isOwner(userId) &&
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
                          isValidId(propertyId) &&
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt &&
-                         propertyPublicationAllowed(incoming()) &&
-                         incoming().get('publisherType', 'AGENCE') == existing().get('publisherType', 'AGENCE') &&
-                         incoming().keys().hasOnly([
-                           'userId', 'title', 'sector', 'address', 'type', 'price', 'surface', 'rooms',
-                           'bedrooms', 'floor', 'dpe', 'ges', 'monthlyCharges', 'propertyTax', 'estimatedWorks',
-                           'listingStatus', 'source', 'exterior', 'parking', 'environment', 'transports',
-                           'schoolsShops', 'generalCondition', 'strengths', 'weaknesses', 'description',
-                           'mandateRef', 'mandateType', 'mandateDate', 'agencyFeePercent', 'listingUrl',
-                           'listingPortal', 'dvfEstimatedEuro', 'dvfEstimatedLowEuro', 'dvfEstimatedHighEuro',
-                           'dvfScore', 'dvfCriteriaSummary', 'advisorValuationNotes',
-                           'latitude', 'longitude',
-                           'publisherType', 'publisherName', 'publicationStatus',
-                           'hideExactAddress', 'ownerConfirmedAccuracy', 'legalPublicationConsent',
-                           'photoVaultPaths', 'photoCount',
-                           'saleDelayMinDays', 'saleDelayLikelyDays', 'saleDelayMaxDays',
-                           'saleDelayConfidence', 'saleDelaySummary', 'cadastralRef', 'pluZone',
-                           'createdAt', 'updatedAt'
-                         ]) &&
-                         isValidProperty();
-        // Modération: le staff (autre UID que le propriétaire) ne peut changer que le statut de publication.
-        allow update: if isStaff() &&
-                         isValidId(propertyId) &&
-                         incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['publicationStatus', 'listingStatus', 'updatedAt']) &&
-                         incoming().get('publicationStatus', 'PUBLIEE') in ['BROUILLON', 'A_VERIFIER', 'PUBLIEE'] &&
-                         incoming().get('listingStatus', '') is string &&
-                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time;
+                         (
+                           (
+                             request.auth.uid == userId &&
+                             propertyPublicationAllowed() &&
+                             incoming().get('publisherType', 'AGENCE') == existing().get('publisherType', 'AGENCE') &&
+                             incoming().keys().hasOnly([
+                               'userId', 'title', 'sector', 'address', 'type', 'price', 'surface', 'rooms',
+                               'bedrooms', 'floor', 'dpe', 'ges', 'monthlyCharges', 'propertyTax', 'estimatedWorks',
+                               'listingStatus', 'source', 'exterior', 'parking', 'environment', 'transports',
+                               'schoolsShops', 'generalCondition', 'strengths', 'weaknesses', 'description',
+                               'mandateRef', 'mandateType', 'mandateDate', 'agencyFeePercent', 'listingUrl',
+                               'listingPortal', 'dvfEstimatedEuro', 'dvfEstimatedLowEuro', 'dvfEstimatedHighEuro',
+                               'dvfScore', 'dvfCriteriaSummary', 'advisorValuationNotes',
+                               'latitude', 'longitude',
+                               'publisherType', 'publisherName', 'publicationStatus',
+                               'hideExactAddress', 'ownerConfirmedAccuracy', 'legalPublicationConsent',
+                               'photoVaultPaths', 'photoCount',
+                               'saleDelayMinDays', 'saleDelayLikelyDays', 'saleDelayMaxDays',
+                               'saleDelayConfidence', 'saleDelaySummary', 'cadastralRef', 'pluZone',
+                               'createdAt', 'updatedAt'
+                             ]) &&
+                             isValidProperty()
+                           ) ||
+                           (
+                             request.auth.token.get('staff', false) == true &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['publicationStatus', 'listingStatus', 'updatedAt']) &&
+                             incoming().get('publicationStatus', 'PUBLIEE') in ['BROUILLON', 'A_VERIFIER', 'PUBLIEE'] &&
+                             incoming().get('listingStatus', '') is string &&
+                             incoming().updatedAt is timestamp && incoming().updatedAt <= request.time
+                           )
+                         );
         allow delete: if isOwner(userId) && isValidId(propertyId);
       }
 
@@ -594,10 +585,12 @@ service cloud.firestore {
                            'callbackRequests', 'rgpdConsentGranted', 'rgpdConsentDate',
                            'createdAt', 'updatedAt'
                          ]) &&
+                         sellerBuyerOrdersAllowedOnCreate(request.resource.data) &&
                          isValidSellerDossier(request.resource.data);
         allow update: if isOwner(userId) &&
                          isValidId(dossierId) &&
                          isValidSellerDossier(request.resource.data) &&
+                         sellerBuyerOrdersAllowedOnUpdate(request.resource.data, resource.data) &&
                          request.resource.data.userId == resource.data.userId &&
                          request.resource.data.createdAt == resource.data.createdAt &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -609,6 +602,12 @@ service cloud.firestore {
                            'executiveSummary', 'documents', 'buyerOrders', 'dvfValuation',
                            'callbackRequests', 'rgpdConsentGranted', 'rgpdConsentDate', 'updatedAt'
                          ]);
+        allow update: if isStaff() &&
+                         isValidId(dossierId) &&
+                         isValidSellerDossier(request.resource.data) &&
+                         request.resource.data.userId == resource.data.userId &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerOrders', 'updatedAt']);
         allow delete: if isOwner(userId) && isValidId(dossierId);
       }
     }

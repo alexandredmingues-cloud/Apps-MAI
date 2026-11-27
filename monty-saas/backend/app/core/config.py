@@ -34,8 +34,8 @@ class Settings:
     enable_dev_auth: bool = False
     sentry_dsn: str = ""
     anthropic_api_key: str = ""
-    anthropic_model_sonnet: str = "claude-3-7-sonnet-latest"
-    anthropic_model_haiku: str = "claude-3-5-haiku-latest"
+    anthropic_model_sonnet: str = "claude-sonnet-4-6"
+    anthropic_model_haiku: str = "claude-haiku-4-5"
     whatsapp_app_secret: str = ""
     whatsapp_verify_token: str = ""
     ai_daily_budget_euro: float = 15.0
@@ -56,9 +56,18 @@ class Settings:
     local_llm_base_url: str = ""
     local_llm_model: str = "qwen2.5:7b-instruct"
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     mistral_api_key: str = ""
     deepseek_api_key: str = ""
     monty_ai_confidential_default: bool = False
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_storage_bucket: str = "monty-vault"
+    s3_region: str = "eu-west-3"
+    seller_pack_price_euro: int = 29
+    firebase_project_id: str = ""
+    platform_admin_user_ids: tuple[str, ...] = ()
+    local_llm_allow_private_hosts: bool = False
 
     @property
     def effective_anthropic_keys(self) -> list[str]:
@@ -95,6 +104,8 @@ def load_settings() -> Settings:
         origins = [o for o in origins if o != "*"]
     raw_anthropic_keys = os.environ.get("ANTHROPIC_API_KEYS", "")
     anthropic_keys = tuple(k.strip() for k in raw_anthropic_keys.split(",") if k.strip())
+    raw_platform_admins = os.environ.get("PLATFORM_ADMIN_USER_IDS", "")
+    platform_admins = tuple(u.strip() for u in raw_platform_admins.split(",") if u.strip())
     return Settings(
         environment=env,
         database_url=os.environ.get("DATABASE_URL", "").strip(),
@@ -114,8 +125,8 @@ def load_settings() -> Settings:
         enable_dev_auth=_parse_bool(os.environ.get("ENABLE_DEV_AUTH"), default=False),
         sentry_dsn=os.environ.get("SENTRY_DSN", "").strip(),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
-        anthropic_model_sonnet=os.environ.get("ANTHROPIC_MODEL_SONNET", "claude-3-7-sonnet-latest").strip(),
-        anthropic_model_haiku=os.environ.get("ANTHROPIC_MODEL_HAIKU", "claude-3-5-haiku-latest").strip(),
+        anthropic_model_sonnet=os.environ.get("ANTHROPIC_MODEL_SONNET", "claude-sonnet-4-6").strip(),
+        anthropic_model_haiku=os.environ.get("ANTHROPIC_MODEL_HAIKU", "claude-haiku-4-5").strip(),
         whatsapp_app_secret=os.environ.get("WHATSAPP_APP_SECRET", "").strip(),
         whatsapp_verify_token=os.environ.get("WHATSAPP_VERIFY_TOKEN", "").strip(),
         ai_daily_budget_euro=float(os.environ.get("AI_DAILY_BUDGET_EURO", "15.0")),
@@ -136,7 +147,16 @@ def load_settings() -> Settings:
         local_llm_base_url=(os.environ.get("OLLAMA_BASE_URL") or os.environ.get("LOCAL_LLM_BASE_URL") or "").strip(),
         local_llm_model=(os.environ.get("LOCAL_LLM_MODEL") or "qwen2.5:7b-instruct").strip(),
         gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
+        gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip(),
         mistral_api_key=os.environ.get("MISTRAL_API_KEY", "").strip(),
         deepseek_api_key=os.environ.get("DEEPSEEK_API_KEY", "").strip(),
         monty_ai_confidential_default=_parse_bool(os.environ.get("MONTY_AI_CONFIDENTIAL_DEFAULT"), default=False),
+        supabase_url=os.environ.get("SUPABASE_URL", "").strip().rstrip("/"),
+        supabase_service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip(),
+        supabase_storage_bucket=os.environ.get("SUPABASE_STORAGE_BUCKET", "monty-vault").strip() or "monty-vault",
+        s3_region=os.environ.get("S3_REGION", "eu-west-3").strip() or "eu-west-3",
+        seller_pack_price_euro=int(os.environ.get("SELLER_PACK_PRICE_EURO", "29")),
+        firebase_project_id=os.environ.get("FIREBASE_PROJECT_ID", "").strip(),
+        platform_admin_user_ids=platform_admins,
+        local_llm_allow_private_hosts=_parse_bool(os.environ.get("LOCAL_LLM_ALLOW_PRIVATE_HOSTS"), default=False),
     )

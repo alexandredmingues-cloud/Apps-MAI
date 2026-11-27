@@ -7,7 +7,7 @@ from app.core.rbac import MontyRole, Permission, TenantContext
 from app.core.security import SlidingWindowRateLimiter, decode_access_token
 from app.db.session import get_session_factory
 
-_rate_limiter = SlidingWindowRateLimiter()
+_rate_limiter = SlidingWindowRateLimiter(redis_url=load_settings().redis_url)
 
 
 def get_settings() -> Settings:

@@ -165,12 +165,86 @@ class RateLimitDecision:
 
 
 class SlidingWindowRateLimiter:
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+    """
+    Rate limiter à fenêtre glissante distribué sur Redis (ZREMRANGEBYSCORE/ZCARD/ZADD/EXPIRE)
+    lorsqu'un `redis_url` ou `redis_client` est configuré, avec bascule transparente en mémoire
+    lorsque Redis est absent ou temporairement injoignable.
+    """
+
+    def __init__(
+        self,
+        clock: Callable[[], float] = time.monotonic,
+        *,
+        redis_url: str = "",
+        redis_client: object | None = None,
+        wall_clock: Callable[[], float] = time.time,
+        key_prefix: str = "monty:rl:",
+    ) -> None:
         self._clock = clock
+        self._wall_clock = wall_clock
+        self._redis_url = redis_url.strip()
+        self._redis_client = redis_client
+        self._redis_init_attempted = redis_client is not None
+        self._key_prefix = key_prefix
         self._buckets: dict[str, deque[float]] = {}
         self._lock = Lock()
 
+    def _resolve_redis_client(self) -> object | None:
+        if self._redis_client is not None:
+            return self._redis_client
+        if self._redis_init_attempted:
+            return None
+        url = self._redis_url or __import__("os").environ.get("REDIS_URL", "").strip()
+        self._redis_init_attempted = True
+        if not url:
+            return None
+        try:
+            import redis  # type: ignore
+
+            self._redis_client = redis.Redis.from_url(
+                url,
+                socket_connect_timeout=1.5,
+                socket_timeout=1.5,
+                decode_responses=True,
+            )
+            return self._redis_client
+        except Exception:
+            return None
+
+    def _check_redis(self, client: object, key: str, max_requests: int, window_seconds: int) -> RateLimitDecision | None:
+        now = float(self._wall_clock())
+        cutoff = now - float(window_seconds)
+        rkey = f"{self._key_prefix}{key}"
+        member = f"{now:.6f}:{secrets.token_hex(4)}"
+        try:
+            pipe = client.pipeline()  # type: ignore[attr-defined]
+            pipe.zremrangebyscore(rkey, "-inf", cutoff)
+            pipe.zcard(rkey)
+            pipe.zadd(rkey, {member: now})
+            pipe.expire(rkey, max(1, int(window_seconds) + 1))
+            results = pipe.execute()
+            prior_count = int(results[1])
+            if prior_count >= max_requests:
+                # Retire le jeton ajouté à tort et calcule le retry_after depuis la plus ancienne entrée
+                try:
+                    client.zrem(rkey, member)  # type: ignore[attr-defined]
+                    oldest = client.zrange(rkey, 0, 0, withscores=True)  # type: ignore[attr-defined]
+                    oldest_ts = float(oldest[0][1]) if oldest else now
+                except Exception:
+                    oldest_ts = now
+                retry_after = max(1, int((oldest_ts + window_seconds) - now))
+                return RateLimitDecision(allowed=False, remaining=0, retry_after_seconds=retry_after)
+            return RateLimitDecision(allowed=True, remaining=max(0, max_requests - (prior_count + 1)))
+        except Exception:
+            return None
+
     def check_and_consume(self, key: str, max_requests: int, window_seconds: int) -> RateLimitDecision:
+        client = self._resolve_redis_client()
+        if client is not None:
+            decision = self._check_redis(client, key, max_requests, window_seconds)
+            if decision is not None:
+                return decision
+
         now = self._clock()
         cutoff = now - window_seconds
         with self._lock:

@@ -412,23 +412,36 @@ class SellerViewModel(
         buyerClient: ClientDossier,
         buyerEmailOverride: String,
         paymentMethodLabel: String,
-        markPaidImmediately: Boolean
+        markPaidImmediately: Boolean,
+        apiClient: com.example.data.remote.MontySaasApiClient = com.example.data.remote.MontySaasApiClient()
     ) {
         viewModelScope.launch {
+            val cleanEmail = buyerEmailOverride.ifBlank { buyerClient.email }
             repository.recordBuyerOrder(
                 userId = currentUserId,
                 dossier = dossier,
                 property = property,
                 buyerClientId = buyerClient.id,
                 buyerName = buyerClient.name,
-                buyerEmail = buyerEmailOverride.ifBlank { buyerClient.email },
+                buyerEmail = cleanEmail,
                 paymentMethodLabel = paymentMethodLabel,
-                markPaidImmediately = markPaidImmediately
-            ).onSuccess {
-                if (markPaidImmediately) {
-                    onNotify("Pack complet débloqué ! Vous pouvez consulter et télécharger les documents.")
+                markPaidImmediately = false
+            ).onSuccess { saved ->
+                val orderId = saved.buyerOrders.firstOrNull { it.buyerClientId == buyerClient.id }?.orderId.orEmpty()
+                if (markPaidImmediately && orderId.isNotBlank() && cleanEmail.contains("@")) {
+                    val checkout = apiClient.createSellerPackCheckout(
+                        dossierId = dossier.id,
+                        propertyId = dossier.propertyId,
+                        orderId = orderId,
+                        buyerEmail = cleanEmail
+                    )
+                    if (checkout.isSuccess && !checkout.getOrNull()?.checkoutUrl.isNullOrBlank()) {
+                        onNotify("Session Stripe prête pour le Pack Vendeur. Le déblocage s'effectue automatiquement après paiement.")
+                    } else {
+                        onNotify("Commande enregistrée (PENDING_PAYMENT). Finalisez le paiement via Stripe pour débloquer le pack.")
+                    }
                 } else {
-                    onNotify("Demande enregistrée. Le conseiller validera l'envoi dès réception du règlement.")
+                    onNotify("Commande enregistrée (en attente de confirmation Stripe serveur).")
                 }
             }.onFailure {
                 onNotify(it.localizedMessage ?: "Commande refusée.")
@@ -443,7 +456,7 @@ class SellerViewModel(
     ) {
         viewModelScope.launch {
             repository.markOrderPaidAndDelivered(currentUserId, dossier, property, orderId)
-                .onSuccess { onNotify("Paiement confirmé — Pack débloqué pour l'acquéreur.") }
+                .onSuccess { onNotify("Paiement Stripe vérifié — Pack débloqué pour l'acquéreur.") }
                 .onFailure { onNotify(it.localizedMessage ?: "Action refusée.") }
         }
     }

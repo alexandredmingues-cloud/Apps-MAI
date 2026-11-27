@@ -14,10 +14,12 @@ from app.core.rbac import Permission, TenantContext
 from app.core.security import InputSanitizer, verify_stripe_webhook_signature
 from app.db.postgres_notaries_rnic_repository import PostgresNotariesRnicRepository
 from app.db.postgres_repositories import PostgresBillingRepository
+from app.db.postgres_v3_orchestrator_repository import PostgresV3OrchestratorRepository
 from app.domain.auth_and_billing import BillingService, SAAS_PLANS
 
 billing_router = APIRouter(prefix="/billing", tags=["Facturation & Abonnements Stripe"])
 _billing = BillingService()
+_seller_pack_orders: dict[str, dict] = {}
 
 
 @billing_router.get("/plans")
@@ -247,6 +249,164 @@ async def verify_rnic_pass_status(
     return {"active": active, "pass_token": pass_token}
 
 
+class SellerPackCheckoutRequest(BaseModel):
+    dossier_id: str = Field(min_length=2, max_length=128)
+    property_id: str = Field(default="", max_length=128)
+    order_id: str = Field(default="", max_length=96)
+    buyer_email: str = Field(min_length=5, max_length=160)
+    success_url: str
+    cancel_url: str
+
+
+@billing_router.post("/seller-pack/checkout")
+async def create_seller_pack_checkout(
+    body: SellerPackCheckoutRequest,
+    authorization: str | None = Header(default=None),
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    """
+    Crée une session Stripe Checkout serveur pour le Pack Vendeur (aucune confirmation client directe autorisée).
+    """
+    ctx = _resolve_optional_tenant(authorization, settings)
+    clean_email = InputSanitizer.sanitize_text(body.buyer_email, 160).lower()
+    if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adresse e-mail valide obligatoire.")
+
+    safe_success = InputSanitizer.sanitize_public_http_url(body.success_url)
+    safe_cancel = InputSanitizer.sanitize_public_http_url(body.cancel_url)
+    if not safe_success or not safe_cancel:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URLs success_url et cancel_url publiques HTTPS/HTTP valides obligatoires.",
+        )
+
+    order_id = InputSanitizer.sanitize_text(body.order_id, 96) or f"sp_{secrets.token_hex(8)}"
+    amount_euro = max(5, int(settings.seller_pack_price_euro))
+
+    if not settings.stripe_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="STRIPE_SECRET_KEY non configurée sur le serveur pour le Pack Vendeur.",
+        )
+
+    sep = "&" if "?" in safe_success else "?"
+    success_url = (
+        f"{safe_success}{sep}"
+        + urlencode({"seller_pack_order_id": order_id})
+        + "&seller_pack_session_id={CHECKOUT_SESSION_ID}"
+    )
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            "https://api.stripe.com/v1/checkout/sessions",
+            headers={"Authorization": f"Bearer {settings.stripe_secret_key}"},
+            data={
+                "mode": "payment",
+                "customer_email": clean_email,
+                "success_url": success_url,
+                "cancel_url": safe_cancel,
+                "line_items[0][price_data][currency]": "eur",
+                "line_items[0][price_data][unit_amount]": str(amount_euro * 100),
+                "line_items[0][price_data][product_data][name]": "Monty Immo — Pack Documents Vendeur Complet",
+                "line_items[0][quantity]": "1",
+                "metadata[order_type]": "SELLER_PACK",
+                "metadata[order_id]": order_id,
+                "metadata[dossier_id]": body.dossier_id,
+                "metadata[property_id]": body.property_id,
+                "metadata[buyer_user_id]": ctx.user_id if ctx else "",
+                "metadata[buyer_email]": clean_email,
+                "metadata[amount_euro]": str(amount_euro),
+            },
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Erreur Stripe Checkout Pack Vendeur ({resp.status_code}).",
+        )
+    data = resp.json()
+    session_id = str(data.get("id", ""))
+    if sf is not None:
+        await PostgresV3OrchestratorRepository(sf).create_seller_pack_order(
+            order_id=order_id,
+            dossier_id=body.dossier_id,
+            property_id=body.property_id,
+            buyer_user_id=ctx.user_id if ctx else "",
+            buyer_email=clean_email,
+            amount_euro=amount_euro,
+            stripe_session_id=session_id,
+        )
+    else:
+        _seller_pack_orders[order_id] = {
+            "order_id": order_id,
+            "dossier_id": body.dossier_id,
+            "property_id": body.property_id,
+            "buyer_user_id": ctx.user_id if ctx else "",
+            "buyer_email": clean_email,
+            "amount_euro": amount_euro,
+            "status": "PENDING_PAYMENT",
+            "stripe_session_id": session_id,
+        }
+    return {
+        "order_id": order_id,
+        "checkout_session_id": session_id,
+        "checkout_url": data.get("url", ""),
+        "amount_euro": amount_euro,
+        "status": "PENDING_PAYMENT",
+    }
+
+
+@billing_router.get("/seller-pack/verify")
+async def verify_seller_pack_order(
+    order_id: str = Query(min_length=2, max_length=96),
+    session_id: str = Query(default="", max_length=160),
+    settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
+) -> dict:
+    order = (
+        await PostgresV3OrchestratorRepository(sf).get_seller_pack_order(order_id)
+        if sf is not None
+        else _seller_pack_orders.get(order_id)
+    )
+    if order and str(order.get("status")) in ("PAID", "DELIVERED"):
+        return {
+            "order_id": order_id,
+            "paid": True,
+            "status": str(order.get("status")),
+            "dossier_id": str(order.get("dossier_id", "")),
+        }
+    if session_id and settings.stripe_secret_key:
+        try:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                resp = await client.get(
+                    f"https://api.stripe.com/v1/checkout/sessions/{session_id}",
+                    headers={"Authorization": f"Bearer {settings.stripe_secret_key}"},
+                )
+            if resp.status_code == 200:
+                sess = resp.json()
+                meta = sess.get("metadata", {}) or {}
+                if (
+                    sess.get("payment_status") == "paid"
+                    and meta.get("order_type") == "SELLER_PACK"
+                    and str(meta.get("order_id") or order_id) == order_id
+                ):
+                    if sf is not None:
+                        await PostgresV3OrchestratorRepository(sf).mark_seller_pack_order_paid(
+                            order_id=order_id,
+                            stripe_session_id=session_id,
+                        )
+                    elif order_id in _seller_pack_orders:
+                        _seller_pack_orders[order_id]["status"] = "PAID"
+                    return {"order_id": order_id, "paid": True, "status": "PAID", "dossier_id": str(meta.get("dossier_id", ""))}
+        except Exception:
+            pass
+    return {
+        "order_id": order_id,
+        "paid": False,
+        "status": str(order.get("status")) if order else "PENDING_PAYMENT",
+        "dossier_id": str(order.get("dossier_id", "")) if order else "",
+    }
+
+
 @billing_router.post("/webhooks/stripe")
 async def stripe_webhook_handler(
     request: Request,
@@ -265,6 +425,55 @@ async def stripe_webhook_handler(
         event_type = str(event.get("type", "")).strip()
         obj = event.get("data", {}).get("object", {})
         metadata = obj.get("metadata", {}) or {}
+
+        if metadata.get("order_type") == "SELLER_PACK":
+            order_id = str(metadata.get("order_id") or "").strip()
+            if sf is not None:
+                processed = await PostgresBillingRepository(sf).record_webhook_and_update_agency(
+                    event_id=event_id,
+                    event_type=event_type,
+                    agency_id="",
+                    plan_code="AGENCY",
+                    subscription_status="ACTIVE",
+                    customer_id=str(obj.get("customer", "") or ""),
+                    subscription_id=str(obj.get("id", "") or ""),
+                )
+                if not processed:
+                    return {"status": "duplicate_ignored", "event_id": event_id, "event_type": event_type}
+                if event_type == "checkout.session.completed" and order_id:
+                    await PostgresV3OrchestratorRepository(sf).mark_seller_pack_order_paid(
+                        order_id=order_id,
+                        stripe_session_id=str(obj.get("id") or event_id),
+                    )
+                return {
+                    "status": "processed",
+                    "event_id": event_id,
+                    "event_type": event_type,
+                    "seller_pack_order_id": order_id,
+                }
+            if event_id in _billing._processed_events:
+                return {"status": "duplicate_ignored", "event_id": event_id, "event_type": event_type}
+            _billing._processed_events.add(event_id)
+            if event_type == "checkout.session.completed" and order_id:
+                existing_order = _seller_pack_orders.setdefault(
+                    order_id,
+                    {
+                        "order_id": order_id,
+                        "dossier_id": str(metadata.get("dossier_id") or ""),
+                        "property_id": str(metadata.get("property_id") or ""),
+                        "buyer_user_id": str(metadata.get("buyer_user_id") or ""),
+                        "buyer_email": str(metadata.get("buyer_email") or ""),
+                        "amount_euro": int(metadata.get("amount_euro") or settings.seller_pack_price_euro),
+                    },
+                )
+                existing_order["status"] = "PAID"
+                existing_order["stripe_session_id"] = str(obj.get("id") or event_id)
+            return {
+                "status": "processed",
+                "event_id": event_id,
+                "event_type": event_type,
+                "seller_pack_order_id": order_id,
+            }
 
         if metadata.get("pass_type") == "RNIC_PARTICULIER":
             if sf is not None:

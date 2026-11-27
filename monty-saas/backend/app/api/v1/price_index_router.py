@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.api.v1.deps import get_current_tenant, require_permission
-from app.core.rbac import Permission, TenantContext
+from app.api.v1.deps import get_current_tenant, get_db_session_factory, require_permission
+from app.core.rbac import MontyRole, Permission, TenantContext
+from app.db.postgres_v3_orchestrator_repository import PostgresV3OrchestratorRepository, is_valid_uuid
+from app.domain.ademe_dpe_service import ademe_dpe_service
 from app.domain.country_packs import CountryCode
-from app.domain.monty_price_index_service import monty_price_engine
+from app.domain.monty_price_index_service import PriceIndexHistoryRecord, monty_price_engine
 from app.domain.real_estate_engines import DvfComparable
 
 price_index_router = APIRouter(tags=["Phase 29 — Monty Price Index"])
+
+
+def _use_pg_agency(sf: Any, agency_id: str) -> bool:
+    return sf is not None and is_valid_uuid(agency_id)
 
 
 class ComparableIn(BaseModel):
@@ -43,8 +50,30 @@ class PriceIndexEvaluateRequest(BaseModel):
     comparables: list[ComparableIn] = Field(default_factory=list)
 
 
+@price_index_router.get("/price-index/ademe-dpe")
+async def lookup_ademe_dpe_diagnostics(
+    postal_code: str = Query(default="", max_length=10),
+    city: str = Query(default="", max_length=80),
+    dpe_number: str = Query(default="", max_length=32),
+    limit: int = Query(default=5, ge=1, le=15),
+) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(
+            ademe_dpe_service.lookup,
+            postal_code=postal_code,
+            city=city,
+            dpe_number=dpe_number,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @price_index_router.post("/price-index/evaluate")
-async def evaluate_monty_price_index(body: PriceIndexEvaluateRequest) -> dict[str, Any]:
+async def evaluate_monty_price_index(
+    body: PriceIndexEvaluateRequest,
+    sf=Depends(get_db_session_factory),
+) -> dict[str, Any]:
     comps = [
         DvfComparable(
             mutation_id=c.mutation_id,
@@ -57,8 +86,13 @@ async def evaluate_monty_price_index(body: PriceIndexEvaluateRequest) -> dict[st
         )
         for c in body.comparables
     ]
+    cfg_override = None
+    pg_ctx: TenantContext | None = None
+    if _use_pg_agency(sf, body.agency_id):
+        pg_ctx = TenantContext(user_id="price-index-eval", agency_id=body.agency_id, role=MontyRole.BUYER)
+        cfg_override = await PostgresV3OrchestratorRepository(sf).get_price_index_config(pg_ctx)
     try:
-        return monty_price_engine.evaluate_property(
+        res = monty_price_engine.evaluate_property(
             agency_id=body.agency_id,
             target_ref=body.target_ref,
             title=body.title,
@@ -76,28 +110,61 @@ async def evaluate_monty_price_index(body: PriceIndexEvaluateRequest) -> dict[st
             estimated_works_euro=body.estimated_works_euro,
             explicit_comparables=comps or None,
             record_history=True,
+            config_override=cfg_override,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if pg_ctx is not None and res.get("display_badge") and res.get("history_record_id"):
+        await PostgresV3OrchestratorRepository(sf).record_price_index_history(
+            pg_ctx,
+            PriceIndexHistoryRecord(
+                id=str(res["history_record_id"]),
+                agency_id=body.agency_id,
+                target_ref=body.target_ref,
+                title=body.title,
+                country_code=body.country_code.value,
+                city=body.city,
+                property_kind=body.property_kind,
+                asking_price_euro=body.asking_price_euro,
+                estimated_market_value=int(res["estimated_market_value"]),
+                gap_percent=float(res["gap_percent"]),
+                category=str(res["category"]),
+                confidence_tier=str(res["confidence_tier"]),
+                comparables_count=int((res.get("comparables") or {}).get("comparables_retained_count") or 0),
+                evaluated_by=pg_ctx.user_id,
+                created_at=str(res["calculated_at"]),
+            ),
+        )
+    return res
 
 
 @price_index_router.get("/price-index/history")
 async def get_price_index_history(
     limit: int = Query(default=40, ge=1, le=200),
     ctx: TenantContext = Depends(get_current_tenant),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
-    items = monty_price_engine.list_history(ctx, limit=limit)
+    if _use_pg_agency(sf, ctx.agency_id):
+        items = await PostgresV3OrchestratorRepository(sf).list_price_index_history(ctx, limit=limit)
+    else:
+        items = monty_price_engine.list_history(ctx, limit=limit)
     return {"count": len(items), "history": [h.__dict__ for h in items]}
 
 
 @price_index_router.get("/admin/price-index/config")
 async def admin_get_price_index_config(
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
+    if _use_pg_agency(sf, ctx.agency_id):
+        cfg = await PostgresV3OrchestratorRepository(sf).get_price_index_config(ctx)
+        return cfg.__dict__
     return monty_price_engine.get_config(ctx.agency_id).__dict__
 
 
 class UpdatePriceIndexConfigRequest(BaseModel):
+    excellent_deal_pct: float | None = Field(default=None, ge=-60.0, le=-5.0)
     very_good_deal_pct: float = Field(ge=-40.0, le=-2.0)
     good_deal_pct: float = Field(ge=-30.0, le=-1.0)
     above_market_pct: float = Field(ge=1.0, le=30.0)
@@ -111,10 +178,12 @@ class UpdatePriceIndexConfigRequest(BaseModel):
 async def admin_update_price_index_config(
     body: UpdatePriceIndexConfigRequest,
     ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     try:
         cfg = monty_price_engine.update_config(
             ctx,
+            excellent_deal_pct=body.excellent_deal_pct,
             very_good_deal_pct=body.very_good_deal_pct,
             good_deal_pct=body.good_deal_pct,
             above_market_pct=body.above_market_pct,
@@ -123,6 +192,8 @@ async def admin_update_price_index_config(
             max_comparable_distance_m=body.max_comparable_distance_m,
             max_comparable_age_months=body.max_comparable_age_months,
         )
+        if _use_pg_agency(sf, ctx.agency_id):
+            cfg = await PostgresV3OrchestratorRepository(sf).upsert_price_index_config(ctx, cfg)
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:

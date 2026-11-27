@@ -195,23 +195,51 @@ class MontyAICoreTests(unittest.TestCase):
 
     def test_admin_provider_keys_are_strictly_masked_and_rbac_protected(self) -> None:
         core = MontyAICore()
-        settings = load_settings()
+        base = load_settings()
+        settings = replace(base, platform_admin_user_ids=("u-platform-admin",))
         dir_ctx = TenantContext(user_id="u-dir", agency_id="ag-adm", role=MontyRole.DIRECTOR)
+        platform_ctx = TenantContext(user_id="u-platform-admin", agency_id="ag-adm", role=MontyRole.DIRECTOR)
         agent_ctx = TenantContext(user_id="u-ag", agency_id="ag-adm", role=MontyRole.AGENT)
 
         with self.assertRaises(PermissionError):
             core.admin_list_engines(agent_ctx, settings)
 
+        # Fail-closed: tenant DIRECTOR outside PLATFORM_ADMIN_USER_IDS cannot modify global keys/engines
+        with self.assertRaises(PermissionError):
+            core.admin_configure_provider_key(
+                dir_ctx,
+                provider="openai",
+                api_key="sk-secret-key-987654321",
+                settings=settings,
+            )
+
         res = core.admin_configure_provider_key(
-            dir_ctx,
+            platform_ctx,
             provider="openai",
             api_key="sk-secret-key-987654321",
+            settings=settings,
         )
         self.assertTrue(res["configured"])
         self.assertNotIn("987654321", res["masked_value"])
         self.assertIn("••••", res["masked_value"])
 
-        engines = core.admin_list_engines(dir_ctx, settings)
+        # Anti-SSRF blocks cloud metadata & private loopback unless explicitly opted in
+        with self.assertRaises(ValueError):
+            core.admin_configure_provider_key(
+                platform_ctx,
+                provider="ollama",
+                local_base_url="http://169.254.169.254/latest/meta-data",
+                settings=settings,
+            )
+        with self.assertRaises(ValueError):
+            core.admin_configure_provider_key(
+                platform_ctx,
+                provider="ollama",
+                local_base_url="http://127.0.0.1:11434",
+                settings=settings,
+            )
+
+        engines = core.admin_list_engines(platform_ctx, settings)
         openai_eng = next(e for e in engines if e["provider"] == "openai")
         self.assertTrue(openai_eng["configured"])
         self.assertNotIn("sk-secret-key-987654321", openai_eng["masked_api_key"])

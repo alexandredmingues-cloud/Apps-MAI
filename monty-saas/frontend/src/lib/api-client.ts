@@ -1,4 +1,5 @@
 import type {
+  AdemeDpeLookupResponse,
   AddressSuggestion,
   AdminOverview,
   AdvisorPrivateNote,
@@ -1181,7 +1182,43 @@ export const montyApi = {
       body: JSON.stringify(payload),
     }),
 
-  // Phase 29 — Monty Price Index
+  // Phase 29 — Monty Price Index & ADEME Open Data DPE
+  lookupAdemeDpe: (params: { postal_code?: string; city?: string; dpe_number?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params.postal_code) q.set("postal_code", params.postal_code);
+    if (params.city) q.set("city", params.city);
+    if (params.dpe_number) q.set("dpe_number", params.dpe_number);
+    if (params.limit) q.set("limit", String(params.limit));
+    return requestJson<AdemeDpeLookupResponse>(`/api/v1/price-index/ademe-dpe?${q.toString()}`, {}, false);
+  },
+
+  createSellerPackCheckout: (payload: {
+    dossier_id: string;
+    property_id?: string;
+    order_id?: string;
+    buyer_email: string;
+    success_url: string;
+    cancel_url: string;
+  }) =>
+    requestJson<{
+      order_id: string;
+      checkout_session_id: string;
+      checkout_url: string;
+      amount_euro: number;
+      status: string;
+    }>("/api/v1/billing/seller-pack/checkout", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  verifySellerPackOrder: (params: { order_id: string; session_id?: string }) => {
+    const q = new URLSearchParams({ order_id: params.order_id });
+    if (params.session_id) q.set("session_id", params.session_id);
+    return requestJson<{ order_id: string; paid: boolean; status: string; dossier_id: string }>(
+      `/api/v1/billing/seller-pack/verify?${q.toString()}`
+    );
+  },
+
   evaluatePriceIndex: (payload: {
     agency_id?: string;
     target_ref?: string;
@@ -1214,6 +1251,7 @@ export const montyApi = {
   adminGetPriceIndexConfig: () => requestJson<PriceIndexConfig>("/api/v1/admin/price-index/config"),
 
   adminUpdatePriceIndexConfig: (payload: {
+    excellent_deal_pct?: number;
     very_good_deal_pct: number;
     good_deal_pct: number;
     above_market_pct: number;

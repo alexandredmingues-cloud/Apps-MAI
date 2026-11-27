@@ -1,12 +1,17 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import { Briefcase, Building2, Calculator, Download, Globe2, Home, Newspaper, PlusCircle, ShieldCheck, UserCircle } from "lucide-react";
+import { SUPPORTED_LOCALES, useMontyLocale, type UiLocaleCode } from "@/lib/i18n";
 
 interface PublicWebHeaderProps {
   activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs" | "coproprietes" | "telecharger" | "mon-compte";
 }
 
 export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
+  const { locale, setLocale, t } = useMontyLocale();
+
   return (
     <header className="sticky top-0 z-40 bg-emeraldDeep/95 backdrop-blur border-b border-goldAntique/30 text-ivoryWarm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
@@ -19,7 +24,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
               MONTY IMMOBILIER
             </p>
             <p className="text-[11px] text-goldChampagne/90 mt-0.5">
-              France entière • Portugal (Prêt)
+              {t.tagline}
             </p>
           </div>
         </Link>
@@ -34,7 +39,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <Globe2 className="w-3.5 h-3.5" />
-            Accueil
+            {t.navHome}
           </Link>
           <Link
             href="/annonces"
@@ -45,7 +50,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <Home className="w-3.5 h-3.5" />
-            Annonces
+            {t.navListings}
           </Link>
           <Link
             href="/publier"
@@ -56,7 +61,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <PlusCircle className="w-3.5 h-3.5" />
-            Publier
+            {t.navPublish}
           </Link>
           <Link
             href="/coproprietes"
@@ -67,7 +72,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <Building2 className="w-3.5 h-3.5" />
-            Copropriétés
+            {t.navCopro}
           </Link>
           <Link
             href="/actualites"
@@ -78,7 +83,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <Newspaper className="w-3.5 h-3.5" />
-            Actualités
+            {t.navNews}
           </Link>
           <Link
             href="/simulateurs"
@@ -89,7 +94,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <Calculator className="w-3.5 h-3.5" />
-            Simulateurs
+            {t.navSimulators}
           </Link>
           <Link
             href="/telecharger"
@@ -100,11 +105,29 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <Download className="w-3.5 h-3.5" />
-            Télécharger l&apos;app
+            {t.navDownloadApp}
           </Link>
         </nav>
 
         <div className="flex items-center gap-2">
+          <div
+            role="group"
+            aria-label="Language selector"
+            className="hidden sm:inline-flex items-center rounded-xl border border-goldAntique/35 bg-emeraldMid/70 p-0.5 text-[10px] font-bold"
+          >
+            {SUPPORTED_LOCALES.map((loc) => (
+              <button
+                key={loc.code}
+                type="button"
+                onClick={() => setLocale(loc.code as UiLocaleCode)}
+                className={`px-2 py-1 rounded-lg transition ${
+                  locale === loc.code ? "bg-goldAntique text-emeraldDeep" : "text-ivoryWarm/80 hover:text-goldChampagne"
+                }`}
+              >
+                {loc.short}
+              </button>
+            ))}
+          </div>
           <Link
             href="/mon-compte"
             className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition ${
@@ -114,14 +137,14 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             }`}
           >
             <UserCircle className="w-4 h-4" />
-            <span className="hidden sm:inline">Mon Espace</span>
+            <span className="hidden sm:inline">{t.navMySpace}</span>
           </Link>
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-goldAntique text-emeraldDeep text-xs sm:text-sm font-bold hover:bg-goldChampagne transition"
           >
             <Briefcase className="w-4 h-4" />
-            Espace Pro SaaS
+            {t.navProSaas}
           </Link>
         </div>
       </div>
@@ -129,29 +152,29 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
       {/* Navigation mobile compacte */}
       <div className="xl:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap">
         <Link href="/site" className={`px-3 py-1.5 rounded-lg ${activePath === "site" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Accueil
+          {t.navHome}
         </Link>
         <Link href="/annonces" className={`px-3 py-1.5 rounded-lg ${activePath === "annonces" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Annonces &amp; Trajet
+          {t.navListings}
         </Link>
         <Link href="/publier" className={`px-3 py-1.5 rounded-lg ${activePath === "publier" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Publier
+          {t.navPublish}
         </Link>
         <Link href="/coproprietes" className={`px-3 py-1.5 rounded-lg ${activePath === "coproprietes" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Copropriétés
+          {t.navCopro}
         </Link>
         <Link href="/actualites" className={`px-3 py-1.5 rounded-lg ${activePath === "actualites" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Actualités
+          {t.navNews}
         </Link>
         <Link href="/simulateurs" className={`px-3 py-1.5 rounded-lg ${activePath === "simulateurs" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Simulateurs
+          {t.navSimulators}
         </Link>
         <Link href="/telecharger" className={`px-3 py-1.5 rounded-lg inline-flex items-center gap-1 ${activePath === "telecharger" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           <Download className="w-3 h-3" />
-          Télécharger APK
+          APK
         </Link>
         <Link href="/mon-compte" className={`px-3 py-1.5 rounded-lg ${activePath === "mon-compte" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
-          Mon Espace
+          {t.navMySpace}
         </Link>
       </div>
     </header>
@@ -159,39 +182,35 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
 }
 
 export function PublicWebFooter() {
+  const { t } = useMontyLocale();
   return (
     <footer className="bg-emeraldDeep text-ivoryWarm/85 border-t border-goldAntique/30 mt-14">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-xs">
         <div className="space-y-2">
           <p className="font-display text-base font-bold text-ivoryWarm">MONTY IMMOBILIER</p>
           <p className="text-goldChampagne">« L&apos;humain avant tout. La technologie au service du conseiller immobilier. »</p>
-          <p className="text-ivoryWarm/70">
-            Architecture multi-pays et multilingue (France active • Portugal isolé • Europe extensible).
-          </p>
+          <p className="text-ivoryWarm/70">{t.footerSummary}</p>
         </div>
         <div className="space-y-2">
-          <p className="font-bold text-ivoryWarm uppercase tracking-wider">Accès Rapide</p>
+          <p className="font-bold text-ivoryWarm uppercase tracking-wider">{t.footerQuickAccess}</p>
           <ul className="space-y-1.5">
-            <li><Link href="/site" className="hover:text-goldChampagne">Accueil Site Web Public</Link></li>
-            <li><Link href="/annonces" className="hover:text-goldChampagne">Annonces &amp; Recherche par Temps de Trajet</Link></li>
-            <li><Link href="/publier" className="hover:text-goldChampagne">Publier un Bien (Particuliers &amp; Agences)</Link></li>
-            <li><Link href="/coproprietes" className="hover:text-goldChampagne">Base Nationale Copropriétés (RNIC) &amp; Notaires</Link></li>
-            <li><Link href="/mon-compte" className="hover:text-goldChampagne">Mon Espace Particulier / Vendeur</Link></li>
-            <li><Link href="/actualites" className="hover:text-goldChampagne">Centre d&apos;Actualités Particuliers</Link></li>
-            <li><Link href="/simulateurs" className="hover:text-goldChampagne">6 Simulateurs Immobiliers Gratuits</Link></li>
-            <li><Link href="/telecharger" className="hover:text-goldChampagne">Télécharger l&apos;application Android (APK)</Link></li>
-            <li><Link href="/" className="hover:text-goldChampagne">Cockpit Professionnel Agences (SaaS)</Link></li>
+            <li><Link href="/site" className="hover:text-goldChampagne">{t.navHome}</Link></li>
+            <li><Link href="/annonces" className="hover:text-goldChampagne">{t.navListings}</Link></li>
+            <li><Link href="/publier" className="hover:text-goldChampagne">{t.navPublish}</Link></li>
+            <li><Link href="/coproprietes" className="hover:text-goldChampagne">{t.navCopro}</Link></li>
+            <li><Link href="/mon-compte" className="hover:text-goldChampagne">{t.navMySpace}</Link></li>
+            <li><Link href="/actualites" className="hover:text-goldChampagne">{t.navNews}</Link></li>
+            <li><Link href="/simulateurs" className="hover:text-goldChampagne">{t.navSimulators}</Link></li>
+            <li><Link href="/telecharger" className="hover:text-goldChampagne">{t.navDownloadFull} (APK)</Link></li>
+            <li><Link href="/" className="hover:text-goldChampagne">{t.navProSaas}</Link></li>
           </ul>
         </div>
         <div className="space-y-2">
           <p className="font-bold text-ivoryWarm uppercase tracking-wider flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-goldChampagne" />
-            Conformité RGPD &amp; Sécurité
+            {t.footerPrivacyTitle}
           </p>
-          <p className="text-ivoryWarm/70 leading-relaxed">
-            Aucune donnée privée d&apos;agence, de client, de mandat ou note interne n&apos;est accessible depuis l&apos;espace public.
-            Les alertes nécessitent un consentement explicite révocable (Art. 6.1.a RGPD) et les estimations restent indicatives.
-          </p>
+          <p className="text-ivoryWarm/70 leading-relaxed">{t.footerPrivacyBody}</p>
         </div>
       </div>
     </footer>

@@ -549,6 +549,7 @@ test("Seller workspace dossiers: owner creates Maison/Appartement with Loi ALUR 
     })
   );
 
+  // Un client non-staff ne peut enregistrer que PENDING_PAYMENT (jamais PAID ni DELIVERED)
   await assertSucceeds(
     sellerRef.update({
       buyerOrders: [
@@ -558,10 +559,10 @@ test("Seller workspace dossiers: owner creates Maison/Appartement with Loi ALUR 
           buyerName: "Laurent — Claire & Thomas",
           buyerEmail: "thomas@example.fr",
           amountEuro: 29,
-          status: "PAID",
-          paymentMethodLabel: "Règlement Pack (Démo Agence)",
+          status: "PENDING_PAYMENT",
+          paymentMethodLabel: "Stripe Checkout (en attente)",
           createdAtLabel: "2026-11-20 10:15",
-          deliveredAtLabel: "2026-11-20 10:15",
+          deliveredAtLabel: "",
         },
       ],
       dvfValuation: {
@@ -628,14 +629,54 @@ test("Seller workspace dossiers: owner creates Maison/Appartement with Loi ALUR 
     })
   );
 
+  // Tentative client de marquer PAID ou DELIVERED refusée ; seul staff / webhook serveur est autorisé
+  await assertFails(
+    sellerRef.update({
+      buyerOrders: [
+        {
+          orderId: "ord_spoof_paid",
+          buyerClientId: "cli_1",
+          buyerName: "Laurent — Claire & Thomas",
+          buyerEmail: "thomas@example.fr",
+          amountEuro: 29,
+          status: "PAID",
+          paymentMethodLabel: "Bypass client",
+          createdAtLabel: "2026-11-20 10:16",
+          deliveredAtLabel: "2026-11-20 10:16",
+        },
+      ],
+      updatedAt: new Date(Date.now() - 100),
+    })
+  );
+  const staffSellerDb = testEnv.authenticatedContext(STAFF_UID, { staff: true }).firestore();
+  await assertSucceeds(
+    staffSellerDb.collection("users").doc(ALICE_UID).collection("seller_dossiers").doc("seller_prop_1").update({
+      buyerOrders: [
+        {
+          orderId: "ord_1",
+          buyerClientId: "cli_1",
+          buyerName: "Laurent — Claire & Thomas",
+          buyerEmail: "thomas@example.fr",
+          amountEuro: 29,
+          status: "PAID",
+          paymentMethodLabel: "Stripe Webhook Vérifié",
+          createdAtLabel: "2026-11-20 10:15",
+          deliveredAtLabel: "2026-11-20 10:16",
+        },
+      ],
+      updatedAt: new Date(Date.now() - 50),
+    })
+  );
+
   // Outsider cannot read or write Alice's seller dossiers
   await assertFails(outsiderDb.collection("users").doc(ALICE_UID).collection("seller_dossiers").limit(20).get());
   await assertFails(outsiderDb.collection("users").doc(ALICE_UID).collection("seller_dossiers").doc("seller_prop_1").get());
 });
 
-test("Properties: owner can create and update mandate, listingUrl, and integrated DVF estimation; invalid fees or ghost fields fail", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
-  const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore();
+test("Properties: owner with advisor claim can create and update mandate, listingUrl, and DVF; non-advisor spoofing AGENCE or invalid fees fail", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID, { advisor: true }).firestore();
+  const nonAdvisorDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore();
+  const outsiderDb = nonAdvisorDb;
   const now = new Date(Date.now() - 2000);
   const propRef = aliceDb.collection("users").doc(ALICE_UID).collection("properties").doc("prop_mandate_1");
 
@@ -699,6 +740,24 @@ test("Properties: owner can create and update mandate, listingUrl, and integrate
     })
   );
   await assertFails(outsiderDb.collection("users").doc(ALICE_UID).collection("properties").doc("prop_mandate_1").get());
+  // Un utilisateur sans claim advisor/staff ne peut pas publier une annonce AGENCE
+  await assertFails(
+    nonAdvisorDb.collection("users").doc(OUTSIDER_UID).collection("properties").doc("prop_spoof_agency").set({
+      userId: OUTSIDER_UID,
+      title: "Fausse annonce agence",
+      sector: "Antigone",
+      type: "Appartement",
+      price: 250000,
+      surface: 55,
+      rooms: 2,
+      bedrooms: 1,
+      dpe: "C",
+      publisherType: "AGENCE",
+      publicationStatus: "PUBLIEE",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
 });
 
 test("RGPD compliance & Spatial commute search: ClientDossier spatial criteria, SellerDossier RGPD consent, and Director Art. 17 erasure", async () => {
@@ -866,9 +925,10 @@ test("Seller listing workflow: Particulier cannot self-publish; only staff moder
   const propsOf = (db, uid) => db.collection("users").doc(uid).collection("properties");
   const propRef = propsOf(sellerDb, SELLER_UID).doc("prop_seller_pub_1");
 
-  // Création directe en PUBLIEE (explicite ou par défaut) refusée
+  // Création directe en PUBLIEE (explicite ou par défaut) refusée ; usurpation AGENCE refusée sans claim advisor
   await assertFails(propsOf(sellerDb, SELLER_UID).doc("p_direct").set({ ...base, publicationStatus: "PUBLIEE" }));
   await assertFails(propsOf(sellerDb, SELLER_UID).doc("p_default").set({ ...base }));
+  await assertFails(propsOf(sellerDb, SELLER_UID).doc("p_spoof_agence").set({ ...base, publisherType: "AGENCE", publicationStatus: "PUBLIEE" }));
 
   // Création en A_VERIFIER OK
   await assertSucceeds(propRef.set({ ...base, publicationStatus: "A_VERIFIER" }));
@@ -1000,7 +1060,7 @@ test("Agency membership hardening: no arbitrary memberUids, director-only remova
 });
 
 test("Kotlin PropertyItem.toCreateMap() full 56-field payload and update pass cleanly", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID, { advisor: true }).firestore();
   const now = new Date(Date.now() - 2000);
   const fullPropRef = aliceDb.collection("users").doc(ALICE_UID).collection("properties").doc("prop_full_kotlin");
 

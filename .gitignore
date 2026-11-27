@@ -17,3 +17,12 @@ local.properties
 .env
 debug.keystore
 *-debug.log
+app/google-services.json
+**/.env
+monty-saas/backend/.env
+monty-saas/frontend/.env*
+monty-saas/frontend/.next/
+monty-saas/frontend/node_modules/
+__pycache__/
+*.py[cod]
+

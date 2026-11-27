@@ -190,6 +190,7 @@ export function AdminV2GovernancePanels({
     if (!piConfig) return;
     try {
       const updated = await montyApi.adminUpdatePriceIndexConfig({
+        excellent_deal_pct: piConfig.excellent_deal_pct ?? -15,
         very_good_deal_pct: piConfig.very_good_deal_pct,
         good_deal_pct: piConfig.good_deal_pct,
         above_market_pct: piConfig.above_market_pct,
@@ -199,7 +200,7 @@ export function AdminV2GovernancePanels({
         max_comparable_age_months: piConfig.max_comparable_age_months,
       });
       setPiConfig(updated);
-      onStatusMessage("Seuils Monty Price Index enregistrés.");
+      onStatusMessage("Seuils Monty Price Index (6 paliers) enregistrés.");
     } catch (err) {
       onErrorMessage(err instanceof Error ? err.message : "Validation des seuils échouée.");
     }
@@ -310,6 +311,9 @@ export function AdminV2GovernancePanels({
 
       {subTab === "monty_ai" && (
         <div className="space-y-4">
+          <div className="rounded-xl bg-amber-50/80 border border-amber-200 px-3 py-2 text-[11px] text-amber-950">
+            Gouvernance stricte (fail-closed) : la modification des moteurs par défaut et l&apos;enregistrement des clés API / URLs locales sont réservés aux identifiants listés dans <code className="font-mono">PLATFORM_ADMIN_USER_IDS</code>.
+          </div>
           {aiMetrics && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-3">
@@ -510,6 +514,16 @@ export function AdminV2GovernancePanels({
         <div className="space-y-4">
           {piConfig && (
             <form onSubmit={handleSavePriceIndexConfig} className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <label className="block">
+                <span className="text-[11px] font-semibold text-slateMuted">Excellente affaire (&lt; %)</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={piConfig.excellent_deal_pct ?? -15}
+                  onChange={(e) => setPiConfig({ ...piConfig, excellent_deal_pct: Number(e.target.value) })}
+                  className="mt-1 w-full rounded-lg border border-borderSubtle bg-white px-2.5 py-1.5"
+                />
+              </label>
               <label className="block">
                 <span className="text-[11px] font-semibold text-slateMuted">Très bonne affaire (&lt; %)</span>
                 <input

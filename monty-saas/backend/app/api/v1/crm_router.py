@@ -12,6 +12,7 @@ from app.core.rgpd import LEGAL_BASIS_CONSENT
 from app.core.security import InputSanitizer
 from app.db.postgres_portfolio_leads_repository import PostgresPortfolioLeadsRepository
 from app.db.postgres_repositories import PostgresCrmRepository
+from app.db.postgres_v3_orchestrator_repository import PostgresV3OrchestratorRepository, is_valid_uuid
 from app.domain.country_packs import CountryCode
 from app.domain.crm_service import (
     ContactRole,
@@ -443,8 +444,12 @@ async def update_public_inbound_lead(
 @crm_router.get("/leads/keywords")
 async def list_monty_lead_keywords(
     ctx: TenantContext = Depends(require_permission(Permission.CRM_READ)),
+    sf=Depends(get_db_session_factory),
 ) -> dict:
-    items = _leads_service.list_lead_keywords(ctx)
+    if sf is not None and is_valid_uuid(ctx.agency_id):
+        items = await PostgresV3OrchestratorRepository(sf).list_lead_keywords(ctx)
+    else:
+        items = _leads_service.list_lead_keywords(ctx)
     return {"count": len(items), "keywords": [k.__dict__ for k in items]}
 
 
@@ -458,14 +463,23 @@ class AddLeadKeywordRequest(BaseModel):
 async def create_monty_lead_keyword(
     body: AddLeadKeywordRequest,
     ctx: TenantContext = Depends(require_permission(Permission.CRM_WRITE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict:
     try:
-        rule = _leads_service.add_lead_keyword(
-            ctx,
-            category=body.category,
-            keyword=body.keyword,
-            geo_scope=body.geo_scope,
-        )
+        if sf is not None and is_valid_uuid(ctx.agency_id):
+            rule = await PostgresV3OrchestratorRepository(sf).add_lead_keyword(
+                ctx,
+                category=body.category,
+                keyword=body.keyword,
+                geo_scope=body.geo_scope,
+            )
+        else:
+            rule = _leads_service.add_lead_keyword(
+                ctx,
+                category=body.category,
+                keyword=body.keyword,
+                geo_scope=body.geo_scope,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return rule.__dict__
@@ -475,7 +489,11 @@ async def create_monty_lead_keyword(
 async def remove_monty_lead_keyword(
     keyword_id: str,
     ctx: TenantContext = Depends(require_permission(Permission.CRM_WRITE)),
+    sf=Depends(get_db_session_factory),
 ) -> dict:
-    removed = _leads_service.delete_lead_keyword(ctx, keyword_id)
+    if sf is not None and is_valid_uuid(ctx.agency_id):
+        removed = await PostgresV3OrchestratorRepository(sf).delete_lead_keyword(ctx, keyword_id)
+    else:
+        removed = _leads_service.delete_lead_keyword(ctx, keyword_id)
     return {"removed": removed, "keyword_id": keyword_id}
 

@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import time
 from typing import Any, Callable
@@ -100,7 +101,7 @@ class MontyAgentsGovernanceService:
     def __init__(self) -> None:
         self._kill_switch_enabled: bool = False
         self._kill_switch_reason: str = ""
-        self._rate_limiter = SlidingWindowRateLimiter()
+        self._rate_limiter = SlidingWindowRateLimiter(redis_url=os.environ.get("REDIS_URL", "").strip())
         self._response_cache: dict[str, tuple[str, str]] = {}
         self._logs: list[AgentExecutionLog] = []
         self._daily_spend_by_agency: dict[tuple[str, str], float] = {}

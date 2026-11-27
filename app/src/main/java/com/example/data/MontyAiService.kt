@@ -24,6 +24,15 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
+/**
+ * Configuration centralisée des modèles IA utilisés par le copilote mobile.
+ * Permet de mettre à jour ou de basculer le modèle Firebase AI Logic sans modifier chaque composant.
+ */
+object MontyAiModelConfig {
+    const val AI_MODEL_NAME: String = "gemini-3.8-flash"
+    const val AI_FALLBACK_MODEL_NAME: String = "gemini-2.5-flash"
+}
+
 data class SellerListingAiDraft(
     val polishedTitle: String,
     val description: String,
@@ -39,10 +48,12 @@ enum class AdvisorAiAction(val label: String) {
     VISIT_REPORT("Compte Rendu Officiel de Visite")
 }
 
-class MontyAiService {
+class MontyAiService(
+    private val saasApiClient: com.example.data.remote.MontySaasApiClient = com.example.data.remote.MontySaasApiClient()
+) {
     private val advisorModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = MontyAiModelConfig.AI_MODEL_NAME,
             systemInstruction = content {
                 text(
                     """
@@ -58,7 +69,7 @@ class MontyAiService {
 
     private val buyerAssistantModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = MontyAiModelConfig.AI_MODEL_NAME,
             systemInstruction = content {
                 text(
                     """
@@ -258,7 +269,7 @@ class MontyAiService {
 
     private val relevanceModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = MontyAiModelConfig.AI_MODEL_NAME,
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = relevanceSchema
@@ -290,7 +301,7 @@ class MontyAiService {
 
     private val propertyDraftModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = MontyAiModelConfig.AI_MODEL_NAME,
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = propertyDraftSchema
@@ -312,7 +323,7 @@ class MontyAiService {
 
     private val sellerListingModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = MontyAiModelConfig.AI_MODEL_NAME,
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = sellerListingSchema
@@ -569,5 +580,29 @@ class MontyAiService {
             vigilancesCsv = json.optString("vigilancesCsv", ""),
             photoObservations = json.optString("photoObservations", "")
         )
+    }
+
+    /**
+     * Tente d'abord l'orchestrateur central SaaS (`Monty AI Core` multi-modèles) et bascule
+     * automatiquement sur Firebase AI Logic (`MontyAiModelConfig.AI_MODEL_NAME`) hors connexion.
+     */
+    suspend fun askOrchestratorWithFallback(
+        prompt: String,
+        taskType: String = "CONVERSATION",
+        confidentialMode: Boolean = false
+    ): String {
+        val safePrompt = RgpdComplianceManager.redactDirectPiiForAi(InputSanitizer.sanitizeAiPromptInput(prompt, 3600))
+        val remoteReply = saasApiClient.chatWithMontyAi(
+            prompt = safePrompt,
+            taskType = taskType,
+            confidentialMode = confidentialMode
+        ).getOrNull()
+        if (remoteReply != null && remoteReply.responseText.isNotBlank()) {
+            return remoteReply.responseText
+        }
+        val response = withTimeout(45_000L) {
+            advisorModel.generateContent(safePrompt)
+        }
+        return response.text?.trim().orEmpty()
     }
 }

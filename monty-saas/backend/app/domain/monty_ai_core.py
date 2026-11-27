@@ -3,15 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
+import hashlib
+import ipaddress
 import json
+import os
 import re
 import time
 from typing import Any, Callable
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
-from app.core.config import Settings
+from app.core.config import Settings, load_settings
 from app.core.rbac import Permission, TenantContext
 from app.core.rgpd import redact_direct_pii_for_ai
 from app.core.security import InputSanitizer, SlidingWindowRateLimiter
@@ -132,6 +136,49 @@ def _mask_secret(raw: str) -> str:
     return f"{clean[:4]}••••{clean[-4:]}"
 
 
+def validate_local_llm_url(raw_url: str, *, allow_private: bool = False) -> str:
+    """Validation anti-SSRF pour l'URL d'un serveur LLM privé/local."""
+    clean = raw_url.strip().rstrip("/")
+    if not clean:
+        return ""
+    parsed = urllib.parse.urlparse(clean)
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ValueError("URL LLM invalide : seuls les schémas http et https sont autorisés.")
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise ValueError("URL LLM invalide : nom d'hôte manquant.")
+
+    # Blocage inconditionnel des endpoints de métadonnées cloud / link-local
+    if host in ("metadata.google.internal", "metadata", "instance-data") or host.endswith(".internal.cloud"):
+        raise ValueError("URL bloquée par la protection anti-SSRF (métadonnées cloud interdites).")
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_link_local:
+            raise ValueError("URL bloquée par la protection anti-SSRF (plage link-local 169.254/fe80 interdite).")
+        if not allow_private and (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            raise ValueError(
+                "Hôte privé/loopback bloqué par défaut (activez LOCAL_LLM_ALLOW_PRIVATE_HOSTS=true si volontaire)."
+            )
+    except ValueError as exc:
+        if "SSRF" in str(exc) or "LOCAL_LLM_ALLOW_PRIVATE_HOSTS" in str(exc):
+            raise
+        # Hostname DNS : bloquer localhost / .local / .internal si allow_private=False
+        if not allow_private and (host == "localhost" or host.endswith(".local") or host.endswith(".internal")):
+            raise ValueError(
+                "Hôte local bloqué par défaut (activez LOCAL_LLM_ALLOW_PRIVATE_HOSTS=true si volontaire)."
+            )
+    return clean
+
+
+def is_platform_admin(ctx: TenantContext, settings: Settings) -> bool:
+    """Vérifie de façon fail-closed si l'utilisateur appartient à PLATFORM_ADMIN_USER_IDS."""
+    if not settings.platform_admin_user_ids:
+        return False
+    return ctx.user_id in settings.platform_admin_user_ids and (
+        ctx.has_permission(Permission.AGENCY_MANAGE) or ctx.has_permission(Permission.PLATFORM_ADMIN)
+    )
+
+
 class AISecurityManager:
     """Filtre injection de prompt, redaction PII et gouvernance confidentielle."""
 
@@ -227,7 +274,7 @@ class AIModelRegistry:
             "ext-anthropic-sonnet": AIEngineConfig(
                 engine_id="ext-anthropic-sonnet",
                 provider="anthropic",
-                model_name="claude-3-7-sonnet-latest",
+                model_name="claude-sonnet-4-6",
                 display_label="Anthropic Claude Sonnet",
                 tier="external",
                 is_local=False,
@@ -349,8 +396,9 @@ class AIProviderManager:
         self._runtime_keys[clean_provider] = clean_key
         return _mask_secret(clean_key)
 
-    def set_local_base_url(self, base_url: str) -> str:
-        self._runtime_local_url = base_url.strip().rstrip("/")
+    def set_local_base_url(self, base_url: str, *, allow_private: bool = False) -> str:
+        validated = validate_local_llm_url(base_url, allow_private=allow_private)
+        self._runtime_local_url = validated
         return self._runtime_local_url
 
     def resolve_key(self, provider: str, settings: Settings) -> str:
@@ -441,6 +489,11 @@ class AIProviderManager:
             raise RuntimeError(f"Clé serveur absente pour {eng.provider}.")
 
         if eng.provider == "anthropic":
+            effective_model = (
+                settings.anthropic_model_sonnet
+                if eng.model_name in ("claude-sonnet-4-6", "claude-3-7-sonnet-latest")
+                else eng.model_name
+            )
             code, data = sender(
                 "https://api.anthropic.com/v1/messages",
                 {
@@ -449,7 +502,7 @@ class AIProviderManager:
                     "content-type": "application/json",
                 },
                 {
-                    "model": eng.model_name,
+                    "model": effective_model,
                     "max_tokens": min(1200, settings.anthropic_max_tokens),
                     "system": system_prompt,
                     "messages": [{"role": "user", "content": user_prompt}],
@@ -465,7 +518,12 @@ class AIProviderManager:
             return text
 
         if eng.provider == "gemini":
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{eng.model_name}:generateContent?key={key}"
+            effective_gemini = (
+                settings.gemini_model
+                if eng.model_name == "gemini-2.5-flash"
+                else eng.model_name
+            )
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{effective_gemini}:generateContent?key={key}"
             code, data = sender(
                 url,
                 {"Content-Type": "application/json"},
@@ -722,11 +780,14 @@ class AIFallbackManager:
 class AIEvaluationManager:
     def __init__(self) -> None:
         self._events: list[AIAuditEvent] = []
+        self._cache_hits_by_agency: dict[str, int] = {}
 
-    def record(self, event: AIAuditEvent) -> None:
+    def record(self, event: AIAuditEvent, *, cache_hit: bool = False) -> None:
         self._events.insert(0, event)
         if len(self._events) > 300:
             self._events = self._events[:300]
+        if cache_hit:
+            self._cache_hits_by_agency[event.agency_id] = self._cache_hits_by_agency.get(event.agency_id, 0) + 1
 
     def metrics_summary(self, agency_id: str) -> dict[str, Any]:
         scoped = [e for e in self._events if e.agency_id == agency_id]
@@ -734,14 +795,33 @@ class AIEvaluationManager:
         avg_latency = round(sum(e.latency_ms for e in scoped) / total, 1) if total else 0.0
         fallbacks = sum(1 for e in scoped if e.status in ("FALLBACK", "OFFLINE_TOOLS"))
         by_engine: dict[str, int] = {}
+        provider_stats: dict[str, dict[str, Any]] = {}
         for e in scoped:
             by_engine[e.engine_id] = by_engine.get(e.engine_id, 0) + 1
+            st = provider_stats.setdefault(
+                e.engine_id,
+                {"engine_id": e.engine_id, "requests": 0, "total_latency_ms": 0, "total_cost_euro": 0.0},
+            )
+            st["requests"] += 1
+            st["total_latency_ms"] += e.latency_ms
+            st["total_cost_euro"] = round(st["total_cost_euro"] + e.estimated_cost_euro, 6)
+        provider_comparison = [
+            {
+                "engine_id": eid,
+                "requests": s["requests"],
+                "avg_latency_ms": round(s["total_latency_ms"] / max(1, s["requests"]), 1),
+                "total_cost_euro": s["total_cost_euro"],
+            }
+            for eid, s in sorted(provider_stats.items(), key=lambda kv: kv[1]["requests"], reverse=True)
+        ]
         return {
             "total_requests": total,
             "avg_latency_ms": avg_latency,
             "fallback_count": fallbacks,
             "fallback_rate_percent": round((fallbacks / total) * 100.0, 1) if total else 0.0,
+            "cache_hits": self._cache_hits_by_agency.get(agency_id, 0),
             "requests_by_engine": by_engine,
+            "provider_comparison": provider_comparison,
             "recent_events": [e.__dict__ for e in scoped[:30]],
         }
 
@@ -749,15 +829,18 @@ class AIEvaluationManager:
 class MontyAICore:
     """Orchestrateur unifié Monty AI : multi-moteurs invisibles, mémoire RGPD, validation humaine et audit."""
 
+    CACHE_TTL_SECONDS = 900
+
     def __init__(self) -> None:
         self.registry = AIModelRegistry()
         self.provider_manager = AIProviderManager()
         self.memory_manager = AIMemoryManager()
         self.cost_manager = AICostManager()
         self.evaluation_manager = AIEvaluationManager()
-        self._rate_limiter = SlidingWindowRateLimiter()
+        self._rate_limiter = SlidingWindowRateLimiter(redis_url=os.environ.get("REDIS_URL", "").strip())
         self._conversations: list[AIConversationTurn] = []
         self._pending_actions: dict[str, AIPendingAction] = {}
+        self._semantic_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def _detect_sensitive_action(self, prompt: str) -> tuple[SensitiveActionType, str] | None:
         lowered = prompt.lower()
@@ -815,6 +898,51 @@ class MontyAICore:
             raise ValueError(block_reason or "Requête invalide.")
 
         tools_invoked, sources, tool_facts = AIToolManager.run_relevant_tools(clean_prompt, context_payload or {})
+        detected = self._detect_sensitive_action(clean_prompt)
+        cache_key = ""
+        if detected is None:
+            digest = hashlib.sha256(
+                f"{clean_prompt.lower()}|{'|'.join(tool_facts)}".encode("utf-8")
+            ).hexdigest()
+            cache_key = f"{ctx.agency_id}:{task_type.value}:{int(eff_confidential)}:{digest}"
+            cached_entry = self._semantic_cache.get(cache_key)
+            if cached_entry is not None:
+                cached_at, cached_payload = cached_entry
+                if (time.monotonic() - cached_at) <= self.CACHE_TTL_SECONDS:
+                    hit_turn_id = f"conv-{uuid.uuid4().hex[:10]}"
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    self.evaluation_manager.record(
+                        AIAuditEvent(
+                            id=f"aiev-{uuid.uuid4().hex[:8]}",
+                            agency_id=ctx.agency_id,
+                            user_id=ctx.user_id,
+                            engine_id=str(cached_payload.get("_engine_used", "semantic-cache")),
+                            task_type=task_type.value,
+                            status="CACHE_HIT",
+                            latency_ms=1,
+                            estimated_cost_euro=0.0,
+                            created_at=now_iso,
+                        ),
+                        cache_hit=True,
+                    )
+                    return {
+                        "conversation_id": hit_turn_id,
+                        "assistant_name": "Monty AI",
+                        "response_text": cached_payload["response_text"],
+                        "execution_mode": cached_payload["execution_mode"],
+                        "confidential_mode": eff_confidential,
+                        "sources": cached_payload["sources"],
+                        "tools_invoked": cached_payload["tools_invoked"],
+                        "latency_ms": 1,
+                        "cache_hit": True,
+                        "requires_human_validation": False,
+                        "pending_action": None,
+                        "_engine_used": cached_payload.get("_engine_used", "semantic-cache"),
+                        "_estimated_cost_euro": 0.0,
+                        "_sanitized_prompt": clean_prompt,
+                    }
+                self._semantic_cache.pop(cache_key, None)
+
         memories = self.memory_manager.list_memories(ctx)
         system_prompt, user_prompt = AIContextManager.build_system_and_user_prompt(
             task_type=task_type,
@@ -870,7 +998,6 @@ class MontyAICore:
 
         latency_ms = max(1, round((time.perf_counter() - t0) * 1000))
         pending_action: AIPendingAction | None = None
-        detected = self._detect_sensitive_action(clean_prompt)
         if detected is not None:
             action_type, action_title = detected
             pending_action = AIPendingAction(
@@ -885,6 +1012,20 @@ class MontyAICore:
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
             self._pending_actions[pending_action.id] = pending_action
+        elif cache_key and execution_mode != "TOOL_ASSISTED_OFFLINE":
+            self._semantic_cache[cache_key] = (
+                time.monotonic(),
+                {
+                    "response_text": response_text,
+                    "execution_mode": execution_mode,
+                    "sources": sources,
+                    "tools_invoked": tools_invoked,
+                    "_engine_used": engine_used,
+                },
+            )
+            if len(self._semantic_cache) > 256:
+                oldest_key = next(iter(self._semantic_cache))
+                self._semantic_cache.pop(oldest_key, None)
 
         turn = AIConversationTurn(
             id=f"conv-{uuid.uuid4().hex[:10]}",
@@ -928,6 +1069,7 @@ class MontyAICore:
             "sources": sources,
             "tools_invoked": tools_invoked,
             "latency_ms": latency_ms,
+            "cache_hit": False,
             "requires_human_validation": pending_action is not None,
             "pending_action": (
                 {
@@ -940,6 +1082,9 @@ class MontyAICore:
                 if pending_action
                 else None
             ),
+            "_engine_used": engine_used,
+            "_estimated_cost_euro": est_cost,
+            "_sanitized_prompt": clean_prompt,
         }
 
     def list_conversations(self, ctx: TenantContext, limit: int = 30) -> list[AIConversationTurn]:
@@ -1004,8 +1149,10 @@ class MontyAICore:
         model_name: str | None = None,
         settings: Settings,
     ) -> dict[str, Any]:
-        if not ctx.has_permission(Permission.AGENCY_MANAGE):
-            raise PermissionError("Accès réservé aux administrateurs.")
+        if not is_platform_admin(ctx, settings):
+            raise PermissionError(
+                "Modification globale des moteurs Monty AI réservée aux administrateurs plateforme (PLATFORM_ADMIN_USER_IDS)."
+            )
         eng = self.registry.get(engine_id)
         if eng is None:
             raise ValueError("Moteur IA inconnu.")
@@ -1034,12 +1181,19 @@ class MontyAICore:
         provider: str,
         api_key: str = "",
         local_base_url: str = "",
+        settings: Settings | None = None,
     ) -> dict[str, Any]:
-        if not ctx.has_permission(Permission.AGENCY_MANAGE):
-            raise PermissionError("Accès réservé aux administrateurs.")
+        eff_settings = settings or load_settings()
+        if not is_platform_admin(ctx, eff_settings):
+            raise PermissionError(
+                "Configuration des clés fournisseurs et URL LLM réservée aux administrateurs plateforme (PLATFORM_ADMIN_USER_IDS)."
+            )
         clean_provider = provider.strip().lower()
         if clean_provider in ("ollama", "vllm", "llamacpp", "local"):
-            url = self.provider_manager.set_local_base_url(local_base_url)
+            url = self.provider_manager.set_local_base_url(
+                local_base_url,
+                allow_private=eff_settings.local_llm_allow_private_hosts,
+            )
             return {"provider": clean_provider, "configured": bool(url), "masked_value": f"local:{url}" if url else ""}
         masked = self.provider_manager.set_provider_key(clean_provider, api_key)
         for eng in self.registry.list_engines():

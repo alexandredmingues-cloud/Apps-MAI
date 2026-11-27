@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertCircle, CheckCircle2, Info, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
-import type { MontyPriceIndexResult, PriceIndexCategory } from "@/lib/types";
+import { AlertCircle, CheckCircle2, Info, SearchCheck, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
+import { montyApi } from "@/lib/api-client";
+import { useMontyLocale } from "@/lib/i18n";
+import type { AdemeDpeRecord, MontyPriceIndexResult, PriceIndexCategory } from "@/lib/types";
 
 interface MontyPriceGaugeProps {
   result: MontyPriceIndexResult;
@@ -14,6 +16,13 @@ const CATEGORY_STYLE: Record<
   PriceIndexCategory,
   { bg: string; text: string; border: string; badgeBg: string; dot: string }
 > = {
+  EXCELLENTE_AFFAIRE: {
+    bg: "bg-emerald-100/80",
+    text: "text-emerald-950",
+    border: "border-emerald-500",
+    badgeBg: "bg-emerald-800 text-goldChampagne",
+    dot: "#065f46",
+  },
   TRES_BONNE_AFFAIRE: {
     bg: "bg-emerald-50",
     text: "text-emerald-950",
@@ -59,6 +68,7 @@ const CATEGORY_STYLE: Record<
 };
 
 const ZONES: { key: PriceIndexCategory; label: string; colorClass: string }[] = [
+  { key: "EXCELLENTE_AFFAIRE", label: "Excellente affaire", colorClass: "bg-emerald-800" },
   { key: "TRES_BONNE_AFFAIRE", label: "Très bonne affaire", colorClass: "bg-emerald-600" },
   { key: "BONNE_AFFAIRE", label: "Bonne affaire", colorClass: "bg-teal-500" },
   { key: "PRIX_COHERENT", label: "Prix cohérent", colorClass: "bg-amber-400" },
@@ -67,8 +77,39 @@ const ZONES: { key: PriceIndexCategory; label: string; colorClass: string }[] = 
 ];
 
 export function MontyPriceGauge({ result, compact = false, onAskAiExplain }: MontyPriceGaugeProps) {
+  const { locale, t } = useMontyLocale();
   const [expanded, setExpanded] = useState(!compact);
   const [hoveredZone, setHoveredZone] = useState<PriceIndexCategory | null>(null);
+  const [ademeOpen, setAdemeOpen] = useState(false);
+  const [ademeQuery, setAdemeQuery] = useState("");
+  const [ademeLoading, setAdemeLoading] = useState(false);
+  const [ademeRecords, setAdemeRecords] = useState<AdemeDpeRecord[]>([]);
+  const [ademeWarning, setAdemeWarning] = useState<string | null>(null);
+
+  async function handleLookupAdeme(e: React.FormEvent) {
+    e.preventDefault();
+    const raw = ademeQuery.trim();
+    if (!raw) return;
+    setAdemeLoading(true);
+    setAdemeWarning(null);
+    try {
+      const isCp = /^\d{5}$/.test(raw);
+      const isDpeNum = /^[0-9A-Z]{10,}$/i.test(raw);
+      const res = await montyApi.lookupAdemeDpe({
+        postal_code: isCp ? raw : undefined,
+        dpe_number: isDpeNum ? raw : undefined,
+        city: !isCp && !isDpeNum ? raw : undefined,
+        limit: 4,
+      });
+      setAdemeRecords(res.records ?? []);
+      if (res.warning) setAdemeWarning(res.warning);
+      else if ((res.records ?? []).length === 0) setAdemeWarning("Aucun DPE public trouvé pour ce critère.");
+    } catch (err) {
+      setAdemeWarning(err instanceof Error ? err.message : "Vérification ADEME indisponible.");
+    } finally {
+      setAdemeLoading(false);
+    }
+  }
 
   if (!result.display_badge || result.category === "DONNEES_INSUFFISANTES") {
     if (compact) return null;
@@ -84,7 +125,7 @@ export function MontyPriceGauge({ result, compact = false, onAskAiExplain }: Mon
   }
 
   const style = CATEGORY_STYLE[result.category] ?? CATEGORY_STYLE.PRIX_COHERENT;
-  // Map gap_percent [-25, +25] -> [4%, 96%] on horizontal 5-zone gauge
+  // Map gap_percent [-25, +25] -> [4%, 96%] on horizontal 6-zone gauge
   const clampedGap = Math.max(-25, Math.min(25, result.gap_percent));
   const markerPercent = Math.round(((clampedGap + 25) / 50) * 92 + 4);
 
@@ -96,18 +137,21 @@ export function MontyPriceGauge({ result, compact = false, onAskAiExplain }: Mon
       : "bg-slate-100 text-slate-700 border-slate-300";
 
   const activeZoneDesc = (zone: PriceIndexCategory | null) => {
-    const t = result.thresholds;
+    const th = result.thresholds;
+    const exc = Math.abs(th.excellent_deal_pct ?? -15);
     switch (zone) {
+      case "EXCELLENTE_AFFAIRE":
+        return `Prix < -${exc} % sous la valeur estimée`;
       case "TRES_BONNE_AFFAIRE":
-        return `Prix < -${Math.abs(t.very_good_deal_pct)} % sous la valeur estimée`;
+        return `Entre -${exc} % et -${Math.abs(th.very_good_deal_pct)} % sous la valeur estimée`;
       case "BONNE_AFFAIRE":
-        return `Entre -${Math.abs(t.very_good_deal_pct)} % et -${Math.abs(t.good_deal_pct)} % sous le marché`;
+        return `Entre -${Math.abs(th.very_good_deal_pct)} % et -${Math.abs(th.good_deal_pct)} % sous le marché`;
       case "PRIX_COHERENT":
-        return `Zone d'équilibre (-${Math.abs(t.good_deal_pct)} % à +${t.above_market_pct} %)`;
+        return `Zone d'équilibre (-${Math.abs(th.good_deal_pct)} % à +${th.above_market_pct} %)`;
       case "AU_DESSUS_DU_MARCHE":
-        return `Entre +${t.above_market_pct} % et +${t.overpriced_pct} % au-dessus du marché`;
+        return `Entre +${th.above_market_pct} % et +${th.overpriced_pct} % au-dessus du marché`;
       case "TROP_CHER":
-        return `Prix supérieur de plus de +${t.overpriced_pct} % à l'estimation`;
+        return `Prix supérieur de plus de +${th.overpriced_pct} % à l'estimation`;
       default:
         return null;
     }
@@ -224,7 +268,7 @@ export function MontyPriceGauge({ result, compact = false, onAskAiExplain }: Mon
           </div>
         </div>
         <div className="flex justify-between text-[10px] font-semibold text-obsidianInk/75">
-          <span>Très bonne affaire</span>
+          <span>Excellente affaire</span>
           <span>Prix cohérent</span>
           <span>Trop cher</span>
         </div>
@@ -284,18 +328,75 @@ export function MontyPriceGauge({ result, compact = false, onAskAiExplain }: Mon
       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slateMuted">
         <span className="inline-flex items-center gap-1">
           <AlertCircle className="w-3 h-3" />
-          Source : {result.comparables.source_label} • Mise à jour {result.comparables.data_date}
+          Source : {result.comparables.source_label} • Données {result.comparables.data_date || "locales"}
+          {result.calculated_at
+            ? ` • ${t.priceIndexCalculatedAt} ${new Date(result.calculated_at).toLocaleDateString(locale)}`
+            : ""}
         </span>
-        {onAskAiExplain && (
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            onClick={() => onAskAiExplain(result)}
-            className="px-2.5 py-1 rounded-lg bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid"
+            onClick={() => setAdemeOpen((v) => !v)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emeraldDeep/30 bg-white text-emeraldDeep font-bold hover:bg-ivoryWarm"
           >
-            Demander un argumentaire Monty AI
+            <SearchCheck className="w-3 h-3" />
+            Vérifier DPE ADEME
           </button>
-        )}
+          {onAskAiExplain && (
+            <button
+              type="button"
+              onClick={() => onAskAiExplain(result)}
+              className="px-2.5 py-1 rounded-lg bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid"
+            >
+              Demander un argumentaire Monty AI
+            </button>
+          )}
+        </div>
       </div>
+
+      {ademeOpen && (
+        <div className="rounded-xl bg-white/90 border border-black/10 p-3 space-y-2 text-[11px]">
+          <form onSubmit={handleLookupAdeme} className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              value={ademeQuery}
+              onChange={(e) => setAdemeQuery(e.target.value)}
+              placeholder="N° DPE (13 car.), code postal (34000) ou ville..."
+              className="flex-1 min-w-[180px] rounded-lg border border-borderSubtle px-2.5 py-1.5 text-xs"
+            />
+            <button
+              type="submit"
+              disabled={ademeLoading}
+              className="px-3 py-1.5 rounded-lg bg-emeraldDeep text-goldChampagne font-bold disabled:opacity-50"
+            >
+              {ademeLoading ? "Recherche..." : "Interroger ADEME"}
+            </button>
+          </form>
+          {ademeWarning && <p className="text-amber-800 font-medium">{ademeWarning}</p>}
+          {ademeRecords.length > 0 && (
+            <div className="space-y-1">
+              {ademeRecords.map((rec) => (
+                <div
+                  key={`${rec.dpe_number}-${rec.issued_date}`}
+                  className="rounded-lg bg-ivoryWarm px-2.5 py-1.5 border border-borderSubtle flex flex-wrap justify-between gap-2"
+                >
+                  <span>
+                    <strong>DPE {rec.dpe_label}</strong> / GES {rec.ges_label} • {rec.city} ({rec.postal_code})
+                    {rec.surface_m2 ? ` • ${rec.surface_m2} m²` : ""}
+                  </span>
+                  <span className="font-mono text-slateMuted">
+                    {rec.dpe_number || rec.issued_date}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="text-[10px] text-slateMuted/90 leading-snug border-t border-black/10 pt-2">
+        {result.estimation_disclaimer || t.priceIndexDisclaimerFallback}
+      </p>
     </div>
   );
 }

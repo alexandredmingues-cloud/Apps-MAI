@@ -509,7 +509,7 @@ fun BuyerDocumentCheckoutAndPackDialog(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = "Paiement en attente de confirmation par le conseiller. En environnement de test/démo agence, vous pouvez aussi simuler la validation immédiate ci-dessous.",
+                                    text = "Paiement en attente de confirmation Stripe Webhook côté serveur. Le déblocage est automatique dès validation du règlement.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = WarningAmber,
                                     modifier = Modifier.padding(10.dp)
@@ -519,19 +519,19 @@ fun BuyerDocumentCheckoutAndPackDialog(
 
                         Button(
                             onClick = {
-                                onSubmitOrder(buyerEmail, "Règlement Démo Agence", true)
+                                onSubmitOrder(buyerEmail, "Stripe Checkout (Serveur)", true)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep, contentColor = GoldChampagne),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)
-                                .testTag("buyer_checkout_confirm_demo_button")
+                                .testTag("buyer_checkout_confirm_stripe_button")
                         ) {
                             Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Régler ${dossier.packPriceEuro} € & Débloquer (Mode Démo)",
+                                text = "Commander & Payer ${dossier.packPriceEuro} € (Stripe)",
                                 fontWeight = FontWeight.Bold
                             )
                         }
