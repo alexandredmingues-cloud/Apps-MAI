@@ -53,6 +53,7 @@ jobs:
         env:
           ENVIRONMENT: development
           ENABLE_DEV_AUTH: "true"
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monagent_test
         run: |
           python -m compileall -q app tests
           python -m pytest -q
