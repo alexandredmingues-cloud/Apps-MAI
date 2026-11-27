@@ -95,8 +95,8 @@ export function InteractiveGeoMap({
   const offsetY = centerPixel.y - centerTileY * TILE_SIZE;
   const tiles = useMemo(() => {
     const result: { key: string; url: string; dx: number; dy: number }[] = [];
-    for (let dy = -2; dy <= 2; dy += 1) {
-      for (let dx = -3; dx <= 3; dx += 1) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
         const x = centerTileX + dx;
         const y = centerTileY + dy;
         const url = tileUrl(zoom, x, y);
