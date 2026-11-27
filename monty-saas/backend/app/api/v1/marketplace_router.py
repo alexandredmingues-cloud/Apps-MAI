@@ -18,6 +18,7 @@ from app.db.postgres_repositories import PostgresMarketplaceRepository
 from app.db.postgres_v2_ops_repository import PostgresV2OpsRepository
 from app.domain.authorized_feeds_service import AuthorizedListingFeedsService, FeedFormat
 from app.domain.ademe_dpe_service import ademe_dpe_service
+from app.domain.cadastre_urbanism_service import cadastre_urbanism_service
 from app.domain.country_packs import CountryCode
 from app.domain.geocoding_service import (
     autocomplete_address,
@@ -167,6 +168,23 @@ async def geo_reverse_lookup(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _suggestion_dto(item)
+
+
+@marketplace_router.get("/cadastre/lookup")
+async def lookup_cadastre_and_urbanism(
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    ctx: TenantContext = Depends(require_permission(Permission.PROPERTY_READ)),
+) -> dict:
+    """Recherche les parcelles IGN, les couches PLU/SUP et les risques Géorisques."""
+    try:
+        return await asyncio.to_thread(
+            cadastre_urbanism_service.lookup,
+            latitude=latitude,
+            longitude=longitude,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @marketplace_router.get("/dpe/lookup")
