@@ -389,6 +389,7 @@ class NotaryBookService:
         notary_name: str = "",
         email: str = "",
         phone: str = "",
+        email_verified: bool = False,
         street_address: str = "",
         postal_code: str = "",
         city: str = "",
@@ -419,7 +420,7 @@ class NotaryBookService:
                 existing.street_address = InputSanitizer.sanitize_text(street_address, 240) or existing.street_address
                 existing.city = InputSanitizer.sanitize_text(city, 100) or existing.city
                 existing.department_code = dept or existing.department_code
-                existing.email_verified = bool(existing.email)
+                existing.email_verified = bool(email_verified and clean_email)
                 existing.is_official_notaire_domain = existing.email.endswith("@notaires.fr")
                 existing.notes = InputSanitizer.sanitize_text(notes, 600) or existing.notes
                 return existing
@@ -437,7 +438,7 @@ class NotaryBookService:
             city=InputSanitizer.sanitize_text(city, 100),
             department_code=dept,
             source=InputSanitizer.sanitize_text(source, 40) or "DINUM_API_GOUV",
-            email_verified=bool(clean_email),
+            email_verified=bool(email_verified and clean_email),
             is_official_notaire_domain=clean_email.endswith("@notaires.fr"),
             notes=InputSanitizer.sanitize_text(notes, 600),
             created_at=datetime.now(timezone.utc).isoformat(),
