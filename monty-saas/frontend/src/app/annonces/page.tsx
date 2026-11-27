@@ -4,9 +4,10 @@ import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebH
 import { MarketplaceAndPublishView } from "@/components/marketplace/MarketplaceAndPublishView";
 
 export const metadata: Metadata = {
-  title: "Annonces & Recherche par Temps de Trajet | Monty Immobilier",
+  title: "Annonces immobilières & recherche intelligente | MON-AGENT",
   description:
-    "Recherchez des biens immobiliers (particuliers & agences) en France et au Portugal selon votre temps de trajet réel en train, tramway, bus, vélo, à pied ou en voiture, avec comparateur DVF et délai estimé.",
+    "Recherchez des biens immobiliers de particuliers et d'agences en France et au Portugal. Comparez les biens, explorez la carte et filtrez selon votre budget, vos critères et vos temps de trajet.",
+  alternates: { canonical: "/annonces" },
 };
 
 export default function PublicListingsPage() {
@@ -18,7 +19,7 @@ export default function PublicListingsPage() {
           initialTab="search"
           initialCountry="FR"
           showTabs={true}
-          audienceLabel="Site Public • Acheteurs & Locataires"
+          audienceLabel="MON-AGENT • Acheteurs & Locataires"
         />
       </main>
       <PublicWebFooter />
