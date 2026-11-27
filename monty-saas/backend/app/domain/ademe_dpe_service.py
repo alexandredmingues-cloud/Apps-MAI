@@ -28,7 +28,7 @@ class AdemeDpeRecord:
     surface_m2: float | None
     construction_year: int | None
     issued_date: str
-    source: str = "ADEME Open Data (dpe-v2-logements-existants)"
+    source: str = "ADEME Open Data (DPE logements existants depuis juillet 2021)"
 
 
 class AdemeDpeService:
