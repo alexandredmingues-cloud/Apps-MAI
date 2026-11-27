@@ -20,10 +20,12 @@ from app.core.rbac import MontyRole  # noqa: E402
 def _claims(**overrides):
     data = {
         "sub": "firebase-user-123",
-        "user_id": "firebase-user-123",
+        "uid": "firebase-user-123",
         "aud": "demo-project",
         "iss": "https://securetoken.google.com/demo-project",
         "exp": int(time.time()) + 600,
+        "iat": int(time.time()) - 30,
+        "auth_time": int(time.time()) - 60,
         "email": "agent@example.test",
         "email_verified": True,
         "name": "Agent Exemple",
@@ -41,9 +43,9 @@ class FirebaseTokenVerificationTests(unittest.TestCase):
 
     def verify(self, claims):
         return auth_router._verify_firebase_token_via_google(
-            "x" * 30,
+            "signed.firebase.token",
             settings=self.settings,
-            transport=lambda _url, _timeout: (200, claims),
+            verifier=lambda _token, _project: claims,
         )
 
     def test_accepts_verified_token_for_exact_project(self):
@@ -71,9 +73,9 @@ class FirebaseTokenVerificationTests(unittest.TestCase):
         settings = replace(self.settings, firebase_project_id="")
         with self.assertRaises(ValueError):
             auth_router._verify_firebase_token_via_google(
-                "x" * 30,
+                "signed.firebase.token",
                 settings=settings,
-                transport=lambda _url, _timeout: (200, _claims()),
+                verifier=lambda _token, _project: _claims(),
             )
 
 

@@ -456,52 +456,69 @@ def _decode_jwt_payload_unverified(token: str) -> dict[str, Any]:
     return data
 
 
+_firebase_app_lock = __import__("threading").Lock()
+
+
 def _verify_firebase_token_via_google(
     id_token: str,
     *,
     settings: Settings,
-    transport: Callable[[str, float], tuple[int, dict[str, Any]]] | None = None,
+    verifier: Callable[[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    def _default_get(url: str, timeout_s: float) -> tuple[int, dict[str, Any]]:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"}, method="GET")
-        try:
-            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-                raw = resp.read().decode("utf-8")
-                return int(getattr(resp, "status", 200)), json.loads(raw) if raw else {}
-        except urllib.error.HTTPError as err:
-            return int(err.code), {}
-
-    getter = transport or _default_get
-    qs = urllib.parse.urlencode({"id_token": id_token.strip()})
-    code, claims = getter(f"https://oauth2.googleapis.com/tokeninfo?{qs}", 6.0)
-    if code != 200 or not isinstance(claims, dict):
-        raise ValueError("Jeton Firebase/Google rejeté lors de la vérification.")
-
-    if not settings.firebase_project_id:
+    """Valide la signature RS256 et les claims avec le SDK Admin Firebase."""
+    project_id = settings.firebase_project_id.strip()
+    if not project_id:
         raise ValueError("Firebase non configuré : FIREBASE_PROJECT_ID obligatoire.")
-    sub = str(claims.get("user_id") or claims.get("sub") or "").strip()
-    if not sub:
-        raise ValueError("Identifiant utilisateur Firebase absent.")
 
+    if verifier is not None:
+        claims = verifier(id_token, project_id)
+    else:
+        try:
+            import firebase_admin
+            from firebase_admin import auth as firebase_auth
+
+            app_name = f"mon-agent-{project_id}"
+            with _firebase_app_lock:
+                try:
+                    firebase_app = firebase_admin.get_app(app_name)
+                except ValueError:
+                    firebase_app = firebase_admin.initialize_app(
+                        options={"projectId": project_id},
+                        name=app_name,
+                    )
+            claims = firebase_auth.verify_id_token(
+                id_token,
+                app=firebase_app,
+                check_revoked=False,
+            )
+        except Exception as exc:
+            raise ValueError("Jeton Firebase invalide, expiré ou non vérifiable.") from exc
+
+    if not isinstance(claims, dict):
+        raise ValueError("Réponse de vérification Firebase invalide.")
+    uid = str(claims.get("uid") or claims.get("sub") or "").strip()
+    if not uid:
+        raise ValueError("Identifiant utilisateur Firebase absent.")
+    if str(claims.get("aud") or "") != project_id:
+        raise ValueError("Jeton émis pour un autre projet Firebase.")
+    if str(claims.get("iss") or "") != f"https://securetoken.google.com/{project_id}":
+        raise ValueError("Émetteur Firebase invalide.")
+    now = int(time.time())
     try:
         exp = int(claims.get("exp") or 0)
+        issued_at = int(claims.get("iat") or 0)
+        auth_time = int(claims.get("auth_time") or 0)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Expiration du jeton Firebase invalide.") from exc
-    if exp <= int(time.time()):
-        raise ValueError("Jeton Firebase expiré ou sans expiration valide.")
-
-    aud = str(claims.get("aud") or "").strip()
-    iss = str(claims.get("iss") or "").strip()
-    expected_issuer = f"https://securetoken.google.com/{settings.firebase_project_id}"
-    if aud != settings.firebase_project_id or iss != expected_issuer:
-        raise ValueError("Jeton émis pour un autre projet ou un autre fournisseur.")
+        raise ValueError("Dates du jeton Firebase invalides.") from exc
+    if exp <= now or issued_at > now or auth_time > now:
+        raise ValueError("Jeton Firebase expiré ou dates invalides.")
     if claims.get("email_verified") is not True:
         raise ValueError("Une adresse e-mail Firebase vérifiée est obligatoire.")
     email = str(claims.get("email") or "").strip()
     if not email or "@" not in email:
         raise ValueError("Adresse e-mail Firebase absente ou invalide.")
+    claims["uid"] = uid
     return claims
-
 
 @router.post("/auth/firebase-exchange", response_model=SessionResponse, tags=["Auth"])
 async def exchange_firebase_session(
