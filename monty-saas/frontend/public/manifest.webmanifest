@@ -9,7 +9,7 @@
   "lang": "fr-FR",
   "icons": [
     {
-      "src": "/icon-monty.svg",
+      "src": "/icon-mon-agent.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
