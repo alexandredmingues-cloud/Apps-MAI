@@ -20,7 +20,7 @@ ads_router = APIRouter(prefix="/ads", tags=["Publicité de marques"])
 
 
 class AdRequest(BaseModel):
-    captcha_token: str = Field(min_length=1, max_length=2048)
+    captcha_token: str = Field(default="", max_length=2048)
     advertiser_name: str = Field(min_length=2, max_length=140)
     brand_name: str = Field(min_length=2, max_length=120)
     contact_email: str = Field(min_length=5, max_length=254)
