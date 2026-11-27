@@ -4,7 +4,7 @@
 
 ## 1. État de départ à préserver
 
-L'historique Android peut contenir Firebase Auth, Firestore, Room, App Check, FCM et des moteurs métier déterministes. Le SaaS comprend FastAPI, PostgreSQL/RLS, Redis/ARQ et les services métier Web. La PR Flutter indique que les sources Kotlin originales ne sont pas présentes dans l'arborescence consultée : leur récupération et leur inventaire sont un préalable bloquant.
+L'historique Android peut contenir Firebase Auth, Firestore, Room, App Check, FCM et des moteurs métier déterministes. Le SaaS comprend FastAPI, PostgreSQL/RLS, Redis/ARQ et les services métier Web. La PR Flutter #4 mise à jour confirme que les sources Kotlin métier sont présentes dans l'arborescence actuelle (modèles, dépôts CRM/agences, services DVF, cartographie, IA, espace vendeur et interfaces Compose). Leur inventaire exhaustif et les tests de caractérisation sont le préalable bloquant.
 
 Le socle Flutter actuel ne comporte pas encore de client API, d'authentification, de persistance locale, de synchronisation ou de modules métier. Il ne faut donc pas prétendre que Flutter synchronise déjà avec le SaaS.
 
