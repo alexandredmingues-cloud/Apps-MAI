@@ -129,6 +129,7 @@ async def create_rnic_particulier_checkout(
     body: RnicPassCheckoutRequest,
     authorization: str | None = Header(default=None),
     settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> dict:
     """
     Crée une session Stripe Checkout (paiement unique) pour débloquer l'accès Particulier
@@ -136,6 +137,8 @@ async def create_rnic_particulier_checkout(
     Gratuit pour les agences et vendeurs (vérifié côté serveur).
     """
     ctx = _resolve_optional_tenant(authorization, settings)
+    if sf is None and settings.is_production:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stockage des droits RNIC indisponible.")
     clean_email = InputSanitizer.sanitize_text(body.buyer_email, 160).lower()
     if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adresse e-mail valide obligatoire.")
@@ -156,11 +159,8 @@ async def create_rnic_particulier_checkout(
 
     pass_token = f"rnic_pass_{secrets.token_urlsafe(24)}"
     sep = "&" if "?" in safe_success else "?"
-    success_with_token = (
-        f"{safe_success}{sep}"
-        + urlencode({"rnic_pass_token": pass_token})
-        + "&rnic_session_id={CHECKOUT_SESSION_ID}"
-    )
+    # Never place the bearer access token in the browser URL/history/referrer.
+    success_with_token = f"{safe_success}{sep}rnic_session_id={{CHECKOUT_SESSION_ID}}"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
@@ -190,7 +190,6 @@ async def create_rnic_particulier_checkout(
     return {
         "checkout_session_id": data.get("id", ""),
         "checkout_url": data.get("url", ""),
-        "pass_token": pass_token,
         "amount_euro": settings.rnic_particulier_price_euro,
     }
 
@@ -204,6 +203,8 @@ async def verify_rnic_pass_status(
     sf=Depends(get_db_session_factory),
 ) -> dict:
     ctx = _resolve_optional_tenant(authorization, settings)
+    if sf is None and settings.is_production:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stockage des droits RNIC indisponible.")
     uid = ctx.user_id if ctx else None
     active = (
         await PostgresNotariesRnicRepository(sf).has_active_rnic_pass(pass_token=pass_token, user_id=uid)
@@ -221,10 +222,16 @@ async def verify_rnic_pass_status(
                 sess = resp.json()
                 meta = sess.get("metadata", {}) or {}
                 if (
-                    sess.get("payment_status") == "paid"
+                    sess.get("id") == session_id
+                    and sess.get("mode") == "payment"
+                    and sess.get("payment_status") == "paid"
+                    and str(sess.get("currency") or "").lower() == "eur"
+                    and int(sess.get("amount_total") or 0) == settings.rnic_particulier_price_euro * 100
                     and meta.get("pass_type") == "RNIC_PARTICULIER"
+                    and bool(meta.get("pass_token"))
+                    and (not ctx or str(meta.get("user_id") or "") == ctx.user_id)
                 ):
-                    tok = str(meta.get("pass_token") or pass_token)
+                    tok = str(meta.get("pass_token"))
                     buyer_email = str(meta.get("buyer_email") or sess.get("customer_email") or "particulier@monty.fr")
                     meta_uid = str(meta.get("user_id") or "") or uid
                     if sf is not None:
