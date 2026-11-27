@@ -245,7 +245,10 @@ class MobileReleasePublicationCleanupTests(unittest.IsolatedAsyncioTestCase):
             put_bytes=lambda **kwargs: SimpleNamespace(object_key=kwargs["object_key"]),
             delete_object=Mock(),
         )
-        fake_repo = SimpleNamespace(upsert_mobile_release=AsyncMock(side_effect=RuntimeError("database unavailable")))
+        fake_repo = SimpleNamespace(
+            assert_mobile_release_version_available=AsyncMock(return_value=None),
+            upsert_mobile_release=AsyncMock(side_effect=RuntimeError("database unavailable")),
+        )
         release = SimpleNamespace(id="rel-test1234", file_name="release.apk", storage_path="")
         with local_patch(
             "app.api.v1.mobile_releases_router.PostgresV3OrchestratorRepository",
