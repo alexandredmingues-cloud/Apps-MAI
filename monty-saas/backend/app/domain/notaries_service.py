@@ -200,7 +200,7 @@ def search_french_notary_offices(
         return {
             "status": "live",
             "source": "recherche-entreprises.api.gouv.fr (NAF 69.10Z)",
-            "email_notice": "Les e-mails @notaires.fr ne sont pas diffusés en open-data : utilisez le lien Annuaire CSN notaires.fr puis enregistrez l'adresse vérifiée dans le carnet d'agence.",
+            "email_notice": "Téléphone et e-mail ne sont pas fournis en open-data par l’API DINUM/INSEE. Consultez la fiche de l’annuaire officiel CSN pour vérifier les coordonnées publiées, puis enregistrez-les dans le carnet d’agence.",
             "count": len(offices),
             "total_results": int(payload_json.get("total_results") or 0),
             "total_pages": int(payload_json.get("total_pages") or 0),
