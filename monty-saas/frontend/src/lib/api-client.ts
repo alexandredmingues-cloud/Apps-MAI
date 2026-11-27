@@ -839,12 +839,13 @@ export const montyApi = {
     ),
 
   // Annuaire Officiel des Notaires de France & Transmissions Dossiers Compromis
-  searchFrenchNotaries: (params: { query?: string; department_code?: string; postal_code?: string; per_page?: number }) => {
+  searchFrenchNotaries: (params: { query?: string; department_code?: string; postal_code?: string; per_page?: number; page?: number }) => {
     const q = new URLSearchParams();
     if (params.query) q.set("query", params.query);
     if (params.department_code) q.set("department_code", params.department_code);
     if (params.postal_code) q.set("postal_code", params.postal_code);
     if (params.per_page) q.set("per_page", String(params.per_page));
+    if (params.page) q.set("page", String(params.page));
     return requestJson<NotarySearchResponse>(`/api/v1/notaries/search?${q.toString()}`, {}, false);
   },
 
