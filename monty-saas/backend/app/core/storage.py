@@ -197,6 +197,59 @@ class ObjectStorageAdapter:
             expires_in_seconds=expires_in_seconds,
         )
 
+    def delete_object(self, *, object_key: str) -> None:
+        """Supprime un objet après échec de publication ; l'opération est idempotente."""
+        clean_key = self._clean_object_key(object_key)
+        backend = self.active_backend
+        self._ensure_backend_allowed(backend)
+        if backend == "supabase":
+            bucket = self._settings.supabase_storage_bucket
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            endpoint = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{encoded_key}"
+            req = urllib.request.Request(
+                endpoint,
+                headers={
+                    "Authorization": f"Bearer {self._settings.supabase_service_role_key}",
+                    "apikey": self._settings.supabase_service_role_key,
+                },
+                method="DELETE",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=12.0):
+                    pass
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise RuntimeError("Impossible de supprimer l'objet Supabase orphelin.") from exc
+            except Exception as exc:
+                raise RuntimeError("Impossible de supprimer l'objet Supabase orphelin.") from exc
+            return
+        if backend == "s3":
+            delete_url = _build_s3_presigned_url(
+                endpoint=self._settings.s3_endpoint,
+                bucket=self._settings.s3_bucket,
+                access_key=self._settings.s3_access_key,
+                secret_key=self._settings.s3_secret_key,
+                region=self._settings.s3_region,
+                object_key=clean_key,
+                method="DELETE",
+                expires_in_seconds=300,
+            )
+            req = urllib.request.Request(delete_url, method="DELETE")
+            try:
+                with urllib.request.urlopen(req, timeout=12.0):
+                    pass
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise RuntimeError("Impossible de supprimer l'objet S3 orphelin.") from exc
+            except Exception as exc:
+                raise RuntimeError("Impossible de supprimer l'objet S3 orphelin.") from exc
+            return
+        target = self._local_path(clean_key)
+        try:
+            target.unlink(missing_ok=True)
+        except OSError as exc:
+            raise RuntimeError("Impossible de supprimer le fichier local orphelin.") from exc
+
     def put_bytes(
         self,
         *,
