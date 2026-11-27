@@ -49,7 +49,7 @@ class FirebaseTokenVerificationTests(unittest.TestCase):
         )
 
     def test_accepts_verified_token_for_exact_project(self):
-        self.assertEqual(self.verify(_claims())["user_id"], "firebase-user-123")
+        self.assertEqual(self.verify(_claims())["uid"], "firebase-user-123")
 
     def test_rejects_wrong_audience_or_issuer(self):
         with self.assertRaises(ValueError):
