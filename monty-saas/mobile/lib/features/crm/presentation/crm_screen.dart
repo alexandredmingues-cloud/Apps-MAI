@@ -135,7 +135,7 @@ class _NewContactDialogState extends State<_NewContactDialog> {
       TextFormField(controller: _city, decoration: const InputDecoration(labelText: 'Ville / secteur')),
       TextFormField(controller: _budget, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Budget (€)')),
       const SizedBox(height: 12),
-      DropdownButtonFormField<String>(value: _role, decoration: const InputDecoration(labelText: 'Type de contact'),
+      DropdownButtonFormField<String>(initialValue: _role, decoration: const InputDecoration(labelText: 'Type de contact'),
         items: const [DropdownMenuItem(value: 'LEAD', child: Text('Lead')), DropdownMenuItem(value: 'PROSPECT', child: Text('Prospect')),
           DropdownMenuItem(value: 'BUYER', child: Text('Acquéreur')), DropdownMenuItem(value: 'SELLER', child: Text('Vendeur')),
           DropdownMenuItem(value: 'PARTNER', child: Text('Partenaire'))],
@@ -146,7 +146,7 @@ class _NewContactDialogState extends State<_NewContactDialog> {
         if (!_key.currentState!.validate()) return;
         final amount = int.tryParse(_budget.text.replaceAll(' ', '')) ?? 0;
         Navigator.pop(context, _NewContact(_name.text, _email.text, _phone.text, _city.text,
-          amount.clamp(0, 100000000), _role));
+          amount.clamp(0, 100000000).toInt(), _role));
       }, child: const Text('Créer'))],
   );
 }

@@ -146,6 +146,11 @@ class HomeScreen extends StatelessWidget {
   final Map<String, dynamic> user;
   final SessionRepository sessions;
   final Future<void> Function() onSignOut;
+  void _openCrm(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => CrmScreen(repository: CrmRepository(sessions.api)),
+    ));
+  }
   @override
   Widget build(BuildContext context) {
     final name = user['display_name'] as String? ?? user['email'] as String? ?? 'Utilisateur';
@@ -159,10 +164,15 @@ class HomeScreen extends StatelessWidget {
           Text(role, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 24),
           const Text('Votre espace immobilier', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          Card(child: ListTile(leading: const Icon(Icons.people_alt_outlined, color: _brand),
-            title: const Text('CRM & Contacts'), subtitle: const Text('Prospects, clients et suivi commercial'),
-            trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => CrmScreen(repository: CrmRepository(sessions.api))))),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.people_alt_outlined, color: _brand),
+              title: const Text('CRM & Contacts'),
+              subtitle: const Text('Prospects, clients et suivi commercial'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _openCrm(context),
+            ),
+          ),
           const _ModuleTile(Icons.home_work_outlined, 'Biens immobiliers', 'Portefeuille, mandats et visites'),
           const _ModuleTile(Icons.calculate_outlined, 'Estimation & DVF', 'Valeurs, comparables et analyse de marché'),
           const _ModuleTile(Icons.calendar_month_outlined, 'Agenda & Relances', 'Actions à venir et échéances'),
