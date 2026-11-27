@@ -11,13 +11,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
-from app.api.v1.deps import _rate_limiter, get_db_session_factory, require_permission
+from app.api.v1.deps import _rate_limiter, get_db_session_factory, get_settings, require_permission
+from app.core.config import Settings
+from app.core.turnstile import verify_turnstile
 from app.core.rbac import Permission, TenantContext
 
 ads_router = APIRouter(prefix="/ads", tags=["Publicité de marques"])
 
 
 class AdRequest(BaseModel):
+    captcha_token: str = Field(min_length=1, max_length=2048)
     advertiser_name: str = Field(min_length=2, max_length=140)
     brand_name: str = Field(min_length=2, max_length=120)
     contact_email: str = Field(min_length=5, max_length=254)
@@ -69,7 +72,8 @@ async def _session(sf):
 
 
 @ads_router.post("/public/requests", status_code=status.HTTP_201_CREATED)
-async def submit_ad_request(body: AdRequest, request: Request, sf=Depends(get_db_session_factory)) -> dict:
+async def submit_ad_request(body: AdRequest, request: Request, sf=Depends(get_db_session_factory), settings: Settings = Depends(get_settings)) -> dict:
+    await verify_turnstile(body.captcha_token, request, settings)
     client_ip = request.client.host if request.client else "unknown"
     rate = _rate_limiter.check_and_consume(f"request:{client_ip}", max_requests=5, window_seconds=3600)
     if not rate.allowed:
