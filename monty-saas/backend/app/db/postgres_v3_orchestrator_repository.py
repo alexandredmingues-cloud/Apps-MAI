@@ -21,6 +21,10 @@ from app.domain.monty_price_index_service import PriceIndexConfig, PriceIndexHis
 from app.domain.portfolio_and_leads_service import LeadKeywordRule
 
 
+class MobileReleaseVersionConflict(ValueError):
+    """Raised when an Android package already has the requested version_code."""
+
+
 def _default_sql_text(sql: str) -> Any:
     from sqlalchemy import text
 
@@ -627,6 +631,28 @@ class PostgresV3OrchestratorRepository:
             created_at=_iso(r["created_at"]),
             updated_at=_iso(r["updated_at"]),
         )
+
+    async def assert_mobile_release_version_available(self, rel: MobileAppRelease) -> None:
+        async with self._open_global_session() as session:
+            existing_id = (
+                await session.execute(
+                    self._text(
+                        """
+                        SELECT id
+                        FROM mobile_app_releases
+                        WHERE package_id = :pkg
+                          AND version_code = :vcode
+                          AND id <> :rid
+                        LIMIT 1
+                        """
+                    ),
+                    {"pkg": rel.package_id, "vcode": rel.version_code, "rid": rel.id},
+                )
+            ).scalar_one_or_none()
+            if existing_id is not None:
+                raise MobileReleaseVersionConflict(
+                    f"Le numéro de version Android {rel.version_code} existe déjà pour ce package."
+                )
 
     async def upsert_mobile_release(self, rel: MobileAppRelease) -> MobileAppRelease:
         async with self._open_global_session() as session:
