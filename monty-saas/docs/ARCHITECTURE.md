@@ -28,7 +28,7 @@ Le portail public et les surfaces web marketing existants peuvent rester en Next
 
 ## État réellement présent
 
-- **Android historique :** le dépôt et ses branches doivent être audités pour identifier les sources Kotlin, Room, Firebase et les fonctionnalités réellement présentes. La PR de migration signale que les sources Kotlin attendues ne sont pas dans l'arborescence consultée ; cette absence doit être résolue avant tout portage.
+- **Android historique :** le dépôt et ses branches doivent être audités pour identifier les sources Kotlin, Room, Firebase et les fonctionnalités réellement présentes. La PR de migration signale que la PR Flutter #4 confirme que les sources Kotlin métier sont présentes (modèles, dépôts CRM/agences, services DVF, cartographie, IA, espace vendeur et interfaces Compose) ; elles doivent être inventoriées et caractérisées avant portage.
 - **SaaS Web :** Next.js / React reste présent.
 - **Backend :** FastAPI, PostgreSQL, migrations Alembic, RLS, Redis/ARQ et intégrations Stripe sont documentés et partiellement implémentés. La présence d'un composant ou d'une migration ne prouve pas sa disponibilité en production.
 - **Flutter :** seul un socle initial existe dans `monty-saas/mobile/`. Le package déclare Android/iOS/Web, mais les modules métier, authentification, client API, cache, synchronisation et parité ne sont pas encore implémentés.
