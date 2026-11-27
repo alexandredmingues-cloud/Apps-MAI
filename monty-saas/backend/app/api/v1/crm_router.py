@@ -6,7 +6,8 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from app.api.v1.deps import get_db_session_factory, require_permission
+from app.api.v1.deps import get_db_session_factory, get_settings, require_permission
+from app.core.config import Settings
 from app.core.rbac import Permission, TenantContext
 from app.core.rgpd import LEGAL_BASIS_CONSENT
 from app.core.security import InputSanitizer
@@ -30,7 +31,28 @@ from app.domain.portfolio_and_leads_service import (
     compute_lead_qualification,
 )
 
-crm_router = APIRouter(prefix="/crm", tags=["Phase 2 — CRM & RGPD"])
+def ensure_crm_persistence(session_factory, *, is_production: bool) -> None:
+    """Refuse le stockage mémoire en production : il n'est ni durable ni partagé entre workers."""
+    if is_production and session_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Le CRM est temporairement indisponible : la base PostgreSQL persistante n'est pas configurée.",
+            headers={"Retry-After": "60"},
+        )
+
+
+async def require_crm_persistence(
+    sf=Depends(get_db_session_factory),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    ensure_crm_persistence(sf, is_production=settings.is_production)
+
+
+crm_router = APIRouter(
+    prefix="/crm",
+    tags=["Phase 2 — CRM & RGPD"],
+    dependencies=[Depends(require_crm_persistence)],
+)
 _crm = CrmService()
 _leads_service = PortfolioAndLeadsService(_crm, interconnections_service)
 
