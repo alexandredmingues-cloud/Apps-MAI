@@ -328,12 +328,12 @@ export default function MontySaasCockpitPage() {
           <section className="rounded-2xl bg-ivoryCard border border-amber-300 p-6 space-y-4">
             <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-xl">
               <Shield className="w-5 h-5 text-amber-700" />
-              Session Monty Pro requise pour le module « {activeSection.toUpperCase()} »
+              Session Mon-Agent Pro requise pour le module « {activeSection.toUpperCase()} »
             </div>
             <p className="text-sm text-slateMuted">
               {session
                 ? `Votre compte connecté (${session.role}) appartient à l'espace Particulier/Vendeur et n'a pas accès au CRM, Pipeline, Pré-État Daté ou Administration d'agence.`
-                : "Connectez un compte agence Monty Pro (Directeur, Admin, Agent ou Assistant) depuis le Dashboard pour accéder aux données cloisonnées par agence (PostgreSQL RLS)."}
+                : "Connectez un compte agence Mon-Agent Pro (Directeur, Admin, Agent ou Assistant) depuis le Dashboard pour accéder aux données cloisonnées par agence (PostgreSQL RLS)."}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -377,7 +377,7 @@ export default function MontySaasCockpitPage() {
             initialTab="search"
             initialCountry="FR"
             showTabs={true}
-            audienceLabel="Monty Pro • Catalogue Agences & Mobilité"
+            audienceLabel="Mon-Agent Pro • Catalogue Agences & Mobilité"
           />
         ) : (
           <>
@@ -389,7 +389,7 @@ export default function MontySaasCockpitPage() {
                     Phase 1 + Centre d&apos;Information &amp; Site Web — Socle SaaS Multi-Agences
                   </p>
                   <h2 className="mt-1 font-display text-2xl sm:text-3xl font-bold">
-                    Monty Immobilier • Cockpit Web Pro
+                    MON-AGENT • Cockpit Web Pro
                   </h2>
                   <p className="mt-1 text-sm text-ivoryWarm/80">
                     « L&apos;humain avant tout. La technologie au service du conseiller immobilier. »
@@ -763,11 +763,11 @@ export default function MontySaasCockpitPage() {
               <div>
                 <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-lg">
                   <TrendingUp className="w-5 h-5 text-goldAntique" />
-                  Plateforme Monty Complète — Particuliers, Pro, Notaires, RNIC, Monty AI &amp; APK
+                  Plateforme MON-AGENT — Particuliers, Pro, Notaires, RNIC, Mon-Agent AI &amp; APK
                 </div>
                 <p className="mt-1.5 text-sm text-slateMuted">
                   Socle multi-pays FR/PT + Site Web Public (`/site`, `/annonces`, `/publier`, `/coproprietes`, `/telecharger`, `/mon-compte`),
-                  Monty Price Index, Monty AI Core multi-moteurs, Annuaire Notaires &amp; RNIC, CRM Multi-Agences et Pipeline Transactions.
+                  Mon-Agent Price Index, Mon-Agent AI Core multi-moteurs, Annuaire Notaires &amp; RNIC, CRM Multi-Agences et Pipeline Transactions.
                 </p>
               </div>
               <Link
