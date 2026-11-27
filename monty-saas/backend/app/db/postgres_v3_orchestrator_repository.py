@@ -1067,9 +1067,7 @@ class PostgresV3OrchestratorRepository:
                             amount_euro, status, stripe_session_id
                         )
                         VALUES (:oid, :did, :pid, :buid, :email, :amt, 'PENDING_PAYMENT', :sid)
-                        ON CONFLICT (order_id) DO UPDATE SET
-                            stripe_session_id = EXCLUDED.stripe_session_id,
-                            updated_at = now()
+                        ON CONFLICT (order_id) DO NOTHING
                         RETURNING *
                         """
                     ),
@@ -1103,6 +1101,7 @@ class PostgresV3OrchestratorRepository:
                             paid_at = COALESCE(paid_at, now()),
                             updated_at = now()
                         WHERE order_id = :oid
+                          AND stripe_session_id = :sid
                         RETURNING *
                         """
                     ),
