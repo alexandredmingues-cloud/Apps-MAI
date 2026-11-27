@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink, Megaphone } from "lucide-react";
 
 type SponsoredAd = { id: string; brand_name: string; creative_image_url: string; target_url: string; headline: string; description: string; sponsored: true };
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 export function SponsoredBrandSlot({ placement = "HOME", countryCode = "FR", city = "" }: { placement?: "HOME" | "SEARCH" | "CONTENT" | "PRO"; countryCode?: "FR" | "PT" | "GB"; city?: string }) {
   const [ads, setAds] = useState<SponsoredAd[]>([]);
