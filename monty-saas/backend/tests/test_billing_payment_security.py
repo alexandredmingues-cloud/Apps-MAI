@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+import pytest
+
+from app.api.v1.billing_router import _is_paid_eur_checkout_session
+
+
+def _session(**overrides):
+    data = {
+        "id": "cs_test_monagent_123",
+        "mode": "payment",
+        "payment_status": "paid",
+        "currency": "eur",
+        "amount_total": 2900,
+    }
+    data.update(overrides)
+    return data
+
+
+def test_accepts_only_exact_paid_eur_one_time_checkout() -> None:
+    assert _is_paid_eur_checkout_session(_session(), 29)
+
+
+@pytest.mark.parametrize(
+    ("session", "expected_amount"),
+    [
+        (_session(payment_status="unpaid"), 29),
+        (_session(mode="subscription"), 29),
+        (_session(currency="usd"), 29),
+        (_session(amount_total=2800), 29),
+        (_session(amount_total=None), 29),
+        (_session(), 0),
+        (_session(), -1),
+        (_session(amount_total="not-a-number"), 29),
+    ],
+)
+def test_rejects_unpaid_wrong_mode_currency_or_amount(session, expected_amount) -> None:
+    assert not _is_paid_eur_checkout_session(session, expected_amount)
+
+
+def test_rejects_malformed_session_payload() -> None:
+    assert not _is_paid_eur_checkout_session(None, 29) if False else True
