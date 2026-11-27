@@ -140,6 +140,8 @@ async def test_agency_scoped_tables_force_rls_for_table_owners() -> None:
         "lead_keyword_rules",
         "monty_price_index_configs",
         "monty_price_index_history",
+        "seller_pack_orders",
+        "rnic_access_passes",
     ]
     engine = create_async_engine(normalize_async_pg_url(database_url))
     try:
@@ -162,3 +164,108 @@ async def test_agency_scoped_tables_force_rls_for_table_owners() -> None:
         )
     finally:
         await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_payment_and_rnic_entitlements_are_restricted_by_rls_context() -> None:
+    import os
+    from datetime import datetime, timedelta, timezone
+
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url:
+        pytest.skip("DATABASE_URL absent: PostgreSQL RLS integration test only")
+
+    engine = create_async_engine(normalize_async_pg_url(database_url))
+    suffix = uuid.uuid4().hex
+    role_name = f"monagent_pay_{suffix}"
+    order_id = f"sp_rls_{suffix}"
+    pass_token = f"rnic_rls_{suffix}"
+    stripe_session = f"cs_test_{suffix}"
+
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(f'CREATE ROLE "{role_name}" NOLOGIN NOSUPERUSER NOBYPASSRLS'))
+            await conn.execute(text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON seller_pack_orders TO "{role_name}"'))
+            await conn.execute(text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON rnic_access_passes TO "{role_name}"'))
+            await conn.execute(
+                text("""
+                    INSERT INTO seller_pack_orders
+                      (order_id, dossier_id, buyer_email, amount_euro, status, stripe_session_id)
+                    VALUES (:oid, 'dossier-rls', 'buyer@example.test', 29, 'PENDING_PAYMENT', :sid)
+                """),
+                {"oid": order_id, "sid": stripe_session},
+            )
+            await conn.execute(
+                text("""
+                    INSERT INTO rnic_access_passes
+                      (buyer_email, pass_token, stripe_session_id, amount_euro, status, expires_at)
+                    VALUES ('buyer@example.test', :token, :sid, 19, 'ACTIVE', :expires)
+                """),
+                {"token": pass_token, "sid": stripe_session, "expires": datetime.now(timezone.utc) + timedelta(days=30)},
+            )
+
+        async with engine.begin() as conn:
+            await conn.execute(text(f'SET LOCAL ROLE "{role_name}"'))
+            state = (
+                await conn.execute(text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user"))
+            ).one()
+            assert state == (False, False)
+
+            hidden_order = await conn.execute(
+                text("SELECT order_id FROM seller_pack_orders WHERE order_id = :oid"),
+                {"oid": order_id},
+            )
+            assert hidden_order.first() is None, "Seller orders must be invisible without payment capability"
+
+            hidden_pass = await conn.execute(
+                text("SELECT pass_token FROM rnic_access_passes WHERE pass_token = :token"),
+                {"token": pass_token},
+            )
+            assert hidden_pass.first() is None, "RNIC passes must be invisible without user/pass context"
+
+            await conn.execute(text("SELECT set_config('app.rnic_pass_token', :token, true)"), {"token": pass_token})
+            visible_pass = await conn.execute(
+                text("SELECT pass_token FROM rnic_access_passes WHERE pass_token = :token"),
+                {"token": pass_token},
+            )
+            assert visible_pass.scalar_one() == pass_token, "The exact bearer pass may read its entitlement"
+
+            with pytest.raises(DBAPIError):
+                async with conn.begin_nested():
+                    await conn.execute(
+                        text("""
+                            INSERT INTO rnic_access_passes
+                              (buyer_email, pass_token, stripe_session_id, amount_euro, status, expires_at)
+                            VALUES ('intruder@example.test', :token, :sid, 19, 'ACTIVE', now() + interval '30 days')
+                        """),
+                        {"token": f"{pass_token}_forged", "sid": f"{stripe_session}_forged"},
+                    )
+
+            await conn.execute(text("SELECT set_config('app.payment_processor', 'on', true)"))
+            visible_order = await conn.execute(
+                text("SELECT order_id FROM seller_pack_orders WHERE order_id = :oid"),
+                {"oid": order_id},
+            )
+            assert visible_order.scalar_one() == order_id, "Payment repository capability may read its order"
+
+            updated = await conn.execute(
+                text("UPDATE seller_pack_orders SET status = 'PAID' WHERE order_id = :oid"),
+                {"oid": order_id},
+            )
+            assert updated.rowcount == 1, "Payment repository capability may update its order"
+    finally:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM seller_pack_orders WHERE order_id = :oid"), {"oid": order_id})
+                await conn.execute(text("DELETE FROM rnic_access_passes WHERE pass_token = :token"), {"token": pass_token})
+                await conn.execute(text(f"""
+                    DO $cleanup$
+                    BEGIN
+                      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role_name}') THEN
+                        EXECUTE 'DROP OWNED BY "{role_name}"';
+                        EXECUTE 'DROP ROLE "{role_name}"';
+                      END IF;
+                    END
+                    $cleanup$;
+                """))
+        finally:
+            await engine.dispose()
