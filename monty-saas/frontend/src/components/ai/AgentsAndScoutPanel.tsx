@@ -11,6 +11,7 @@ import {
   Power,
   Send,
   ShieldCheck,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
@@ -20,12 +21,14 @@ import type {
   MontyRole,
   ScoutProposal,
 } from "@/lib/types";
+import { MontyAIChatWorkspace } from "./MontyAIChatWorkspace";
 
 interface AgentsAndScoutPanelProps {
   role: MontyRole;
 }
 
 export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
+  const [aiTab, setAiTab] = useState<"unified" | "agents">("unified");
   const [catalog, setCatalog] = useState<AgentCatalogResponse | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("scout_prospection");
   const [promptText, setPromptText] = useState(
@@ -132,7 +135,34 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
 
   return (
     <div className="space-y-6">
-      {/* En-tête Gouvernance IA + Kill-Switch */}
+      <div className="inline-flex rounded-2xl bg-ivoryCard border border-borderSubtle p-1 text-xs">
+        <button
+          type="button"
+          onClick={() => setAiTab("unified")}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold transition ${
+            aiTab === "unified" ? "bg-emeraldDeep text-goldChampagne" : "text-slateMuted hover:text-obsidianInk"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Assistant unifié Monty AI
+        </button>
+        <button
+          type="button"
+          onClick={() => setAiTab("agents")}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold transition ${
+            aiTab === "agents" ? "bg-emeraldDeep text-goldChampagne" : "text-slateMuted hover:text-obsidianInk"
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5" />
+          11 Agents &amp; Monty Scout
+        </button>
+      </div>
+
+      {aiTab === "unified" ? (
+        <MontyAIChatWorkspace />
+      ) : (
+        <>
+          {/* En-tête Gouvernance IA + Kill-Switch */}
       <div className="rounded-2xl bg-emeraldDeep text-ivoryWarm p-5 border border-goldAntique/40 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-goldChampagne font-semibold">
@@ -392,6 +422,8 @@ export function AgentsAndScoutPanel({ role }: AgentsAndScoutPanelProps) {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

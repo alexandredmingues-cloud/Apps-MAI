@@ -1,9 +1,9 @@
 import React from "react";
 import Link from "next/link";
-import { Briefcase, Building2, Calculator, Globe2, Home, Newspaper, PlusCircle, ShieldCheck, UserCircle } from "lucide-react";
+import { Briefcase, Building2, Calculator, Download, Globe2, Home, Newspaper, PlusCircle, ShieldCheck, UserCircle } from "lucide-react";
 
 interface PublicWebHeaderProps {
-  activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs" | "coproprietes" | "mon-compte";
+  activePath: "site" | "annonces" | "publier" | "actualites" | "simulateurs" | "coproprietes" | "telecharger" | "mon-compte";
 }
 
 export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
@@ -91,6 +91,17 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
             <Calculator className="w-3.5 h-3.5" />
             Simulateurs
           </Link>
+          <Link
+            href="/telecharger"
+            className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
+              activePath === "telecharger"
+                ? "bg-emeraldSurface text-goldChampagne border border-goldAntique/40"
+                : "text-ivoryWarm/85 hover:bg-emeraldMid"
+            }`}
+          >
+            <Download className="w-3.5 h-3.5" />
+            Télécharger l&apos;app
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -135,6 +146,10 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
         <Link href="/simulateurs" className={`px-3 py-1.5 rounded-lg ${activePath === "simulateurs" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           Simulateurs
         </Link>
+        <Link href="/telecharger" className={`px-3 py-1.5 rounded-lg inline-flex items-center gap-1 ${activePath === "telecharger" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
+          <Download className="w-3 h-3" />
+          Télécharger APK
+        </Link>
         <Link href="/mon-compte" className={`px-3 py-1.5 rounded-lg ${activePath === "mon-compte" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           Mon Espace
         </Link>
@@ -164,6 +179,7 @@ export function PublicWebFooter() {
             <li><Link href="/mon-compte" className="hover:text-goldChampagne">Mon Espace Particulier / Vendeur</Link></li>
             <li><Link href="/actualites" className="hover:text-goldChampagne">Centre d&apos;Actualités Particuliers</Link></li>
             <li><Link href="/simulateurs" className="hover:text-goldChampagne">6 Simulateurs Immobiliers Gratuits</Link></li>
+            <li><Link href="/telecharger" className="hover:text-goldChampagne">Télécharger l&apos;application Android (APK)</Link></li>
             <li><Link href="/" className="hover:text-goldChampagne">Cockpit Professionnel Agences (SaaS)</Link></li>
           </ul>
         </div>

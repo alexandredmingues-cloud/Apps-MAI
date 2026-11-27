@@ -59,6 +59,36 @@ class ClientDocumentRecord:
     created_at: str
 
 
+@dataclass
+class ModuleFeatureFlag:
+    module_key: str
+    label: str
+    category: str
+    status: str  # "EN_DEVELOPPEMENT" | "EN_TEST" | "DISPONIBLE"
+    visible: bool
+    critical: bool = False
+    updated_by: str = "system"
+    updated_at: str = ""
+
+
+DEFAULT_MODULE_FLAGS: tuple[tuple[str, str, str, str, bool, bool], ...] = (
+    ("dashboard", "Tableau de bord", "Pilotage", "DISPONIBLE", True, True),
+    ("search", "Biens & Annonces", "Marketplace", "DISPONIBLE", True, False),
+    ("matching", "Matching 6 modes", "Prospection", "DISPONIBLE", True, False),
+    ("properties", "Portefeuille & Pipeline", "Transaction", "DISPONIBLE", True, False),
+    ("valuation", "Estimation & Price Index", "Analyse", "DISPONIBLE", True, False),
+    ("finance", "Simulateur HCSF", "Finance", "DISPONIBLE", True, False),
+    ("crm", "CRM & Monty Leads", "Acquisition", "DISPONIBLE", True, False),
+    ("copro", "Copropriétés RNIC", "Data France", "DISPONIBLE", True, False),
+    ("notaries", "Notaires & Avant-Contrats", "Juridique", "DISPONIBLE", True, False),
+    ("documents", "Documents & RGPD", "Conformité", "DISPONIBLE", True, False),
+    ("agents", "Monty AI & 11 Agents", "Intelligence", "DISPONIBLE", True, False),
+    ("news", "Veille & Actualités", "Veille", "DISPONIBLE", True, False),
+    ("telecharger", "Application Mobile (APK)", "Mobile", "DISPONIBLE", True, False),
+    ("admin", "Admin SaaS & Sécurité", "Gouvernance", "DISPONIBLE", True, True),
+)
+
+
 class InterconnectionsService:
     """
     Bus d'interconnexions en mémoire (fallback sans DATABASE_URL) :
@@ -87,6 +117,8 @@ class InterconnectionsService:
         self._favorites: list[ClientFavoriteRecord] = []
         self._client_documents: list[ClientDocumentRecord] = []
         self._auto_tasks: list[dict[str, Any]] = []
+        self._module_flags_by_agency: dict[str, dict[str, ModuleFeatureFlag]] = {}
+        self._module_flag_history: list[dict[str, Any]] = []
 
     def emit_notification(
         self,
@@ -289,6 +321,87 @@ class InterconnectionsService:
             target_id=rec.id,
         )
         return rec
+
+    # --- MODULE FEATURE FLAGS CENTRALISES ---
+    def _ensure_module_flags(self, agency_id: str) -> dict[str, ModuleFeatureFlag]:
+        if agency_id not in self._module_flags_by_agency:
+            now = datetime.now(timezone.utc).isoformat()
+            self._module_flags_by_agency[agency_id] = {
+                key: ModuleFeatureFlag(
+                    module_key=key,
+                    label=label,
+                    category=cat,
+                    status=st,
+                    visible=vis,
+                    critical=crit,
+                    updated_by="system",
+                    updated_at=now,
+                )
+                for key, label, cat, st, vis, crit in DEFAULT_MODULE_FLAGS
+            }
+        return self._module_flags_by_agency[agency_id]
+
+    def list_module_flags(self, agency_id: str) -> list[ModuleFeatureFlag]:
+        return list(self._ensure_module_flags(agency_id).values())
+
+    def update_module_flag(
+        self,
+        ctx: TenantContext,
+        *,
+        module_key: str,
+        status: str,
+        visible: bool,
+    ) -> ModuleFeatureFlag:
+        ctx.require_permission(Permission.AGENCY_MANAGE)
+        flags = self._ensure_module_flags(ctx.agency_id)
+        target = flags.get(module_key)
+        if target is None:
+            raise ValueError("Module inconnu.")
+        norm_status = status.strip().upper()
+        if norm_status not in ("EN_DEVELOPPEMENT", "EN_TEST", "DISPONIBLE"):
+            raise ValueError("Statut module invalide (EN_DEVELOPPEMENT, EN_TEST, DISPONIBLE).")
+        if target.critical and not visible:
+            raise ValueError("Les modules critiques de sécurité et d'administration ne peuvent pas être masqués.")
+        now = datetime.now(timezone.utc).isoformat()
+        target.status = norm_status
+        target.visible = bool(visible)
+        target.updated_by = ctx.user_id
+        target.updated_at = now
+        self._module_flag_history.insert(
+            0,
+            {
+                "id": f"mfh-{uuid.uuid4().hex[:8]}",
+                "agency_id": ctx.agency_id,
+                "module_key": module_key,
+                "status": norm_status,
+                "visible": bool(visible),
+                "updated_by": ctx.user_id,
+                "updated_at": now,
+            },
+        )
+        return target
+
+    def restore_default_module_flags(self, ctx: TenantContext) -> list[ModuleFeatureFlag]:
+        ctx.require_permission(Permission.AGENCY_MANAGE)
+        self._module_flags_by_agency.pop(ctx.agency_id, None)
+        restored = self.list_module_flags(ctx.agency_id)
+        self._module_flag_history.insert(
+            0,
+            {
+                "id": f"mfh-{uuid.uuid4().hex[:8]}",
+                "agency_id": ctx.agency_id,
+                "module_key": "ALL",
+                "status": "RESTORED_DEFAULTS",
+                "visible": True,
+                "updated_by": ctx.user_id,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        return restored
+
+    def list_module_flag_history(self, ctx: TenantContext) -> list[dict[str, Any]]:
+        ctx.require_permission(Permission.AGENCY_MANAGE)
+        return [h for h in self._module_flag_history if h["agency_id"] == ctx.agency_id][:50]
 
 
 interconnections_service = InterconnectionsService()

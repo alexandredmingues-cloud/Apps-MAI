@@ -412,3 +412,60 @@ async def update_agency_feature_flags(
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return flags.__dict__
+
+
+@interconnect_router.get("/module-flags/active")
+async def get_active_module_flags(
+    agency_id: str = Query(default="agency-france-reseau", max_length=128),
+) -> dict[str, Any]:
+    flags = interconnections_service.list_module_flags(agency_id)
+    return {"agency_id": agency_id, "modules": [f.__dict__ for f in flags]}
+
+
+@interconnect_router.get("/admin/module-flags")
+async def admin_list_module_flags(
+    ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+) -> dict[str, Any]:
+    flags = interconnections_service.list_module_flags(ctx.agency_id)
+    return {"count": len(flags), "modules": [f.__dict__ for f in flags]}
+
+
+class UpdateModuleFlagRequest(BaseModel):
+    status: str = Field(default="DISPONIBLE", max_length=24)
+    visible: bool = True
+
+
+@interconnect_router.put("/admin/module-flags/{module_key}")
+async def admin_update_module_flag(
+    module_key: str,
+    body: UpdateModuleFlagRequest,
+    ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+) -> dict[str, Any]:
+    try:
+        updated = interconnections_service.update_module_flag(
+            ctx,
+            module_key=module_key,
+            status=body.status,
+            visible=body.visible,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return updated.__dict__
+
+
+@interconnect_router.post("/admin/module-flags/restore")
+async def admin_restore_module_flags(
+    ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+) -> dict[str, Any]:
+    flags = interconnections_service.restore_default_module_flags(ctx)
+    return {"count": len(flags), "modules": [f.__dict__ for f in flags]}
+
+
+@interconnect_router.get("/admin/module-flags/history")
+async def admin_module_flag_history(
+    ctx: TenantContext = Depends(require_permission(Permission.AGENCY_MANAGE)),
+) -> dict[str, Any]:
+    items = interconnections_service.list_module_flag_history(ctx)
+    return {"count": len(items), "history": items}

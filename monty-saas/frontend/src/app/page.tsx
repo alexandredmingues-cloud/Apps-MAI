@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, Calculator, CalendarDays, CheckCircle2, Database, Globe2, Newspaper, Server, Shield, TrendingUp } from "lucide-react";
+import { Bell, Calculator, CalendarDays, CheckCircle2, Database, Download, Globe2, Newspaper, Server, Shield, TrendingUp } from "lucide-react";
 import { LogOut } from "lucide-react";
 import { AdminSaasConsole } from "@/components/admin/AdminSaasConsole";
 import { AgentsAndScoutPanel } from "@/components/ai/AgentsAndScoutPanel";
@@ -19,6 +19,7 @@ import type {
   AgencyNotification,
   HealthStatus,
   HcsfResult,
+  ModuleFeatureFlag,
   MontyRole,
   NavSectionKey,
   SessionInfo,
@@ -51,6 +52,7 @@ export default function MontySaasCockpitPage() {
   const [notifications, setNotifications] = useState<AgencyNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [agendaItems, setAgendaItems] = useState<UnifiedAgendaItem[]>([]);
+  const [moduleFlags, setModuleFlags] = useState<ModuleFeatureFlag[]>([]);
 
   async function refreshDashboardWidgets() {
     try {
@@ -108,6 +110,11 @@ export default function MontySaasCockpitPage() {
           setRole("BUYER");
         });
     }
+
+    montyApi
+      .getActiveModuleFlags(stored?.agency_id ?? agencyId)
+      .then((res) => setModuleFlags(res.modules))
+      .catch(() => {});
   }, []);
 
   async function handleConnectDevSession(selectedRole: MontyRole) {
@@ -254,6 +261,7 @@ export default function MontySaasCockpitPage() {
       onSelectSection={setActiveSection}
       agencyId={session ? session.agency_id : "Session non connectée"}
       role={session ? session.role : "VISITEUR"}
+      activeModuleFlags={moduleFlags}
     >
       <div className="space-y-6">
         {/* Barre d'accès rapide Site Web Public & Double Public */}
@@ -262,6 +270,13 @@ export default function MontySaasCockpitPage() {
             Architecture Multi-Pays : 🇫🇷 France entière (Active) • 🇵🇹 Portugal (Module isolé prêt)
           </span>
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/telecharger"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-goldAntique text-emeraldDeep font-bold hover:bg-goldChampagne"
+            >
+              <Download className="w-3.5 h-3.5" />
+              App Mobile APK
+            </Link>
             <Link
               href="/site"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emeraldDeep text-goldChampagne font-semibold hover:bg-emeraldMid"
@@ -721,16 +736,24 @@ export default function MontySaasCockpitPage() {
             )}
 
             {/* Statut transparent du plan de livraison */}
-            <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5">
-              <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-lg">
-                <TrendingUp className="w-5 h-5 text-goldAntique" />
-                Plateforme Monty Complète — Particuliers, Pro, Notaires, RNIC &amp; IA ({activeSection.toUpperCase()})
+            <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-emeraldDeep font-display font-bold text-lg">
+                  <TrendingUp className="w-5 h-5 text-goldAntique" />
+                  Plateforme Monty Complète — Particuliers, Pro, Notaires, RNIC, Monty AI &amp; APK
+                </div>
+                <p className="mt-1.5 text-sm text-slateMuted">
+                  Socle multi-pays FR/PT + Site Web Public (`/site`, `/annonces`, `/publier`, `/coproprietes`, `/telecharger`, `/mon-compte`),
+                  Monty Price Index, Monty AI Core multi-moteurs, Annuaire Notaires &amp; RNIC, CRM Multi-Agences et Pipeline Transactions.
+                </p>
               </div>
-              <p className="mt-2 text-sm text-slateMuted">
-                Socle multi-pays FR/PT + Site Web Public (`/site`, `/annonces`, `/publier`, `/coproprietes`, `/mon-compte`),
-                Annuaire Notaires de France &amp; Envoi Compromis `.eml`, Base Copropriétés RNIC (Gratuit Agences/Vendeurs, Payant Particuliers),
-                CRM Multi-Agences, Pipeline Transactions, 11 Agents IA et Gouvernance RBAC + RGPD.
-              </p>
+              <Link
+                href="/telecharger"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne text-xs font-bold hover:bg-emeraldMid shrink-0"
+              >
+                <Download className="w-4 h-4" />
+                Télécharger l&apos;APK Android
+              </Link>
             </section>
           </>
         )}

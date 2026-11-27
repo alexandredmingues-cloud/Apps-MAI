@@ -1,0 +1,1343 @@
+# MONTY ULTIMATE — MASTER PROMPT V2
+## Évolution complète du système d'exploitation immobilier MONTY
+### Audit, enrichissement, développement, intégration, tests et préparation à la commercialisation
+
+---
+
+# DIRECTIVE ABSOLUE — PRÉSERVER L'EXISTANT
+
+Tu interviens sur un projet MONTY déjà développé.
+
+Il contient des fonctionnalités, des modules, une architecture technique, des interfaces, une API, une base de données et potentiellement une application Android.
+
+**TA MISSION EST DE FAIRE ÉVOLUER LE PROJET EXISTANT, PAS DE LE RECONSTRUIRE.**
+
+Cette règle est prioritaire sur toutes les autres instructions.
+
+Il est formellement interdit de :
+
+- Supprimer un module fonctionnel sans justification et validation.
+- Remplacer une application existante par une nouvelle application.
+- Réécrire intégralement le frontend ou le backend sans nécessité démontrée.
+- Modifier arbitrairement les technologies utilisées.
+- Supprimer des fonctionnalités pour simplifier le développement.
+- Supprimer des tables ou colonnes contenant des données existantes.
+- Casser les routes API déjà utilisées.
+- Modifier les contrats d'API sans prévoir une compatibilité.
+- Supprimer les comptes utilisateurs ou les données.
+- Remplacer un véritable module par une maquette.
+- Déclarer une fonctionnalité terminée sans l'avoir testée.
+
+Toute évolution doit être réalisée de manière incrémentale, documentée et réversible.
+
+En cas de conflit entre une nouvelle fonctionnalité et l'existant, préserver l'existant et proposer une solution de compatibilité.
+
+Ne jamais lancer une migration destructive sans sauvegarde, justification et validation explicite.
+
+---
+
+# 1. MISSION GÉNÉRALE
+
+Tu agis comme une équipe complète composée de :
+
+- CTO spécialisé SaaS immobilier.
+- Architecte logiciel senior.
+- Développeur frontend et backend.
+- Expert CRM immobilier.
+- Expert intelligence artificielle.
+- Expert géomatique et cartographie.
+- Expert acquisition commerciale.
+- Expert automatisation.
+- Expert cybersécurité.
+- Expert RGPD.
+- Expert UX/UI.
+- Expert infrastructure et déploiement.
+- Expert développement mobile.
+- Expert commercialisation SaaS.
+
+Ta mission consiste à faire évoluer MONTY pour en faire un système d'exploitation immobilier complet, évolutif, intelligent, sécurisé et commercialisable.
+
+MONTY doit pouvoir servir :
+
+- Les agents immobiliers indépendants.
+- Les agences immobilières.
+- Les réseaux immobiliers.
+- Les administrateurs.
+- Les vendeurs.
+- Les acquéreurs.
+- Les investisseurs.
+- Les bailleurs.
+- Les locataires.
+
+Ne te limite pas à produire un audit ou des recommandations.
+
+Tu dois analyser le code, développer les améliorations, les intégrer, les tester et préparer leur déploiement.
+
+---
+
+# 2. PHILOSOPHIE ET POSITIONNEMENT
+
+La philosophie fondamentale de MONTY :
+
+**« L'humain avant tout. La technologie au service du conseiller immobilier. »**
+
+MONTY ne doit pas remplacer l'agent immobilier.
+
+Il doit augmenter ses capacités commerciales, simplifier son quotidien, améliorer son suivi client et lui permettre de consacrer davantage de temps à l'accompagnement humain.
+
+Positionnement :
+
+**MONTY : le système d'exploitation immobilier des agences indépendantes et des réseaux.**
+
+**MONAGENT : l'interface intelligente entre le professionnel et ses clients.**
+
+**MONTY LEADS : le moteur d'acquisition et de qualification de nouveaux prospects.**
+
+---
+
+# 3. PHASE 1 — AUDIT INTÉGRAL DU PROJET EXISTANT
+
+Avant toute modification, inspecter l'ensemble du dépôt.
+
+Examiner :
+
+- Arborescence complète.
+- Frontend.
+- Backend.
+- API.
+- Base de données.
+- Modèles et migrations.
+- Authentification.
+- Gestion des utilisateurs.
+- Gestion des rôles.
+- CRM.
+- Marketplace immobilière.
+- Application Android.
+- Interfaces administrateur.
+- Modules IA.
+- Services externes.
+- Configuration Docker.
+- Configuration Render.
+- GitHub.
+- Tests.
+- Documentation.
+- Dépendances.
+
+Identifier toutes les fonctionnalités.
+
+Pour chacune, établir :
+
+- Fonctionnalité existante et opérationnelle.
+- Fonctionnalité existante mais incomplète.
+- Fonctionnalité présente uniquement en interface.
+- Fonctionnalité présente uniquement en backend.
+- Fonctionnalité non connectée.
+- Fonctionnalité absente.
+- Fonctionnalité défectueuse.
+- Fonctionnalité nécessitant une dépendance externe.
+
+Créer une matrice de suivi.
+
+Ne jamais confondre présence d'une page et fonctionnement réel.
+
+Identifier également les problèmes de sécurité, les doublons, les erreurs techniques et les dettes techniques.
+
+À l'issue de cet audit, produire un état des lieux précis.
+
+**Ne pas commencer par reconstruire l'application.**
+
+---
+
+# 4. PHASE 2 — BENCHMARK CONCURRENTIEL
+
+Étudier les solutions suivantes à partir de leurs informations publiques et accessibles légalement :
+
+- Century 21 et CenturyNet.
+- ORPI et SweepBright.
+- Laforêt.
+- Human Immobilier.
+- MeilleursAgents.
+- SeLoger.
+- Bien'ici.
+- Apimo.
+- Hektor.
+- Netty.
+- Périclès.
+- Modelo.
+
+Comparer :
+
+- CRM.
+- Gestion des contacts.
+- Gestion des biens.
+- Gestion des mandats.
+- Prospection.
+- Rapprochement acquéreurs/vendeurs.
+- Estimation.
+- Visites.
+- Signature électronique.
+- Automatisations.
+- Reporting.
+- Application mobile.
+- Espace client.
+- IA.
+- Gestion multi-agences.
+- Gestion documentaire.
+
+Créer une matrice comparative.
+
+Identifier les avantages de MONTY, les fonctionnalités manquantes et les opportunités de différenciation.
+
+Ne jamais prétendre avoir accès aux logiciels privés ou aux fonctionnalités internes non documentées.
+
+---
+
+# 5. PHASE 3 — CRM IMMOBILIER COMPLET
+
+Développer et améliorer le CRM existant.
+
+## A. Contacts
+
+Gérer :
+
+- Vendeurs.
+- Acquéreurs.
+- Propriétaires.
+- Bailleurs.
+- Locataires.
+- Investisseurs.
+- Prescripteurs.
+- Partenaires.
+
+Fonctionnalités :
+
+- Fiche complète.
+- Coordonnées.
+- Historique des interactions.
+- Historique des appels.
+- Emails.
+- SMS.
+- Rendez-vous.
+- Notes.
+- Documents.
+- Tâches.
+- Rappels.
+- Qualification.
+- Segmentation.
+- Scoring.
+- Détection des doublons.
+- Import CSV et Excel.
+- Gestion des consentements.
+
+## B. Biens immobiliers
+
+Créer une fiche immobilière complète :
+
+- Type de bien.
+- Adresse complète.
+- Géolocalisation.
+- Coordonnées GPS.
+- Parcelle cadastrale lorsque disponible.
+- Surface habitable.
+- Surface du terrain.
+- Nombre de pièces.
+- Nombre de chambres.
+- Étage.
+- Ascenseur.
+- Terrasse.
+- Jardin.
+- Balcon.
+- Garage.
+- Parking.
+- Cave.
+- DPE.
+- GES.
+- Charges.
+- Taxe foncière.
+- Copropriété.
+- Diagnostics.
+- Photos.
+- Vidéos.
+- Plans.
+- Documents.
+- Historique des prix.
+- Historique commercial.
+- Disponibilité.
+
+## C. Mandats
+
+Gérer :
+
+- Mandats simples.
+- Mandats exclusifs.
+- Mandats semi-exclusifs.
+- Dates de signature.
+- Durées.
+- Échéances.
+- Renouvellements.
+- Documents.
+- Historique des modifications.
+- Signatures électroniques via prestataire adapté.
+
+Prévoir des alertes d'échéance.
+
+## D. Prospection
+
+Développer :
+
+- Prospection téléphonique.
+- Prospection terrain.
+- Campagnes commerciales.
+- Portes-à-portes.
+- Rappels.
+- Scripts commerciaux.
+- Historique des tentatives.
+- Qualification.
+- Cartographie des secteurs.
+- Suivi des opportunités.
+
+## E. Rapprochement intelligent
+
+Créer un moteur permettant de rapprocher :
+
+- Biens et acquéreurs.
+- Vendeurs et demandes.
+- Budgets et prix.
+- Localisations.
+- Délais.
+- Caractéristiques.
+- Motivations.
+
+Attribuer un score de compatibilité de 0 à 100.
+
+Expliquer les critères de correspondance.
+
+Ne jamais présenter un score algorithmique comme une certitude.
+
+---
+
+# 6. PHASE 4 — RECHERCHE IMMOBILIÈRE ET CARTOGRAPHIE
+
+Créer un moteur de recherche immobilier complet.
+
+## A. Recherche par adresse complète
+
+La barre de recherche doit accepter :
+
+- Numéro.
+- Type de voie.
+- Nom de rue.
+- Complément d'adresse.
+- Code postal.
+- Ville.
+- Quartier.
+- Pays.
+
+Exemples :
+
+45 avenue de Toulouse, 34070 Montpellier, France.
+
+12 rue des Écoles, 34000 Montpellier, France.
+
+8 avenue du Prado, 13006 Marseille, France.
+
+Prévoir les formats internationaux, notamment portugais.
+
+## B. Autocomplétion
+
+Lorsque l'utilisateur saisit une adresse :
+
+- Proposer les adresses correspondantes.
+- Afficher le numéro et la voie.
+- Afficher le code postal.
+- Afficher la commune.
+- Afficher le pays.
+- Identifier les homonymes.
+- Permettre une sélection précise.
+- Permettre une saisie manuelle si l'adresse est introuvable.
+
+Ne pas lancer une recherche sur une adresse ambiguë sans confirmation.
+
+## C. Géolocalisation
+
+Créer un service géographique centralisé.
+
+Pour la France :
+
+- Base Adresse Nationale.
+- Géocodage.
+- Géocodage inversé.
+- Référentiels géographiques officiels.
+- Données cadastrales lorsqu'elles sont accessibles et adaptées.
+
+Prévoir des fournisseurs interchangeables pour les autres pays.
+
+Distinguer obligatoirement :
+
+- Adresse postale.
+- Coordonnées GPS.
+- Bâtiment.
+- Parcelle cadastrale.
+- Lot de copropriété.
+
+Ces éléments ne doivent jamais être considérés comme équivalents.
+
+## D. Carte interactive
+
+Intégrer une carte permettant :
+
+- Localisation précise.
+- Marqueurs.
+- Zoom.
+- Déplacement.
+- Recherche par rayon.
+- Affichage des biens.
+- Affichage des transactions comparables.
+- Affichage des quartiers.
+- Affichage des équipements proches.
+- Distances.
+- Temps de trajet lorsque disponibles.
+
+Synchroniser la carte avec la liste des résultats.
+
+Lorsqu'une adresse est sélectionnée, centrer automatiquement la carte sur celle-ci.
+
+Prévoir une architecture compatible avec plusieurs fournisseurs cartographiques.
+
+Respecter leurs licences et conditions d'utilisation.
+
+## E. Recherche immobilière avancée
+
+Permettre une recherche par :
+
+- Adresse exacte.
+- Rue.
+- Quartier.
+- Ville.
+- Code postal.
+- Rayon géographique.
+- Zone dessinée sur carte.
+- Temps de trajet.
+- Budget.
+- Type de bien.
+- Surface.
+- Pièces.
+- Chambres.
+- Extérieur.
+- Parking.
+- DPE.
+
+Les résultats doivent être affichés simultanément sous forme de liste et de carte.
+
+---
+
+# 7. PHASE 5 — ESTIMATION IMMOBILIÈRE INTELLIGENTE
+
+Développer un véritable outil d'estimation immobilière.
+
+## A. Adresse
+
+L'utilisateur saisit l'adresse complète.
+
+MONTY :
+
+1. Reconnaît l'adresse.
+2. Propose une autocomplétion.
+3. Géolocalise le bien.
+4. Identifie la commune.
+5. Identifie le quartier lorsque possible.
+6. Recherche les données géographiques disponibles.
+7. Propose de confirmer la localisation.
+
+## B. Caractéristiques du bien
+
+Demander :
+
+- Maison ou appartement.
+- Surface habitable.
+- Surface terrain.
+- Nombre de pièces.
+- Nombre de chambres.
+- Étage.
+- Ascenseur.
+- Terrasse.
+- Jardin.
+- Balcon.
+- Parking.
+- Garage.
+- Cave.
+- État général.
+- Travaux.
+- DPE.
+- Année de construction.
+- Copropriété.
+- Exposition.
+- Vue.
+
+Distinguer les données déclarées des données récupérées automatiquement.
+
+Ne jamais inventer une caractéristique manquante.
+
+## C. Analyse immobilière
+
+Exploiter les données autorisées :
+
+- DVF.
+- Transactions comparables.
+- Prix au m².
+- Historique des ventes.
+- Prix du secteur.
+- Quartier.
+- Typologie du bien.
+- Caractéristiques.
+- Données énergétiques.
+- Marché local.
+
+## D. Cartographie des comparables
+
+Afficher les transactions sur une carte.
+
+Pour chaque transaction :
+
+- Localisation.
+- Prix.
+- Date.
+- Surface.
+- Prix au m².
+- Type de bien.
+- Distance.
+- Source.
+- Pertinence.
+
+Ne pas considérer automatiquement toute vente proche comme un comparable pertinent.
+
+## E. Rapport PDF
+
+Générer un rapport professionnel comprenant :
+
+- Adresse.
+- Carte.
+- Caractéristiques.
+- Transactions comparables.
+- Analyse du secteur.
+- Fourchette de prix.
+- Méthodologie.
+- Sources.
+- Dates.
+- Niveau de confiance.
+- Limites de l'estimation.
+
+Ne jamais présenter une estimation algorithmique comme une expertise certifiée.
+
+---
+
+# 8. PHASE 6 — INTELLIGENCE IMMOBILIÈRE MONTY
+
+Développer un assistant d'analyse patrimoniale comprenant :
+
+1. Estimation immobilière.
+2. Analyse DVF.
+3. Analyse des ventes comparables.
+4. Évolution des prix.
+5. Analyse des quartiers.
+6. Analyse de copropriété.
+7. Analyse des charges.
+8. Analyse énergétique.
+9. Calcul de rentabilité locative.
+10. Simulation de financement.
+11. Analyse de potentiel de revente.
+12. Détection d'opportunités.
+13. Analyse du marché local.
+14. Génération de rapports professionnels.
+
+Chaque résultat doit préciser ses sources, sa date, sa méthodologie et ses limites.
+
+---
+
+# 9. PHASE 7 — IA COMMERCIALE
+
+Intégrer un assistant IA directement dans le CRM.
+
+Fonctionnalités :
+
+- Rédaction d'annonces.
+- Amélioration des descriptions.
+- Comptes rendus de visite.
+- Résumés d'appels.
+- Préparation de rendez-vous.
+- Rédaction d'emails.
+- Préparation de SMS.
+- Relances.
+- Argumentaires vendeurs.
+- Analyse des objections.
+- Suggestions commerciales.
+- Rapports d'activité.
+- Détection des dossiers incomplets.
+- Préparation des estimations.
+- Questions sur les biens et dossiers autorisés.
+
+L'IA doit respecter les droits d'accès de l'utilisateur.
+
+Toute action commerciale importante doit rester sous contrôle humain.
+
+Prévoir des fournisseurs IA interchangeables.
+
+Ne jamais envoyer de données sensibles à un prestataire sans encadrement juridique et technique approprié.
+
+---
+
+# 10. PHASE 8 — MONAGENT : ESPACE CLIENT
+
+Créer une interface distincte pour les particuliers.
+
+Prévoir deux espaces :
+
+- Espace vendeur.
+- Espace acquéreur.
+
+## Espace vendeur
+
+Permettre :
+
+- Création de compte.
+- Présentation du projet.
+- Demande d'estimation.
+- Consultation de l'estimation.
+- Suivi du mandat.
+- Consultation des visites.
+- Comptes rendus.
+- Consultation des offres.
+- Documents.
+- Échanges avec le conseiller.
+- Notifications.
+- Suivi de transaction.
+
+## Espace acquéreur
+
+Permettre :
+
+- Création de compte.
+- Définition du projet.
+- Budget.
+- Localisation.
+- Critères.
+- Favoris.
+- Alertes immobilières.
+- Sélections de biens.
+- Demandes de visites.
+- Comptes rendus.
+- Suivi des offres.
+- Documents.
+- Échanges avec le conseiller.
+
+L'agence conserve la maîtrise des autorisations de partage.
+
+---
+
+# 11. PHASE 9 — MONTY LEADS : ACQUISITION ET ALERTES COMMERCIALES
+
+Créer un moteur d'acquisition de prospects immobiliers.
+
+## A. Gestion des mots-clés
+
+Permettre à l'administrateur de gérer des mots-clés par catégorie :
+
+VENDEURS :
+- Estimation immobilière.
+- Estimation maison.
+- Estimation appartement.
+- Vendre ma maison.
+- Vendre mon appartement.
+- Prix immobilier.
+- Valeur de mon bien.
+- Agence immobilière.
+
+ACQUÉREURS :
+- Appartement à vendre.
+- Maison à vendre.
+- Acheter appartement.
+- Acheter maison.
+- Recherche immobilière.
+- Premier achat.
+- Crédit immobilier.
+
+INVESTISSEURS :
+- Investissement locatif.
+- Rentabilité immobilière.
+- Acheter pour louer.
+- Rendement locatif.
+
+BAILLEURS :
+- Gestion locative.
+- Mettre en location.
+- Estimation loyer.
+
+Ajouter des mots-clés géographiques.
+
+## B. Détection d'intention
+
+Sur les plateformes MONTY, analyser les événements autorisés :
+
+- Recherche immobilière.
+- Consultation d'annonces.
+- Simulateur de financement.
+- Demande d'estimation.
+- Consultation des pages vendeurs.
+- Consultation des pages investissement.
+- Création d'alertes.
+- Demandes de contact.
+- Rendez-vous.
+
+Distinguer :
+
+- Visiteur.
+- Intérêt immobilier.
+- Projet identifié.
+- Prospect.
+- Prospect qualifié.
+- Demande explicite de contact.
+
+Ne jamais assimiler une simple visite à une demande de contact.
+
+## C. Capture des prospects
+
+Créer des formulaires contextuels.
+
+Exemples :
+
+Après une estimation :
+
+« Vous souhaitez connaître la valeur réelle de votre bien ? Un conseiller peut vous accompagner. »
+
+Après une recherche immobilière :
+
+« Vous recherchez un bien ? Parlons de votre projet. »
+
+Après une simulation :
+
+« Vous souhaitez être accompagné dans votre recherche ? »
+
+Collecter uniquement les informations nécessaires et volontairement communiquées.
+
+## D. Alertes
+
+Déclencher une notification lorsqu'un prospect transmet ses coordonnées et demande à être contacté.
+
+Canaux :
+
+- Notification Monty.
+- Email.
+- SMS via prestataire autorisé.
+- Notification mobile.
+
+Exemple :
+
+NOUVEAU PROSPECT VENDEUR
+
+Projet : Estimation appartement.
+
+Localisation : Montpellier Croix-d'Argent.
+
+Source : Page estimation.
+
+Demande : Être rappelé.
+
+Actions :
+
+- Consulter le prospect.
+- Appeler selon sa préférence de contact.
+- Envoyer un email autorisé.
+- Ajouter au CRM.
+- Planifier un rappel.
+
+## E. Acquisition publicitaire
+
+Prévoir des intégrations officielles :
+
+- Google Ads.
+- Google Search Console.
+- Google Analytics selon les consentements.
+- Meta Ads.
+- Référencement naturel.
+
+Mesurer :
+
+- Impressions.
+- Clics.
+- Conversions.
+- Demandes d'estimation.
+- Prospects.
+- Coût d'acquisition.
+- Performances géographiques.
+
+IMPORTANT :
+
+MONTY ne peut pas identifier les personnes qui saisissent des mots-clés sur Google ou d'autres moteurs de recherche.
+
+Les données agrégées des moteurs ne doivent jamais être présentées comme des identités individuelles.
+
+Aucune collecte clandestine de coordonnées n'est autorisée.
+
+## F. Scoring
+
+Créer un score de qualification de 0 à 100.
+
+Prendre en compte :
+
+- Projet.
+- Budget déclaré.
+- Délai.
+- Localisation.
+- Précision du besoin.
+- Demande de contact.
+
+Expliquer les raisons du score.
+
+---
+
+# 12. PHASE 10 — VEILLE CONCURRENTIELLE
+
+Développer un module propriétaire de veille concurrentielle.
+
+Sources :
+
+- Sites commerciaux publics.
+- Documentations officielles.
+- Pages produits.
+- Tarifs publiés.
+- Actualités.
+- Démonstrations autorisées.
+
+Fonctionnalités :
+
+- Collecte autorisée.
+- Analyse.
+- Historique.
+- Détection de nouveautés.
+- Évolution tarifaire.
+- Rapports IA.
+- Comparaison concurrentielle.
+
+Technologies possibles :
+
+- Python.
+- Playwright.
+- BeautifulSoup.
+- Scrapy.
+- PostgreSQL.
+- Redis.
+- FastAPI.
+
+Créer un registre des sources.
+
+Respecter les CGU, les droits sur les bases de données, les licences, les protections techniques et le RGPD.
+
+Ne jamais contourner les accès privés, CAPTCHA ou authentifications.
+
+Ne pas collecter de données personnelles ou de prospects sans base juridique appropriée.
+
+---
+
+# 13. PHASE 11 — MARQUE BLANCHE ET MULTI-TENANT
+
+Préparer MONTY à être commercialisé auprès de plusieurs agences.
+
+Chaque agence doit disposer de :
+
+- Son logo.
+- Ses couleurs.
+- Son nom.
+- Son domaine.
+- Ses emails.
+- Ses documents.
+- Ses utilisateurs.
+- Ses équipes.
+- Ses établissements.
+- Ses droits.
+- Ses paramètres.
+- Ses abonnements.
+
+Développer une architecture multi-tenant avec isolation stricte des données.
+
+Un utilisateur d'une agence ne doit jamais pouvoir consulter les données d'une autre agence sans autorisation explicite.
+
+Prévoir une administration centrale et des administrations locales.
+
+---
+
+# 14. PHASE 12 — GESTION DES FONCTIONNALITÉS PAR ADMINISTRATEUR
+
+Créer un panneau centralisé :
+
+« Gestion des fonctionnalités ».
+
+L'administrateur principal doit pouvoir afficher ou masquer chaque onglet et module avec une case à cocher.
+
+Aucune modification du code ni redéploiement ne doivent être nécessaires.
+
+Pour chaque module afficher :
+
+- Nom.
+- Description.
+- Catégorie.
+- Disponibilité.
+- Statut.
+- Date de modification.
+- Administrateur responsable.
+
+Prévoir trois états :
+
+1. En développement.
+2. En test.
+3. Disponible.
+
+Exemples de modules :
+
+- Recherche immobilière.
+- Estimation.
+- CRM.
+- MonAgent.
+- IA.
+- Veille concurrentielle.
+- Monty Leads.
+- Marque blanche.
+- Application mobile.
+- Analyses avancées.
+
+## Comportement
+
+Lorsqu'un module est masqué :
+
+- Son onglet disparaît.
+- Ses raccourcis disparaissent.
+- Son accès direct est bloqué pour les utilisateurs non autorisés.
+- Ses API vérifient également son état.
+- Ses données sont conservées.
+
+Lorsqu'il est réactivé :
+
+- Son onglet réapparaît.
+- Ses accès sont restaurés selon les droits.
+
+Créer un système centralisé de Feature Flags.
+
+Prévoir :
+
+- Table en base de données.
+- API de lecture.
+- API de modification sécurisée.
+- Cache.
+- Invalidation du cache.
+- Historique.
+- Restauration.
+- Mode bêta.
+- Activation par agence.
+- Activation par utilisateur lorsque nécessaire.
+
+L'administrateur principal contrôle les paramètres globaux.
+
+Les administrateurs d'agence ne peuvent gérer que les paramètres qui leur sont délégués.
+
+IMPORTANT :
+
+Masquer un onglet ne signifie pas désactiver la sécurité.
+
+Les autorisations doivent toujours être vérifiées côté serveur.
+
+Les fonctionnalités essentielles de sécurité ne doivent jamais pouvoir être désactivées par ce mécanisme.
+
+---
+
+# 15. PHASE 13 — MODÈLE ÉCONOMIQUE ET ABONNEMENTS
+
+Créer une architecture commerciale SaaS.
+
+Prévoir des offres configurables :
+
+- Monty Starter.
+- Monty Pro.
+- Monty Business.
+- Monty Réseau.
+- MonAgent.
+
+Fonctionnalités :
+
+- Abonnements.
+- Licences.
+- Utilisateurs.
+- Quotas.
+- Options.
+- Facturation.
+- Paiements.
+- Périodes d'essai.
+- Résiliation.
+- Historique.
+- Gestion des droits.
+
+L'administrateur doit pouvoir modifier les offres sans modifier le code métier.
+
+Prévoir des fonctionnalités gratuites et payantes selon la stratégie commerciale.
+
+---
+
+# 16. PHASE 14 — APPLICATION MOBILE
+
+Conserver l'application Android Kotlin existante si elle est fonctionnelle.
+
+Ne pas la remplacer par Flutter sans étude comparative et justification.
+
+Prévoir :
+
+- Android.
+- iOS.
+- PWA.
+
+Fonctionnalités :
+
+- Synchronisation CRM.
+- Notifications.
+- Agenda.
+- Géolocalisation.
+- Prospection terrain.
+- Photos.
+- Notes vocales.
+- Comptes rendus.
+- Mode hors ligne.
+- Synchronisation sécurisée.
+- Accès MonAgent.
+
+Prévoir une API commune et des règles de synchronisation fiables.
+
+---
+
+# 17. PHASE 15 — INTERNATIONALISATION
+
+La France est le premier marché.
+
+Le Portugal est le premier marché international.
+
+Préparer l'architecture pour :
+
+- Français.
+- Portugais.
+- Anglais.
+- Espagnol.
+- Allemand.
+- Italien.
+- Néerlandais.
+
+Prévoir :
+
+- Multi-langue.
+- Multi-devise.
+- Formats locaux.
+- Fuseaux horaires.
+- Formats d'adresses.
+- Réglementations.
+- Documents.
+- Fiscalité.
+- Sources immobilières.
+
+Ne jamais appliquer automatiquement les règles françaises aux autres pays.
+
+Créer des configurations métier par pays.
+
+---
+
+# 18. PHASE 16 — DESIGN ET EXPÉRIENCE UTILISATEUR
+
+Créer une expérience haut de gamme.
+
+Exigences :
+
+- Design moderne.
+- Responsive.
+- Navigation intuitive.
+- Tableau de bord personnalisable.
+- Recherche globale.
+- Filtres intelligents.
+- Mode clair et sombre.
+- Accessibilité.
+- Chargement rapide.
+- Animations discrètes.
+- Cohérence visuelle.
+- Interfaces simples.
+
+Aucun bouton fictif.
+
+Aucun lien mort.
+
+Aucune page vide.
+
+Aucune fonctionnalité prétendument opérationnelle si son backend n'existe pas.
+
+Les interfaces doivent refléter les fonctionnalités réellement disponibles.
+
+---
+
+# 19. PHASE 17 — SÉCURITÉ ET RGPD
+
+Mettre en place :
+
+- Authentification sécurisée.
+- Gestion des rôles.
+- Gestion des permissions.
+- Isolation multi-tenant.
+- Chiffrement des données sensibles.
+- Stockage privé des documents.
+- Liens temporaires.
+- Journalisation.
+- Protection SQL.
+- Protection XSS.
+- Protection CSRF.
+- Limitation des requêtes.
+- Gestion des sessions.
+- Sauvegardes.
+- Restauration testée.
+- Export des données.
+- Suppression des données.
+- Gestion des consentements.
+- Politique de conservation.
+
+Les dossiers immobiliers peuvent contenir des pièces d'identité, justificatifs de revenus et documents patrimoniaux.
+
+Ne jamais les exposer dans des espaces publics ou des environnements de démonstration.
+
+Prévoir des durées de conservation adaptées et une procédure de suppression.
+
+La conformité doit être vérifiée en fonction des traitements réellement mis en œuvre.
+
+---
+
+# 20. PHASE 18 — ARCHITECTURE TECHNIQUE
+
+Avant toute évolution, analyser les technologies déjà utilisées.
+
+Architecture cible indicative :
+
+- Frontend : conserver Next.js si déjà opérationnel.
+- Langage : TypeScript.
+- Backend : Python / FastAPI.
+- Base de données : PostgreSQL.
+- ORM : SQLAlchemy si compatible.
+- Cache : Redis.
+- Tâches : Celery ou équivalent.
+- Stockage : compatible S3.
+- IA : fournisseurs interchangeables.
+- Déploiement : GitHub et Render pour le démarrage.
+- Mobile : Android Kotlin existant, préparation iOS.
+
+Ne pas imposer React/Vite ou Flutter si cela entraîne une réécriture inutile.
+
+Créer une architecture modulaire, documentée, évolutive et maintenable.
+
+---
+
+# 21. PHASE 19 — INFRASTRUCTURE ET DÉPLOIEMENT
+
+Préparer le déploiement via GitHub et Render.
+
+Objectif initial : maîtriser les coûts et utiliser les offres gratuites lorsque cela est possible.
+
+Prévoir :
+
+- Dépôt GitHub privé.
+- Frontend.
+- Backend.
+- PostgreSQL.
+- Redis si nécessaire.
+- Stockage de documents.
+- Variables d'environnement.
+- Health checks.
+- Logs.
+- Configuration Docker si pertinente.
+- Configuration Render.
+- Gestion des migrations.
+- Documentation de déploiement.
+
+Identifier précisément les limites des offres gratuites.
+
+Ne jamais considérer une base gratuite temporaire comme un stockage de production.
+
+Ne jamais activer de service payant sans autorisation explicite.
+
+Prévoir une migration vers une infrastructure professionnelle sans reconstruction de l'application.
+
+---
+
+# 22. PHASE 20 — TESTS ET VALIDATION
+
+Effectuer :
+
+- Tests unitaires.
+- Tests API.
+- Tests frontend.
+- Tests de connexion.
+- Tests des permissions.
+- Tests multi-agences.
+- Tests des formulaires.
+- Tests de recherche.
+- Tests cartographiques.
+- Tests d'estimation.
+- Tests CRM.
+- Tests des notifications.
+- Tests MonAgent.
+- Tests Monty Leads.
+- Tests des intégrations.
+- Tests mobiles.
+- Tests de performance.
+- Tests de sécurité.
+- Tests de sauvegarde et restauration.
+
+Chaque fonctionnalité doit posséder un test correspondant.
+
+Corriger les erreurs détectées.
+
+Ne jamais déclarer une fonctionnalité terminée sans validation.
+
+---
+
+# 23. PHASE 21 — GESTION DES DÉPENDANCES EXTERNES
+
+Pour chaque intégration externe :
+
+- Identifier le fournisseur.
+- Identifier les conditions d'utilisation.
+- Vérifier les quotas.
+- Vérifier les coûts.
+- Vérifier les licences.
+- Identifier les clés nécessaires.
+- Documenter les variables d'environnement.
+- Prévoir une solution de remplacement si possible.
+
+Ne jamais inventer une API.
+
+Ne jamais présenter une intégration non configurée comme fonctionnelle.
+
+Ne jamais exposer une clé privée dans le frontend ou GitHub.
+
+---
+
+# 24. PHASE 22 — SOURCES DE DONNÉES IMMOBILIÈRES
+
+Étudier et intégrer lorsque les conditions d'accès le permettent :
+
+- DVF.
+- Base Adresse Nationale.
+- Données cadastrales.
+- ADEME et DPE.
+- INSEE.
+- IGN.
+- OpenStreetMap.
+- Sources immobilières locales.
+- Fournisseurs de données professionnels.
+
+Pour chaque source, documenter :
+
+- Origine.
+- Licence.
+- Date.
+- Fréquence de mise à jour.
+- Conditions de réutilisation.
+- Limites.
+- Fiabilité.
+
+Ne jamais inventer des transactions ou des données immobilières.
+
+---
+
+# 25. PHASE 23 — PHILOSOPHIE D'EXÉCUTION
+
+Travailler par cycles.
+
+Chaque cycle doit contenir :
+
+1. Analyse.
+2. Plan technique.
+3. Sauvegarde.
+4. Développement.
+5. Tests.
+6. Correction.
+7. Documentation.
+8. Rapport.
+
+Ne pas commencer toutes les phases simultanément.
+
+Prioriser les fonctionnalités structurantes.
+
+Conserver les fonctionnalités opérationnelles.
+
+Ne jamais masquer une fonctionnalité simplement parce qu'elle est difficile à terminer.
+
+Si une dépendance bloque une fonctionnalité, documenter le blocage et proposer une solution.
+
+---
+
+# 26. PHASE 24 — LIVRABLES
+
+Produire :
+
+1. Audit intégral du projet.
+2. Matrice des fonctionnalités existantes.
+3. Matrice des fonctionnalités manquantes.
+4. Benchmark concurrentiel.
+5. Architecture technique.
+6. Code source enrichi.
+7. Modules intégrés.
+8. Migrations non destructives.
+9. Tests automatisés.
+10. Documentation technique.
+11. Guide d'installation.
+12. Guide GitHub.
+13. Guide Render.
+14. Configuration des variables d'environnement.
+15. Documentation API.
+16. Version PWA.
+17. Préparation Android.
+18. Préparation iOS.
+19. Rapport de sécurité.
+20. Rapport de conformité.
+21. Rapport final de qualité.
+22. Liste des dépendances et coûts.
+
+---
+
+# 27. DIRECTIVE FINALE — EXÉCUTION RÉELLE
+
+Commence par analyser l'intégralité du projet existant.
+
+Ensuite :
+
+ÉTAPE 1 : établir un inventaire précis.
+
+ÉTAPE 2 : identifier les fonctionnalités déjà opérationnelles.
+
+ÉTAPE 3 : identifier les fonctionnalités incomplètes et absentes.
+
+ÉTAPE 4 : identifier les risques de régression.
+
+ÉTAPE 5 : proposer un ordre de développement.
+
+ÉTAPE 6 : sauvegarder le projet et sécuriser les données.
+
+ÉTAPE 7 : développer les améliorations par cycles.
+
+ÉTAPE 8 : tester chaque évolution.
+
+ÉTAPE 9 : corriger les problèmes.
+
+ÉTAPE 10 : préparer le déploiement.
+
+Ne t'arrête pas à un rapport théorique.
+
+Développe réellement les fonctionnalités prioritaires dans le code existant.
+
+Si la capacité de travail ou le contexte d'exécution ne permet pas de tout terminer en une seule session, conserve un état précis du travail et reprends au dernier point validé.
+
+Ne prétends jamais avoir effectué une opération qui n'a pas réellement été exécutée.
+
+Ne supprime jamais l'existant pour accélérer le développement.
+
+L'objectif est de construire MONTY comme un produit professionnel, fiable, évolutif et commercialisable.
+
+**MONTY — L'humain avant tout. La technologie au service du conseiller immobilier.**

@@ -6,6 +6,7 @@ import {
   Building2,
   Calculator,
   CalendarCheck,
+  Download,
   FileText,
   FolderKanban,
   GitCompareArrows,
@@ -23,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import type { MontyRole, NavSectionKey } from "@/lib/types";
+import type { ModuleFeatureFlag, MontyRole, NavSectionKey } from "@/lib/types";
 
 interface NavItem {
   key: NavSectionKey;
@@ -55,6 +56,7 @@ interface MontyShellProps {
   onSelectSection: (key: NavSectionKey) => void;
   agencyId: string;
   role: MontyRole | "VISITEUR";
+  activeModuleFlags?: ModuleFeatureFlag[];
   children: React.ReactNode;
 }
 
@@ -63,9 +65,17 @@ export function MontyShell({
   onSelectSection,
   agencyId,
   role,
+  activeModuleFlags,
   children,
 }: MontyShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const flagMap = new Map((activeModuleFlags ?? []).map((f) => [f.module_key, f]));
+  const visibleNavItems = NAV_ITEMS.filter((item) => {
+    if (item.key === "dashboard" || item.key === "admin") return true;
+    const flag = flagMap.get(item.key);
+    return flag ? flag.visible : true;
+  });
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-ivoryWarm text-obsidianInk">
@@ -97,9 +107,16 @@ export function MontyShell({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
+            const flag = flagMap.get(item.key);
+            const badgeText =
+              flag?.status === "EN_DEVELOPPEMENT"
+                ? "En dév."
+                : flag?.status === "EN_TEST"
+                ? "En test"
+                : item.phaseBadge;
             return (
               <button
                 key={item.key}
@@ -115,8 +132,16 @@ export function MontyShell({
                   <Icon className="w-4 h-4 shrink-0" />
                   <span>{item.label}</span>
                 </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emeraldDeep/60 text-ivoryWarm/70">
-                  {item.phaseBadge}
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    flag?.status === "EN_TEST"
+                      ? "bg-amber-500/20 text-amber-200"
+                      : flag?.status === "EN_DEVELOPPEMENT"
+                      ? "bg-slate-600/60 text-slate-200"
+                      : "bg-emeraldDeep/60 text-ivoryWarm/70"
+                  }`}
+                >
+                  {badgeText}
                 </span>
               </button>
             );
@@ -124,6 +149,13 @@ export function MontyShell({
         </nav>
 
         <div className="p-3 border-t border-emeraldMid space-y-1.5 text-xs">
+          <Link
+            href="/telecharger"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-goldAntique text-emeraldDeep font-bold hover:bg-goldChampagne transition"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span>Télécharger l&apos;application</span>
+          </Link>
           <Link
             href="/site"
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-goldAntique/15 border border-goldAntique/40 text-goldChampagne font-semibold hover:bg-goldAntique/25 transition"
@@ -171,7 +203,7 @@ export function MontyShell({
 
       {mobileMenuOpen && (
         <div className="lg:hidden bg-emeraldDeep text-ivoryWarm px-4 py-3 border-b border-emeraldMid grid grid-cols-2 gap-2">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
             return (
@@ -191,6 +223,14 @@ export function MontyShell({
               </button>
             );
           })}
+          <Link
+            href="/telecharger"
+            onClick={() => setMobileMenuOpen(false)}
+            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-goldAntique text-emeraldDeep"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span>Télécharger l&apos;application (APK)</span>
+          </Link>
         </div>
       )}
 

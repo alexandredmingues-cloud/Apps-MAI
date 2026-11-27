@@ -1,4 +1,5 @@
 import type {
+  AddressSuggestion,
   AdminOverview,
   AdvisorPrivateNote,
   AgencyFeatureFlags,
@@ -31,12 +32,25 @@ import type {
   HcsfResult,
   IndicativeEstimationResult,
   KillSwitchResult,
+  LatestMobileReleaseResponse,
+  LeadKeywordRule,
   LeadKind,
   LeadStatus,
   MarketplaceListing,
   MarketplaceSearchHit,
   MatchingCalculationResult,
+  MobileAppRelease,
+  ModuleFeatureFlag,
+  ModuleFlagHistoryEntry,
   MonthlyPaymentResult,
+  MontyAIChatResponse,
+  MontyAIConversationTurn,
+  MontyAIEngineConfig,
+  MontyAIMemoryEntry,
+  MontyAIMetricsSummary,
+  MontyAIPendingAction,
+  MontyAITaskType,
+  MontyPriceIndexResult,
   MontyRole,
   NewsCategory,
   NewsSource,
@@ -51,6 +65,8 @@ import type {
   PreEtatDateComputeResult,
   PreEtatDateExportResult,
   PreEtatDatePayload,
+  PriceIndexConfig,
+  PriceIndexHistoryRecord,
   ProNewsArticle,
   PublicInboundLead,
   PublicNewsArticle,
@@ -457,6 +473,8 @@ export const montyApi = {
     max_price_euro?: number;
     min_surface_m2?: number;
     only_within_perimeter?: boolean;
+    price_index_category?: string;
+    sort_by?: string;
   }) => {
     const q = new URLSearchParams({ country_code: params.country_code });
     if (params.publisher_type) q.set("publisher_type", params.publisher_type);
@@ -472,12 +490,28 @@ export const montyApi = {
     if (params.only_within_perimeter !== undefined) {
       q.set("only_within_perimeter", String(params.only_within_perimeter));
     }
+    if (params.price_index_category) q.set("price_index_category", params.price_index_category);
+    if (params.sort_by) q.set("sort_by", params.sort_by);
     return requestJson<{ count: number; hits: MarketplaceSearchHit[] }>(
       `/api/v1/marketplace/listings?${q.toString()}`,
       {},
       false
     );
   },
+
+  geoAutocomplete: (q: string, countryCode: CountryCode = "FR", limit = 6) =>
+    requestJson<{ query: string; country_code: string; count: number; suggestions: AddressSuggestion[] }>(
+      `/api/v1/marketplace/geo/autocomplete?q=${encodeURIComponent(q)}&country_code=${countryCode}&limit=${limit}`,
+      {},
+      false
+    ),
+
+  geoReverse: (lat: number, lon: number, countryCode: CountryCode = "FR") =>
+    requestJson<AddressSuggestion>(
+      `/api/v1/marketplace/geo/reverse?lat=${lat}&lon=${lon}&country_code=${countryCode}`,
+      {},
+      false
+    ),
 
   assistListingCopywriting: (payload: {
     country_code: CountryCode;
@@ -990,6 +1024,205 @@ export const montyApi = {
     notary_auto_task_on_compromis: boolean;
   }) =>
     requestJson<AgencyFeatureFlags>("/api/v1/admin/feature-flags", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  // Monty Leads : Mots-clés
+  listLeadKeywords: () =>
+    requestJson<{ count: number; keywords: LeadKeywordRule[] }>("/api/v1/crm/leads/keywords"),
+
+  createLeadKeyword: (payload: { category: string; keyword: string; geo_scope: string }) =>
+    requestJson<LeadKeywordRule>("/api/v1/crm/leads/keywords", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteLeadKeyword: (keywordId: string) =>
+    requestJson<{ removed: boolean; keyword_id: string }>(
+      `/api/v1/crm/leads/keywords/${encodeURIComponent(keywordId)}`,
+      { method: "DELETE" }
+    ),
+
+  // Module Feature Flags centralisés
+  getActiveModuleFlags: (agencyId = "agency-france-reseau") =>
+    requestJson<{ agency_id: string; modules: ModuleFeatureFlag[] }>(
+      `/api/v1/module-flags/active?agency_id=${encodeURIComponent(agencyId)}`,
+      {},
+      false
+    ),
+
+  adminListModuleFlags: () =>
+    requestJson<{ count: number; modules: ModuleFeatureFlag[] }>("/api/v1/admin/module-flags"),
+
+  adminUpdateModuleFlag: (moduleKey: string, payload: { status: string; visible: boolean }) =>
+    requestJson<ModuleFeatureFlag>(`/api/v1/admin/module-flags/${encodeURIComponent(moduleKey)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  adminRestoreModuleFlags: () =>
+    requestJson<{ count: number; modules: ModuleFeatureFlag[] }>("/api/v1/admin/module-flags/restore", {
+      method: "POST",
+    }),
+
+  adminModuleFlagHistory: () =>
+    requestJson<{ count: number; history: ModuleFlagHistoryEntry[] }>("/api/v1/admin/module-flags/history"),
+
+  // Phase 27 — Monty AI Core
+  montyAiChat: (payload: {
+    prompt: string;
+    task_type?: MontyAITaskType;
+    confidential_mode?: boolean;
+    context_payload?: Record<string, unknown>;
+  }) =>
+    requestJson<MontyAIChatResponse>("/api/v1/monty-ai/chat", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listMontyAiConversations: (limit = 25) =>
+    requestJson<{ count: number; conversations: MontyAIConversationTurn[] }>(
+      `/api/v1/monty-ai/conversations?limit=${limit}`
+    ),
+
+  listMontyAiMemories: () =>
+    requestJson<{ count: number; memories: MontyAIMemoryEntry[] }>("/api/v1/monty-ai/memories"),
+
+  upsertMontyAiMemory: (payload: {
+    memory_id?: string | null;
+    scope: "USER" | "AGENCY";
+    title: string;
+    content: string;
+    source_ref?: string;
+  }) =>
+    requestJson<MontyAIMemoryEntry>("/api/v1/monty-ai/memories", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteMontyAiMemory: (memoryId: string) =>
+    requestJson<{ removed: boolean; memory_id: string }>(
+      `/api/v1/monty-ai/memories/${encodeURIComponent(memoryId)}`,
+      { method: "DELETE" }
+    ),
+
+  listMontyAiActions: () =>
+    requestJson<{ count: number; actions: MontyAIPendingAction[] }>("/api/v1/monty-ai/actions"),
+
+  decideMontyAiAction: (actionId: string, approve: boolean) =>
+    requestJson<MontyAIPendingAction>(`/api/v1/monty-ai/actions/${encodeURIComponent(actionId)}/decide`, {
+      method: "POST",
+      body: JSON.stringify({ approve }),
+    }),
+
+  adminListAiEngines: () =>
+    requestJson<{ count: number; engines: MontyAIEngineConfig[] }>("/api/v1/monty-ai/admin/engines"),
+
+  adminUpdateAiEngine: (
+    engineId: string,
+    payload: {
+      enabled?: boolean;
+      is_default?: boolean;
+      is_fallback?: boolean;
+      priority?: number;
+      model_name?: string;
+    }
+  ) =>
+    requestJson<MontyAIEngineConfig>(`/api/v1/monty-ai/admin/engines/${encodeURIComponent(engineId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  adminConfigureAiProviderKey: (payload: { provider: string; api_key?: string; local_base_url?: string }) =>
+    requestJson<{ provider: string; configured: boolean; masked_value: string }>(
+      "/api/v1/monty-ai/admin/providers/key",
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+
+  adminMontyAiMetrics: () => requestJson<MontyAIMetricsSummary>("/api/v1/monty-ai/admin/metrics"),
+
+  // Phase 28 — Mobile APK Releases
+  getLatestMobileRelease: () =>
+    requestJson<LatestMobileReleaseResponse>("/api/v1/mobile/releases/latest", {}, false),
+
+  listPublicMobileReleases: () =>
+    requestJson<{ count: number; releases: MobileAppRelease[] }>("/api/v1/mobile/releases", {}, false),
+
+  getApkDownloadUrl: (releaseId: string) =>
+    `${API_BASE}/api/v1/mobile/releases/${encodeURIComponent(releaseId)}/download`,
+
+  adminListMobileReleases: () =>
+    requestJson<{ count: number; total_downloads: number; releases: MobileAppRelease[] }>(
+      "/api/v1/admin/mobile/releases"
+    ),
+
+  adminUploadMobileApk: (payload: {
+    file_name: string;
+    content_base64: string;
+    version_name: string;
+    version_code: number;
+    min_android_sdk?: number;
+    release_notes?: string;
+    publish_now?: boolean;
+    mark_recommended?: boolean;
+  }) =>
+    requestJson<MobileAppRelease>("/api/v1/admin/mobile/releases/upload", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  adminUpdateMobileRelease: (
+    releaseId: string,
+    payload: { is_published?: boolean; is_recommended?: boolean; release_notes?: string }
+  ) =>
+    requestJson<MobileAppRelease>(`/api/v1/admin/mobile/releases/${encodeURIComponent(releaseId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  // Phase 29 — Monty Price Index
+  evaluatePriceIndex: (payload: {
+    agency_id?: string;
+    target_ref?: string;
+    title?: string;
+    country_code?: CountryCode;
+    city: string;
+    sector_label?: string;
+    postal_code?: string;
+    property_kind?: string;
+    asking_price_euro: number;
+    surface_m2: number;
+    dpe?: string;
+    condition_label?: string;
+    has_exterior?: boolean;
+    has_parking?: boolean;
+    estimated_works_euro?: number;
+    comparables?: DvfComparableInput[];
+  }) =>
+    requestJson<MontyPriceIndexResult>(
+      "/api/v1/price-index/evaluate",
+      { method: "POST", body: JSON.stringify(payload) },
+      false
+    ),
+
+  getPriceIndexHistory: (limit = 40) =>
+    requestJson<{ count: number; history: PriceIndexHistoryRecord[] }>(
+      `/api/v1/price-index/history?limit=${limit}`
+    ),
+
+  adminGetPriceIndexConfig: () => requestJson<PriceIndexConfig>("/api/v1/admin/price-index/config"),
+
+  adminUpdatePriceIndexConfig: (payload: {
+    very_good_deal_pct: number;
+    good_deal_pct: number;
+    above_market_pct: number;
+    overpriced_pct: number;
+    min_comparables_required: number;
+    max_comparable_distance_m: number;
+    max_comparable_age_months: number;
+  }) =>
+    requestJson<PriceIndexConfig>("/api/v1/admin/price-index/config", {
       method: "PUT",
       body: JSON.stringify(payload),
     }),

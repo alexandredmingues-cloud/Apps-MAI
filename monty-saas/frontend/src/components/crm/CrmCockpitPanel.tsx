@@ -27,6 +27,7 @@ import type {
   CsvImportSummary,
   ExchangeChannel,
   FollowUpTask,
+  LeadKeywordRule,
   LeadStatus,
   MontyRole,
   PublicInboundLead,
@@ -120,6 +121,10 @@ export function CrmCockpitPanel({
   const [tab, setTab] = useState<"contacts" | "followups" | "web_leads" | "csv_rgpd">(initialTab);
   const [contacts, setContacts] = useState<CrmContact[]>(SEED_LOCAL_CONTACTS);
   const [webLeads, setWebLeads] = useState<PublicInboundLead[]>([]);
+  const [leadKeywords, setLeadKeywords] = useState<LeadKeywordRule[]>([]);
+  const [kwCategory, setKwCategory] = useState("VENDEURS");
+  const [kwText, setKwText] = useState("");
+  const [kwGeo, setKwGeo] = useState("France entière");
   const [selectedContactId, setSelectedContactId] = useState<string>(SEED_LOCAL_CONTACTS[0].id);
   const [roleFilter, setRoleFilter] = useState<ContactRole | "ALL">(initialRoleFilter);
   const [countryFilter, setCountryFilter] = useState<"ALL" | CountryCode>("ALL");
@@ -223,14 +228,16 @@ export function CrmCockpitPanel({
   async function refreshCrmData() {
     setIsLoading(true);
     try {
-      const [cResp, tResp, lResp] = await Promise.all([
+      const [cResp, tResp, lResp, kwResp] = await Promise.all([
         montyApi.listCrmContacts(),
         montyApi.getAutoFollowups(),
         montyApi.listPublicLeads(),
+        montyApi.listLeadKeywords().catch(() => ({ count: 0, keywords: [] as LeadKeywordRule[] })),
       ]);
       setContacts(cResp.contacts);
       setTasks(tResp.tasks);
       setWebLeads(lResp.leads);
+      setLeadKeywords(kwResp.keywords);
       setModeLabel("api");
       setApiWarning(null);
     } catch {
@@ -239,6 +246,31 @@ export function CrmCockpitPanel({
       setApiWarning("Session JWT non connectée ou API indisponible : affichage en mode local temporaire.");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleCreateLeadKeyword(e: React.FormEvent) {
+    e.preventDefault();
+    if (kwText.trim().length < 2) return;
+    try {
+      const created = await montyApi.createLeadKeyword({
+        category: kwCategory,
+        keyword: kwText.trim(),
+        geo_scope: kwGeo.trim() || "France entière",
+      });
+      setLeadKeywords((prev) => [created, ...prev]);
+      setKwText("");
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Impossible d'ajouter ce mot-clé Monty Leads.");
+    }
+  }
+
+  async function handleDeleteLeadKeyword(id: string) {
+    try {
+      await montyApi.deleteLeadKeyword(id);
+      setLeadKeywords((prev) => prev.filter((k) => k.id !== id));
+    } catch (err) {
+      setApiWarning(err instanceof Error ? err.message : "Suppression mot-clé refusée.");
     }
   }
 
@@ -870,78 +902,180 @@ export function CrmCockpitPanel({
       )}
 
       {tab === "web_leads" && (
-        <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="font-display text-lg font-bold text-emeraldDeep flex items-center gap-2">
-                <Globe className="w-5 h-5 text-goldAntique" />
-                Demandes Entrantes Site Web Public (Consentement RGPD vérifié)
-              </h3>
-              <p className="text-xs text-slateMuted">
-                Alertes acquéreurs, recherches guidées « Je ne trouve pas mon bien » et avis de valeur vendeurs.
-              </p>
+        <section className="space-y-5">
+          {/* Règles Mots-Clés Monty Leads */}
+          <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-display text-base font-bold text-emeraldDeep">
+                  Monty Leads • Règles de détection &amp; scoring 0–100
+                </h3>
+                <p className="text-slateMuted">
+                  Mots-clés métier actifs sur les leads entrants (Vendeurs, Acquéreurs, Investisseurs, Bailleurs + zone géo).
+                </p>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={refreshCrmData}
-              className="px-3 py-1.5 rounded-xl border border-borderSubtle text-xs font-semibold hover:border-emeraldDeep"
-            >
-              Actualiser
-            </button>
+            <form onSubmit={handleCreateLeadKeyword} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <select
+                value={kwCategory}
+                onChange={(e) => setKwCategory(e.target.value)}
+                className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
+              >
+                <option value="VENDEURS">VENDEURS</option>
+                <option value="ACQUEREURS">ACQUEREURS</option>
+                <option value="INVESTISSEURS">INVESTISSEURS</option>
+                <option value="BAILLEURS">BAILLEURS</option>
+              </select>
+              <input
+                type="text"
+                value={kwText}
+                onChange={(e) => setKwText(e.target.value)}
+                placeholder="Mot-clé (ex: succession, DPE, mandat)"
+                className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
+              />
+              <input
+                type="text"
+                value={kwGeo}
+                onChange={(e) => setKwGeo(e.target.value)}
+                placeholder="Portée géographique (ex: Lyon, Hérault)"
+                className="rounded-xl border border-borderSubtle bg-ivoryWarm px-3 py-2"
+              />
+              <button
+                type="submit"
+                className="px-3 py-2 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid"
+              >
+                Ajouter règle
+              </button>
+            </form>
+            {leadKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {leadKeywords.map((kw) => (
+                  <span
+                    key={kw.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ivoryWarm border border-borderSubtle"
+                  >
+                    <strong className="text-emeraldDeep">{kw.category}</strong>
+                    <span>{kw.keyword}</span>
+                    <span className="text-slateMuted">({kw.geo_scope})</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLeadKeyword(kw.id)}
+                      aria-label={`Supprimer ${kw.keyword}`}
+                      className="text-rose-700 hover:text-rose-900 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          {webLeads.length === 0 ? (
-            <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 text-xs text-slateMuted">
-              Aucune demande web entrante enregistrée pour le moment sur cette agence.
+
+          <div className="rounded-2xl bg-ivoryCard border border-borderSubtle p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-display text-lg font-bold text-emeraldDeep flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-goldAntique" />
+                  Demandes Entrantes Site Web Public (Consentement RGPD vérifié)
+                </h3>
+                <p className="text-xs text-slateMuted">
+                  Alertes acquéreurs, recherches guidées « Je ne trouve pas mon bien » et avis de valeur vendeurs.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={refreshCrmData}
+                className="px-3 py-1.5 rounded-xl border border-borderSubtle text-xs font-semibold hover:border-emeraldDeep"
+              >
+                Actualiser
+              </button>
             </div>
-          ) : (
-            <div className="space-y-2.5 text-xs">
-              {webLeads.map((lead) => (
-                <div
-                  key={lead.id}
-                  className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-full bg-emeraldDeep text-goldChampagne font-bold text-[10px]">
-                        {lead.lead_kind === "VISIT_REQUEST"
-                          ? "Demande de Visite"
-                          : lead.lead_kind === "SEARCH_ALERT"
-                          ? "Alerte Recherche"
-                          : lead.lead_kind === "SELLER_VALUATION"
-                          ? "Avis de Valeur Vendeur"
-                          : "Conciergerie Acquéreur"}
-                      </span>
-                      <span className="font-bold text-sm text-obsidianInk">{lead.email}</span>
-                      <span className="text-slateMuted">({lead.country_code})</span>
+            {webLeads.length === 0 ? (
+              <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 text-xs text-slateMuted">
+                Aucune demande web entrante enregistrée pour le moment sur cette agence.
+              </div>
+            ) : (
+              <div className="space-y-2.5 text-xs">
+                {webLeads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full bg-emeraldDeep text-goldChampagne font-bold text-[10px]">
+                          {lead.lead_kind === "VISIT_REQUEST"
+                            ? "Demande de Visite"
+                            : lead.lead_kind === "SEARCH_ALERT"
+                            ? "Alerte Recherche"
+                            : lead.lead_kind === "SELLER_VALUATION"
+                            ? "Avis de Valeur Vendeur"
+                            : "Conciergerie Acquéreur"}
+                        </span>
+                        {lead.qualification_score !== undefined && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                              lead.qualification_score >= 70
+                                ? "bg-emerald-100 text-emerald-900"
+                                : lead.qualification_score >= 45
+                                ? "bg-amber-100 text-amber-900"
+                                : "bg-slate-200 text-slate-700"
+                            }`}
+                          >
+                            Score {lead.qualification_score}/100
+                          </span>
+                        )}
+                        {lead.intent_stage && (
+                          <span className="px-2 py-0.5 rounded-full bg-goldChampagne/30 text-emeraldDeep font-bold text-[10px]">
+                            {lead.intent_stage}
+                          </span>
+                        )}
+                        <span className="font-bold text-sm text-obsidianInk">{lead.email}</span>
+                        <span className="text-slateMuted">({lead.country_code})</span>
+                      </div>
+                      <p className="text-slateMuted">
+                        Secteur : <strong>{lead.city || "Non précisé"}</strong> • Budget :{" "}
+                        <strong>{lead.budget_euro.toLocaleString("fr-FR")} €</strong>
+                        {lead.property_title ? ` • Bien : ${lead.property_title}` : ""}
+                        {lead.horizon ? ` • Horizon : ${lead.horizon}` : ""}
+                      </p>
+                      {lead.notes && <p className="text-obsidianInk/80">{lead.notes}</p>}
+                      {(lead.qualification_reasons?.length || lead.matched_keywords?.length) ? (
+                        <div className="flex flex-wrap gap-1 pt-0.5 text-[10px]">
+                          {(lead.matched_keywords ?? []).map((mk) => (
+                            <span key={mk} className="px-2 py-0.5 rounded bg-emeraldDeep/10 text-emeraldDeep font-semibold">
+                              #{mk}
+                            </span>
+                          ))}
+                          {(lead.qualification_reasons ?? []).map((rs) => (
+                            <span key={rs} className="px-2 py-0.5 rounded bg-white border border-borderSubtle text-slateMuted">
+                              {rs}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                    <p className="text-slateMuted">
-                      Secteur : <strong>{lead.city || "Non précisé"}</strong> • Budget :{" "}
-                      <strong>{lead.budget_euro.toLocaleString("fr-FR")} €</strong>
-                      {lead.property_title ? ` • Bien : ${lead.property_title}` : ""}
-                      {lead.horizon ? ` • Horizon : ${lead.horizon}` : ""}
-                    </p>
-                    {lead.notes && <p className="text-obsidianInk/80">{lead.notes}</p>}
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      {(["NEW", "CONTACTED", "CONVERTED", "ARCHIVED"] as LeadStatus[]).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => handleUpdateLeadStatus(lead.id, st)}
+                          className={`px-2.5 py-1 rounded-lg font-bold ${
+                            lead.status === st
+                              ? "bg-emeraldDeep text-goldChampagne"
+                              : "bg-white border border-borderSubtle text-slateMuted hover:text-obsidianInk"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                    {(["NEW", "CONTACTED", "CONVERTED", "ARCHIVED"] as LeadStatus[]).map((st) => (
-                      <button
-                        key={st}
-                        type="button"
-                        onClick={() => handleUpdateLeadStatus(lead.id, st)}
-                        className={`px-2.5 py-1 rounded-lg font-bold ${
-                          lead.status === st
-                            ? "bg-emeraldDeep text-goldChampagne"
-                            : "bg-white border border-borderSubtle text-slateMuted hover:text-obsidianInk"
-                        }`}
-                      >
-                        {st}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       )}
 

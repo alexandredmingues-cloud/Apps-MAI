@@ -15,6 +15,9 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="icon" href="/icon-monty.svg" type="image/svg+xml" />
+        <meta name="theme-color" content="#0B3B2E" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

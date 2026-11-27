@@ -18,12 +18,17 @@ from app.db.postgres_repositories import PostgresMarketplaceRepository
 from app.db.postgres_v2_ops_repository import PostgresV2OpsRepository
 from app.domain.authorized_feeds_service import AuthorizedListingFeedsService, FeedFormat
 from app.domain.country_packs import CountryCode
-from app.domain.geocoding_service import geocode_french_address
+from app.domain.geocoding_service import (
+    autocomplete_address,
+    geocode_french_address,
+    reverse_geocode,
+)
 from app.domain.marketplace_service import (
     MarketplaceService,
     PublisherType,
     generate_listing_copy,
 )
+from app.domain.monty_price_index_service import monty_price_engine
 from app.domain.portfolio_and_leads_service import LeadKind
 from app.domain.real_estate_engines import SearchPerimeterMode, TransportMode
 
@@ -62,6 +67,20 @@ def _listing_dto(item) -> dict:
             "high_days": item.sale_timeline.high_days,
             "confidence_label": item.sale_timeline.confidence_label,
         },
+        "price_index": monty_price_engine.evaluate_property(
+            agency_id=item.agency_id,
+            target_ref=item.id,
+            title=item.title,
+            country_code=item.country_code,
+            city=item.city,
+            sector_label=item.sector_label,
+            property_kind=item.property_kind,
+            asking_price_euro=item.price_euro,
+            surface_m2=item.surface_m2,
+            dpe=item.dpe,
+            condition_label=item.condition_label,
+            record_history=False,
+        ),
         "published_at": item.published_at,
     }
 
@@ -84,6 +103,71 @@ def _feed_dto(f) -> dict:
     }
 
 
+def _suggestion_dto(s) -> dict:
+    return {
+        "label": s.label,
+        "housenumber": s.housenumber,
+        "street": s.street,
+        "postcode": s.postcode,
+        "city": s.city,
+        "department_code": s.department_code,
+        "region_name": s.region_name,
+        "country_code": s.country_code,
+        "latitude": s.latitude,
+        "longitude": s.longitude,
+        "ban_id": s.ban_id,
+        "ban_type": s.ban_type,
+        "score": s.score,
+        "source": s.source,
+        "homonym_warning": s.homonym_warning,
+        "entities": {
+            "postal_address": s.entities.postal_address,
+            "gps": s.entities.gps,
+            "building_ref": s.entities.building_ref,
+            "cadastral_parcel": s.entities.cadastral_parcel,
+            "copro_lot": s.entities.copro_lot,
+        },
+    }
+
+
+@marketplace_router.get("/geo/autocomplete")
+async def geo_autocomplete_addresses(
+    q: str = Query(min_length=2, max_length=180),
+    country_code: CountryCode = CountryCode.FR,
+    limit: int = Query(default=6, ge=1, le=10),
+) -> dict:
+    items = await asyncio.to_thread(
+        autocomplete_address,
+        q,
+        country_code=country_code,
+        limit=limit,
+    )
+    return {
+        "query": q,
+        "country_code": country_code.value,
+        "count": len(items),
+        "suggestions": [_suggestion_dto(item) for item in items],
+    }
+
+
+@marketplace_router.get("/geo/reverse")
+async def geo_reverse_lookup(
+    lat: float = Query(ge=-90.0, le=90.0),
+    lon: float = Query(ge=-180.0, le=180.0),
+    country_code: CountryCode = CountryCode.FR,
+) -> dict:
+    try:
+        item = await asyncio.to_thread(
+            reverse_geocode,
+            lat,
+            lon,
+            country_code=country_code,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _suggestion_dto(item)
+
+
 @marketplace_router.get("/listings")
 async def search_marketplace_listings(
     country_code: CountryCode = CountryCode.FR,
@@ -98,6 +182,8 @@ async def search_marketplace_listings(
     max_price_euro: int | None = Query(default=None, ge=10_000),
     min_surface_m2: int = Query(default=0, ge=0),
     only_within_perimeter: bool = True,
+    price_index_category: str | None = Query(default=None, max_length=40),
+    sort_by: str = Query(default="default", max_length=32),
     sf=Depends(get_db_session_factory),
 ) -> dict:
     if origin_lat is not None and origin_lon is not None:
@@ -142,18 +228,35 @@ async def search_marketplace_listings(
             min_surface_m2=min_surface_m2,
             only_within_perimeter=only_within_perimeter,
         )
+    formatted_hits = [
+        {
+            "listing": _listing_dto(h.listing),
+            "distance_km": h.distance_km,
+            "estimated_minutes": h.estimated_minutes,
+            "transport_badge": h.transport_badge,
+            "within_perimeter": h.within_perimeter,
+        }
+        for h in hits
+    ]
+    if price_index_category:
+        cat_upper = price_index_category.strip().upper()
+        formatted_hits = [
+            item
+            for item in formatted_hits
+            if item["listing"]["price_index"].get("display_badge")
+            and item["listing"]["price_index"].get("category") == cat_upper
+        ]
+    if sort_by == "price_index_asc":
+        formatted_hits.sort(
+            key=lambda x: x["listing"]["price_index"].get("gap_percent", 0.0)
+            if x["listing"]["price_index"].get("display_badge")
+            else 999.0
+        )
+    elif sort_by == "price_asc":
+        formatted_hits.sort(key=lambda x: x["listing"]["price_euro"])
     return {
-        "count": len(hits),
-        "hits": [
-            {
-                "listing": _listing_dto(h.listing),
-                "distance_km": h.distance_km,
-                "estimated_minutes": h.estimated_minutes,
-                "transport_badge": h.transport_badge,
-                "within_perimeter": h.within_perimeter,
-            }
-            for h in hits
-        ],
+        "count": len(formatted_hits),
+        "hits": formatted_hits,
     }
 
 

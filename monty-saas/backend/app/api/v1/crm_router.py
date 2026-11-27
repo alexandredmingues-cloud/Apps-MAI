@@ -26,6 +26,7 @@ from app.domain.interconnections_service import interconnections_service
 from app.domain.portfolio_and_leads_service import (
     LeadStatus,
     PortfolioAndLeadsService,
+    compute_lead_qualification,
 )
 
 crm_router = APIRouter(prefix="/crm", tags=["Phase 2 — CRM & RGPD"])
@@ -34,6 +35,7 @@ _leads_service = PortfolioAndLeadsService(_crm, interconnections_service)
 
 
 def _public_lead_dto(lead) -> dict:
+    qual = _leads_service.qualify_lead(lead.agency_id or "agency-france-reseau", lead)
     return {
         "id": lead.id,
         "agency_id": lead.agency_id,
@@ -55,6 +57,10 @@ def _public_lead_dto(lead) -> dict:
         "rgpd_consent_at": lead.rgpd_consent_at,
         "status": lead.status.value,
         "created_at": lead.created_at,
+        "qualification_score": qual.score,
+        "intent_stage": qual.intent_stage,
+        "qualification_reasons": qual.reasons,
+        "matched_keywords": qual.matched_keywords,
     }
 
 
@@ -432,4 +438,44 @@ async def update_public_inbound_lead(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _public_lead_dto(updated)
+
+
+@crm_router.get("/leads/keywords")
+async def list_monty_lead_keywords(
+    ctx: TenantContext = Depends(require_permission(Permission.CRM_READ)),
+) -> dict:
+    items = _leads_service.list_lead_keywords(ctx)
+    return {"count": len(items), "keywords": [k.__dict__ for k in items]}
+
+
+class AddLeadKeywordRequest(BaseModel):
+    category: str = Field(min_length=4, max_length=32)
+    keyword: str = Field(min_length=2, max_length=120)
+    geo_scope: str = Field(default="France", max_length=80)
+
+
+@crm_router.post("/leads/keywords", status_code=status.HTTP_201_CREATED)
+async def create_monty_lead_keyword(
+    body: AddLeadKeywordRequest,
+    ctx: TenantContext = Depends(require_permission(Permission.CRM_WRITE)),
+) -> dict:
+    try:
+        rule = _leads_service.add_lead_keyword(
+            ctx,
+            category=body.category,
+            keyword=body.keyword,
+            geo_scope=body.geo_scope,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return rule.__dict__
+
+
+@crm_router.delete("/leads/keywords/{keyword_id}")
+async def remove_monty_lead_keyword(
+    keyword_id: str,
+    ctx: TenantContext = Depends(require_permission(Permission.CRM_WRITE)),
+) -> dict:
+    removed = _leads_service.delete_lead_keyword(ctx, keyword_id)
+    return {"removed": removed, "keyword_id": keyword_id}
 

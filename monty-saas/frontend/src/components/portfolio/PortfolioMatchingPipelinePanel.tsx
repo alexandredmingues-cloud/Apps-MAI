@@ -12,11 +12,13 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { NotariesAndRnicPanel } from "@/components/legal/NotariesAndRnicPanel";
+import { MontyPriceGauge } from "@/components/price-index/MontyPriceGauge";
 import { hasInMemoryAccessToken, montyApi } from "@/lib/api-client";
 import type {
   DvfComparableInput,
   DvfValuationResult,
   MatchingCalculationResult,
+  MontyPriceIndexResult,
   PortfolioProperty,
   PortfolioTransaction,
   PortfolioVisit,
@@ -110,8 +112,9 @@ export function PortfolioMatchingPipelinePanel({
   const [newPropDpe, setNewPropDpe] = useState("C");
   const [newPropMandate, setNewPropMandate] = useState<"EXCLUSIF" | "SIMPLE">("EXCLUSIF");
 
-  // DVF V2 & Délai de vente
+  // DVF V2, Monty Price Index & Délai de vente
   const [dvfResult, setDvfResult] = useState<DvfValuationResult | null>(null);
+  const [priceIndexResult, setPriceIndexResult] = useState<MontyPriceIndexResult | null>(null);
   const [timelineResult, setTimelineResult] = useState<(SaleTimelineEstimate & { warnings?: string[] }) | null>(null);
 
   // Matching Acquéreur ↔ Bien
@@ -243,6 +246,19 @@ export function PortfolioMatchingPipelinePanel({
         mandate_type: selectedProp.mandate,
       });
       setTimelineResult(tl);
+      const pi = await montyApi.evaluatePriceIndex({
+        target_ref: selectedProp.id,
+        title: selectedProp.title,
+        city: selectedProp.sector.split(" ")[0] || "Lyon",
+        sector_label: selectedProp.sector,
+        property_kind: selectedProp.property_type,
+        asking_price_euro: selectedProp.price,
+        surface_m2: selectedProp.surface,
+        dpe: selectedProp.dpe,
+        condition_label: "Bon état",
+        comparables: SAMPLE_DVF_COMPARABLES,
+      });
+      setPriceIndexResult(pi);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Connectez une session Pro pour calculer le Score Monty DVF.");
     } finally {
@@ -607,6 +623,7 @@ export function PortfolioMatchingPipelinePanel({
                   <strong>Délai de vente estimé :</strong> {timelineResult.low_days} à {timelineResult.high_days} jours (probable {timelineResult.likely_days} j — {timelineResult.confidence_label}).
                 </p>
               )}
+              {priceIndexResult && <MontyPriceGauge result={priceIndexResult} />}
             </div>
           )}
         </div>

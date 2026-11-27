@@ -18,9 +18,12 @@ from app.api.v1.deps import (
 from app.api.v1.interconnect_router import interconnect_router
 from app.api.v1.legal_agents_router import legal_agents_router
 from app.api.v1.marketplace_router import marketplace_router
+from app.api.v1.mobile_releases_router import mobile_releases_router
+from app.api.v1.monty_ai_router import monty_ai_router
 from app.api.v1.news_router import news_router
 from app.api.v1.notaries_rnic_router import notaries_rnic_router
 from app.api.v1.portfolio_router import portfolio_router
+from app.api.v1.price_index_router import price_index_router
 from app.core.config import Settings
 from app.core.rbac import ROLE_PERMISSIONS, MontyRole, Permission, TenantContext
 from app.core.rgpd import compute_retention_until, redact_direct_pii_for_ai
@@ -52,6 +55,9 @@ router.include_router(legal_agents_router)
 router.include_router(portfolio_router)
 router.include_router(notaries_rnic_router)
 router.include_router(interconnect_router)
+router.include_router(monty_ai_router)
+router.include_router(mobile_releases_router)
+router.include_router(price_index_router)
 
 _auth_service = AuthService()
 

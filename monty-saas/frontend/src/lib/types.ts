@@ -390,6 +390,7 @@ export interface MarketplaceListing {
   moderation_status?: ListingModerationStatus;
   moderation_note?: string;
   sale_timeline: SaleTimelineEstimate;
+  price_index?: MontyPriceIndexResult;
   published_at: string;
 }
 
@@ -663,6 +664,10 @@ export interface PublicInboundLead {
   rgpd_consent_at: string;
   status: LeadStatus;
   created_at: string;
+  qualification_score?: number;
+  intent_stage?: string;
+  qualification_reasons?: string[];
+  matched_keywords?: string[];
 }
 
 export type VisitStatus = "PLANIFIEE" | "REALISEE" | "ANNULEE";
@@ -903,6 +908,281 @@ export interface AgencyFeatureFlags {
   public_appointment_booking: boolean;
   notary_auto_task_on_compromis: boolean;
   updated_at?: string;
+}
+
+// Phase 4/5 — Géocodage BAN / Portugal & Distinction entités
+export interface GeoEntitiesDistinction {
+  postal_address: string;
+  gps: string;
+  building_ref: string;
+  cadastral_parcel: string;
+  copro_lot: string;
+}
+
+export interface AddressSuggestion {
+  label: string;
+  housenumber: string;
+  street: string;
+  postcode: string;
+  city: string;
+  department_code: string;
+  region_name: string;
+  country_code: CountryCode | string;
+  latitude: number;
+  longitude: number;
+  ban_id: string;
+  ban_type: string;
+  score: number;
+  source: string;
+  homonym_warning: boolean;
+  entities: GeoEntitiesDistinction;
+}
+
+// Phase 9 & 12 — Monty Leads Mots-clés & Module Feature Flags centralisés
+export interface LeadKeywordRule {
+  id: string;
+  agency_id: string;
+  category: "VENDEURS" | "ACQUEREURS" | "INVESTISSEURS" | "BAILLEURS" | string;
+  keyword: string;
+  geo_scope: string;
+  created_at: string;
+}
+
+export type ModuleFlagStatus = "EN_DEVELOPPEMENT" | "EN_TEST" | "DISPONIBLE";
+
+export interface ModuleFeatureFlag {
+  module_key: string;
+  label: string;
+  category: string;
+  status: ModuleFlagStatus;
+  visible: boolean;
+  critical: boolean;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface ModuleFlagHistoryEntry {
+  id: string;
+  agency_id: string;
+  module_key: string;
+  status: string;
+  visible: boolean;
+  updated_by: string;
+  updated_at: string;
+}
+
+// Phase 27 — Monty AI Core
+export type MontyAITaskType =
+  | "CONVERSATION"
+  | "QUICK_SUMMARY"
+  | "DOCUMENT_ANALYSIS"
+  | "WRITING"
+  | "COMPLEX_REASONING"
+  | "CONFIDENTIAL"
+  | "LONG_CONTEXT"
+  | "PRICE_EXPLANATION"
+  | "MULTIMODAL";
+
+export interface MontyAIChatResponse {
+  conversation_id: string;
+  assistant_name: string;
+  response_text: string;
+  execution_mode: "LOCAL_OPEN_SOURCE" | "EXTERNAL_PROVIDER" | "TOOL_ASSISTED_OFFLINE";
+  confidential_mode: boolean;
+  sources: { label: string; ref: string }[];
+  tools_invoked: string[];
+  latency_ms: number;
+  requires_human_validation: boolean;
+  pending_action: {
+    id: string;
+    action_type: string;
+    title: string;
+    summary: string;
+    status: string;
+  } | null;
+}
+
+export interface MontyAIConversationTurn {
+  id: string;
+  task_type: string;
+  execution_mode: string;
+  sanitized_prompt: string;
+  response_text: string;
+  sources: { label: string; ref: string }[];
+  tools_invoked: string[];
+  latency_ms: number;
+  created_at: string;
+}
+
+export interface MontyAIMemoryEntry {
+  id: string;
+  agency_id: string;
+  user_id: string;
+  scope: "USER" | "AGENCY";
+  title: string;
+  content: string;
+  source_ref: string;
+  retention_until: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MontyAIPendingAction {
+  id: string;
+  action_type: string;
+  title: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  status: "A_VALIDER" | "VALIDEE" | "REJETEE";
+  requested_by_user_id: string;
+  reviewed_by_user_id: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface MontyAIEngineConfig {
+  engine_id: string;
+  provider: string;
+  model_name: string;
+  display_label: string;
+  tier: "local" | "external";
+  is_local: boolean;
+  confidential_safe: boolean;
+  enabled: boolean;
+  is_default: boolean;
+  is_fallback: boolean;
+  priority: number;
+  min_ram_gb: number;
+  cost_per_1k_tokens_euro: number;
+  configured: boolean;
+  masked_api_key: string;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface MontyAIMetricsSummary {
+  total_requests: number;
+  avg_latency_ms: number;
+  fallback_count: number;
+  fallback_rate_percent: number;
+  daily_spend_euro: number;
+  requests_by_engine: Record<string, number>;
+  recent_events: {
+    id: string;
+    engine_id: string;
+    task_type: string;
+    status: string;
+    latency_ms: number;
+    estimated_cost_euro: number;
+    created_at: string;
+  }[];
+}
+
+// Phase 28 — Mobile APK Releases
+export interface MobileAppRelease {
+  id: string;
+  version_name: string;
+  version_code: number;
+  package_id: string;
+  min_android_sdk: number;
+  min_android_label: string;
+  sha256: string;
+  file_size_bytes: number;
+  file_size_mb: number;
+  file_name: string;
+  release_notes: string;
+  signature_verified: boolean;
+  is_published: boolean;
+  is_recommended: boolean;
+  download_count: number;
+  published_by: string;
+  created_at: string;
+  updated_at: string;
+  download_path: string;
+}
+
+export interface LatestMobileReleaseResponse {
+  available: boolean;
+  message: string;
+  release: MobileAppRelease | null;
+}
+
+// Phase 29 — Monty Price Index
+export type PriceIndexCategory =
+  | "TRES_BONNE_AFFAIRE"
+  | "BONNE_AFFAIRE"
+  | "PRIX_COHERENT"
+  | "AU_DESSUS_DU_MARCHE"
+  | "TROP_CHER"
+  | "DONNEES_INSUFFISANTES";
+
+export interface MontyPriceIndexResult {
+  display_badge: boolean;
+  category: PriceIndexCategory;
+  category_label: string;
+  confidence_tier: "HIGH" | "MEDIUM" | "LOW" | "INSUFFICIENT";
+  confidence_label: string;
+  reliability_score: number;
+  asking_price_euro: number;
+  asking_price_m2: number;
+  estimated_market_value: number;
+  estimated_price_m2: number;
+  price_range_low: number;
+  price_range_high: number;
+  gap_percent: number;
+  gap_euro: number;
+  comparables: {
+    comparables_found_count: number;
+    comparables_retained_count: number;
+    outliers_removed_count: number;
+    median_price_m2: number;
+    weighted_price_m2: number;
+    q1_price_m2: number;
+    q3_price_m2: number;
+    dispersion_cv: number;
+    avg_distance_m: number;
+    source_label: string;
+    data_date: string;
+  };
+  adjustment_factors: { factor: string; impact: string }[];
+  thresholds: {
+    very_good_deal_pct: number;
+    good_deal_pct: number;
+    above_market_pct: number;
+    overpriced_pct: number;
+  };
+  explanation_grounded: string;
+}
+
+export interface PriceIndexConfig {
+  agency_id: string;
+  very_good_deal_pct: number;
+  good_deal_pct: number;
+  above_market_pct: number;
+  overpriced_pct: number;
+  min_comparables_required: number;
+  max_comparable_distance_m: number;
+  max_comparable_age_months: number;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface PriceIndexHistoryRecord {
+  id: string;
+  agency_id: string;
+  target_ref: string;
+  title: string;
+  country_code: string;
+  city: string;
+  property_kind: string;
+  asking_price_euro: number;
+  estimated_market_value: number;
+  gap_percent: number;
+  category: PriceIndexCategory | string;
+  confidence_tier: string;
+  comparables_count: number;
+  evaluated_by: string;
+  created_at: string;
 }
 
 

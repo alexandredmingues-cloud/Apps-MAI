@@ -36,16 +36,20 @@ import {
   searchLocalListings,
 } from "@/lib/marketplace-local";
 import type {
+  AddressSuggestion,
   CountryCode,
   MarketplaceListing,
   MarketplaceSearchHit,
+  MontyPriceIndexResult,
   PublisherType,
   SearchPerimeterMode,
   TransportMode,
 } from "@/lib/types";
 import { BuyerSearchTools } from "./BuyerSearchTools";
+import { InteractiveGeoMap } from "./InteractiveGeoMap";
 import { MarketplacePublishForm, type PublishFormState } from "./MarketplacePublishForm";
 import { PartnerFeedsPanel } from "./PartnerFeedsPanel";
+import { MontyPriceGauge } from "../price-index/MontyPriceGauge";
 
 interface MarketplaceAndPublishViewProps {
   initialTab?: "search" | "publish";
@@ -89,6 +93,13 @@ export function MarketplaceAndPublishView({
   const [maxPrice, setMaxPrice] = useState<number>(900000);
   const [minSurface] = useState<number>(0);
   const [onlyWithinPerimeter, setOnlyWithinPerimeter] = useState<boolean>(false);
+  const [priceIndexFilter, setPriceIndexFilter] = useState<string>("ALL");
+  const [sortBy, setSortBy] = useState<string>("travel");
+  const [geoSuggestions, setGeoSuggestions] = useState<AddressSuggestion[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<AddressSuggestion | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [evaluatedPriceMap, setEvaluatedPriceMap] = useState<Record<string, MontyPriceIndexResult>>({});
   const [showAlertDrawer, setShowAlertDrawer] = useState<boolean>(false);
 
   // Catalogue local fusionné + état API (initialisé immédiatement pour éviter 0 annonce au premier rendu)
@@ -349,6 +360,8 @@ export function MarketplaceAndPublishView({
         max_price_euro: maxPrice > 0 ? maxPrice : undefined,
         min_surface_m2: minSurface,
         only_within_perimeter: onlyWithinPerimeter,
+        price_index_category: priceIndexFilter !== "ALL" ? priceIndexFilter : undefined,
+        sort_by: sortBy,
       });
       if (resp.hits.length > 0) {
         setHits(resp.hits);
@@ -356,7 +369,7 @@ export function MarketplaceAndPublishView({
         setIsDemoCatalog(resp.hits.every((h) => h.listing.id.startsWith("lst-fr-") || h.listing.id.startsWith("lst-pt-")));
       } else {
         const localHits = computeLocalHitsNow();
-        if (!onlyWithinPerimeter && localHits.length > 0) {
+        if (!onlyWithinPerimeter && priceIndexFilter === "ALL" && localHits.length > 0) {
           setHits(localHits);
           setDataSourceMode("local");
           setIsDemoCatalog(true);
@@ -380,7 +393,52 @@ export function MarketplaceAndPublishView({
     runSearch();
     loadPendingModeration();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryCode, publisherFilter, searchMode, transportMode, maxMinutes, maxRadiusKm, onlyWithinPerimeter, localCatalog, originCoords]);
+  }, [countryCode, publisherFilter, searchMode, transportMode, maxMinutes, maxRadiusKm, onlyWithinPerimeter, localCatalog, originCoords, priceIndexFilter, sortBy]);
+
+  useEffect(() => {
+    const q = originAddress.trim();
+    if (q.length < 3) {
+      setGeoSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      montyApi
+        .geoAutocomplete(q, countryCode, 6)
+        .then((res) => setGeoSuggestions(res.suggestions))
+        .catch(() => setGeoSuggestions([]));
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [originAddress, countryCode]);
+
+  async function handleReverseLookup(lat: number, lon: number) {
+    try {
+      const rev = await montyApi.geoReverse(lat, lon, countryCode);
+      setSelectedSuggestion(rev);
+      setGeoNotice(`Géocodage inverse : ${rev.label}`);
+    } catch {
+      setGeoNotice("Géocodage inverse indisponible hors connexion API.");
+    }
+  }
+
+  async function handleEvaluateListingPrice(listing: MarketplaceListing) {
+    try {
+      const res = await montyApi.evaluatePriceIndex({
+        target_ref: listing.id,
+        title: listing.title,
+        country_code: listing.country_code,
+        city: listing.city,
+        sector_label: listing.sector_label,
+        property_kind: listing.property_kind,
+        asking_price_euro: listing.price_euro,
+        surface_m2: listing.surface_m2,
+        dpe: listing.dpe,
+        condition_label: listing.condition_label,
+      });
+      setEvaluatedPriceMap((prev) => ({ ...prev, [listing.id]: res }));
+    } catch {
+      // Ignore silently if offline
+    }
+  }
 
   function handleGeolocate() {
     if (typeof window === "undefined" || !navigator.geolocation) {
@@ -806,9 +864,9 @@ export function MarketplaceAndPublishView({
           {/* Barre de critères mobilité 6 modes */}
           <section className="rounded-2xl bg-ivoryCard border border-borderSubtle p-5 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 text-sm">
-              <label className="md:col-span-4 block">
+              <label className="md:col-span-4 block relative">
                 <span className="text-xs font-bold text-slateMuted">
-                  Adresse / Ville de référence (travail, gare, école...)
+                  Adresse / Ville de référence (BAN FR &amp; PT, gare, école...)
                 </span>
                 <div className="mt-1 flex gap-1.5">
                   <div className="relative flex-1">
@@ -816,13 +874,44 @@ export function MarketplaceAndPublishView({
                     <input
                       type="text"
                       value={originAddress}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 180)}
                       onChange={(e) => {
                         setOriginAddress(e.target.value);
                         setOriginCoords(null);
+                        setShowSuggestions(true);
                       }}
-                      placeholder={countryCode === "PT" ? "Lisboa, Porto, Faro..." : "Paris, Lyon, Bordeaux, Nantes..."}
+                      placeholder={countryCode === "PT" ? "Lisboa, Porto, Faro..." : "Adresse exacte, Paris, Lyon, Montpellier..."}
                       className="w-full rounded-xl border border-borderSubtle bg-ivoryWarm pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-emeraldDeep"
                     />
+                    {showSuggestions && geoSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-xl bg-white border border-borderSubtle shadow-lg max-h-60 overflow-y-auto divide-y divide-borderSubtle/60 text-xs">
+                        {geoSuggestions.map((sug) => (
+                          <button
+                            key={`${sug.ban_id}-${sug.label}`}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setOriginAddress(sug.label);
+                              setOriginCoords({ lat: sug.latitude, lon: sug.longitude });
+                              setSelectedSuggestion(sug);
+                              setShowSuggestions(false);
+                              setGeoNotice(
+                                sug.homonym_warning
+                                  ? `${sug.label} — Homonyme détecté : commune confirmée (${sug.postcode})`
+                                  : `Adresse vérifiée (${sug.source})`
+                              );
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-ivoryWarm flex items-center justify-between gap-2"
+                          >
+                            <span className="font-medium text-obsidianInk truncate">{sug.label}</span>
+                            <span className="text-[10px] font-mono text-slateMuted shrink-0">
+                              {sug.postcode} {sug.department_code}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -947,6 +1036,29 @@ export function MarketplaceAndPublishView({
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                <select
+                  aria-label="Filtrer par Monty Price Index"
+                  value={priceIndexFilter}
+                  onChange={(e) => setPriceIndexFilter(e.target.value)}
+                  className="rounded-xl border border-borderSubtle bg-ivoryWarm px-2.5 py-2 font-semibold text-obsidianInk"
+                >
+                  <option value="ALL">Price Index : Tous</option>
+                  <option value="TRES_BONNE_AFFAIRE">Très bonne affaire</option>
+                  <option value="BONNE_AFFAIRE">Bonne affaire</option>
+                  <option value="PRIX_COHERENT">Prix cohérent</option>
+                  <option value="AU_DESSUS_DU_MARCHE">Au-dessus du marché</option>
+                  <option value="TROP_CHER">Trop cher</option>
+                </select>
+                <select
+                  aria-label="Trier les annonces"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="rounded-xl border border-borderSubtle bg-ivoryWarm px-2.5 py-2 font-semibold text-obsidianInk"
+                >
+                  <option value="travel">Tri : Temps de trajet</option>
+                  <option value="price_index_asc">Tri : Meilleures affaires</option>
+                  <option value="price_asc">Tri : Prix croissant</option>
+                </select>
                 <label className="inline-flex items-center gap-1.5 font-medium text-obsidianInk cursor-pointer">
                   <input
                     type="checkbox"
@@ -975,6 +1087,17 @@ export function MarketplaceAndPublishView({
               </div>
             </div>
           </section>
+
+          <InteractiveGeoMap
+            hits={hits}
+            originAddress={originAddress}
+            originLat={originCoords?.lat}
+            originLon={originCoords?.lon}
+            selectedListingId={selectedListingId}
+            selectedSuggestion={selectedSuggestion}
+            onSelectListing={(id) => setSelectedListingId(id)}
+            onReverseLookup={handleReverseLookup}
+          />
 
           {isDemoCatalog && (
             <div className="rounded-xl bg-amber-50 border border-amber-300 px-4 py-2.5 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
@@ -1104,11 +1227,14 @@ export function MarketplaceAndPublishView({
                 const isCompared = compareIds.includes(listing.id);
                 const isSampleListing =
                   listing.id.startsWith("lst-fr-") || listing.id.startsWith("lst-pt-");
+                const effectivePriceIndex = listing.price_index ?? evaluatedPriceMap[listing.id];
+                const isSelectedOnMap = selectedListingId === listing.id;
                 return (
                   <article
                     key={listing.id}
+                    onClick={() => setSelectedListingId(listing.id)}
                     className={`rounded-2xl bg-ivoryCard border p-5 flex flex-col justify-between gap-4 transition ${
-                      isCompared
+                      isCompared || isSelectedOnMap
                         ? "border-emeraldDeep ring-2 ring-emeraldDeep/20"
                         : "border-borderSubtle hover:border-emeraldMid"
                     }`}
@@ -1167,6 +1293,21 @@ export function MarketplaceAndPublishView({
                           {countryCode === "PT" ? "CE" : "DPE"} {listing.dpe}
                         </span>
                       </div>
+
+                      {effectivePriceIndex ? (
+                        <MontyPriceGauge result={effectivePriceIndex} compact={true} />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEvaluateListingPrice(listing);
+                          }}
+                          className="text-[11px] font-bold text-emeraldDeep underline hover:opacity-80"
+                        >
+                          Calculer le Monty Price Index
+                        </button>
+                      )}
 
                       <p className="text-xs text-slateMuted leading-relaxed line-clamp-3">{listing.description}</p>
 

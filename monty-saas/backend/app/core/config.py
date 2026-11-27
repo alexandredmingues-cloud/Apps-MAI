@@ -53,6 +53,12 @@ class Settings:
     smtp_password: str = ""
     smtp_from_email: str = ""
     resend_api_key: str = ""
+    local_llm_base_url: str = ""
+    local_llm_model: str = "qwen2.5:7b-instruct"
+    gemini_api_key: str = ""
+    mistral_api_key: str = ""
+    deepseek_api_key: str = ""
+    monty_ai_confidential_default: bool = False
 
     @property
     def effective_anthropic_keys(self) -> list[str]:
@@ -127,4 +133,10 @@ def load_settings() -> Settings:
         smtp_password=os.environ.get("SMTP_PASSWORD", "").strip(),
         smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", "").strip(),
         resend_api_key=os.environ.get("RESEND_API_KEY", "").strip(),
+        local_llm_base_url=(os.environ.get("OLLAMA_BASE_URL") or os.environ.get("LOCAL_LLM_BASE_URL") or "").strip(),
+        local_llm_model=(os.environ.get("LOCAL_LLM_MODEL") or "qwen2.5:7b-instruct").strip(),
+        gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
+        mistral_api_key=os.environ.get("MISTRAL_API_KEY", "").strip(),
+        deepseek_api_key=os.environ.get("DEEPSEEK_API_KEY", "").strip(),
+        monty_ai_confidential_default=_parse_bool(os.environ.get("MONTY_AI_CONFIDENTIAL_DEFAULT"), default=False),
     )

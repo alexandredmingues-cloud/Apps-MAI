@@ -104,6 +104,86 @@ class PublicInboundLead:
     created_at: str
 
 
+@dataclass(frozen=True)
+class LeadKeywordRule:
+    id: str
+    agency_id: str
+    category: str  # "VENDEURS" | "ACQUEREURS" | "INVESTISSEURS" | "BAILLEURS"
+    keyword: str
+    geo_scope: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class LeadQualificationResult:
+    score: int
+    intent_stage: str  # "VISITEUR" | "RECHERCHE_ACTIVE" | "ESTIMATION" | "VISITE" | "DEMANDE_CONTACT"
+    reasons: list[str]
+    matched_keywords: list[str]
+
+
+def compute_lead_qualification(
+    lead: PublicInboundLead,
+    keyword_rules: list[LeadKeywordRule] | None = None,
+) -> LeadQualificationResult:
+    score = 25
+    reasons: list[str] = []
+    if lead.rgpd_consent_granted:
+        score += 10
+        reasons.append("Consentement RGPD explicite validé (+10)")
+    if lead.phone.strip():
+        score += 15
+        reasons.append("Téléphone direct renseigné (+15)")
+    if lead.budget_euro >= 100_000:
+        score += 15
+        reasons.append("Budget qualifié ≥ 100 k€ (+15)")
+    if lead.horizon.strip():
+        h_low = lead.horizon.lower()
+        if any(k in h_low for k in ("immédiat", "immediat", "1 mois", "3 mois", "urgent", "rapide")):
+            score += 15
+            reasons.append(f"Horizon court terme « {lead.horizon} » (+15)")
+        else:
+            score += 8
+            reasons.append(f"Horizon précisé « {lead.horizon} » (+8)")
+    if lead.lead_kind == LeadKind.VISIT_REQUEST:
+        score += 15
+        reasons.append("Demande de visite directe (+15)")
+        stage = "VISITE"
+    elif lead.lead_kind == LeadKind.SELLER_VALUATION:
+        score += 15
+        reasons.append("Projet vendeur / estimation (+15)")
+        stage = "ESTIMATION"
+    elif lead.lead_kind == LeadKind.BUYER_CONCIERGE:
+        score += 10
+        reasons.append("Recherche guidée acquéreur (+10)")
+        stage = "RECHERCHE_ACTIVE"
+    else:
+        stage = "VISITEUR"
+
+    if lead.status in (LeadStatus.CONTACTED, LeadStatus.CONVERTED):
+        stage = "DEMANDE_CONTACT"
+        score += 5
+        reasons.append("Contact pris / suivi engagé (+5)")
+
+    matched_kw: list[str] = []
+    text_blob = f"{lead.city} {lead.property_title} {lead.notes}".lower()
+    for rule in keyword_rules or []:
+        kw = rule.keyword.strip().lower()
+        if kw and kw in text_blob:
+            matched_kw.append(f"{rule.keyword} ({rule.category})")
+    if matched_kw:
+        bonus = min(15, 5 * len(matched_kw))
+        score += bonus
+        reasons.append(f"Mots-clés ciblés détectés : {', '.join(matched_kw[:3])} (+{bonus})")
+
+    return LeadQualificationResult(
+        score=max(0, min(100, score)),
+        intent_stage=stage,
+        reasons=reasons,
+        matched_keywords=matched_kw,
+    )
+
+
 class PortfolioAndLeadsService:
     """
     Service domaine en mémoire (fallback sans DATABASE_URL) reflétant 1:1
@@ -121,6 +201,12 @@ class PortfolioAndLeadsService:
         self._visits: dict[str, PortfolioVisit] = {}
         self._transactions: dict[str, PortfolioTransaction] = {}
         self._leads: dict[str, PublicInboundLead] = {}
+        self._lead_keywords: list[LeadKeywordRule] = [
+            LeadKeywordRule("kw-1", "agency-france-reseau", "VENDEURS", "estimation", "France", "2026-11-25T09:00:00+00:00"),
+            LeadKeywordRule("kw-2", "agency-france-reseau", "ACQUEREURS", "terrasse", "Lyon / Montpellier", "2026-11-25T09:00:00+00:00"),
+            LeadKeywordRule("kw-3", "agency-france-reseau", "INVESTISSEURS", "rendement", "France / Portugal", "2026-11-25T09:00:00+00:00"),
+            LeadKeywordRule("kw-4", "agency-france-reseau", "BAILLEURS", "gestion locative", "France", "2026-11-25T09:00:00+00:00"),
+        ]
         self._seed_demo_agency()
 
     def _seed_demo_agency(self) -> None:
@@ -609,3 +695,46 @@ class PortfolioAndLeadsService:
         ctx.assert_same_agency(lead.agency_id or "")
         lead.status = status
         return lead
+
+    # --- MONTY LEADS : MOTS-CLÉS & QUALIFICATION ---
+    def list_lead_keywords(self, ctx: TenantContext) -> list[LeadKeywordRule]:
+        ctx.require_permission(Permission.CRM_READ)
+        return [k for k in self._lead_keywords if k.agency_id == ctx.agency_id]
+
+    def add_lead_keyword(
+        self,
+        ctx: TenantContext,
+        *,
+        category: str,
+        keyword: str,
+        geo_scope: str = "France",
+    ) -> LeadKeywordRule:
+        ctx.require_permission(Permission.CRM_WRITE)
+        norm_cat = category.strip().upper()
+        if norm_cat not in ("VENDEURS", "ACQUEREURS", "INVESTISSEURS", "BAILLEURS"):
+            raise ValueError("Catégorie invalide (VENDEURS, ACQUEREURS, INVESTISSEURS ou BAILLEURS).")
+        clean_kw = InputSanitizer.sanitize_text(keyword, 120)
+        if len(clean_kw) < 2:
+            raise ValueError("Mot-clé trop court (minimum 2 caractères).")
+        rule = LeadKeywordRule(
+            id=f"kw-{uuid.uuid4().hex[:8]}",
+            agency_id=ctx.agency_id,
+            category=norm_cat,
+            keyword=clean_kw,
+            geo_scope=InputSanitizer.sanitize_text(geo_scope, 80) or "France",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self._lead_keywords.insert(0, rule)
+        return rule
+
+    def delete_lead_keyword(self, ctx: TenantContext, keyword_id: str) -> bool:
+        ctx.require_permission(Permission.CRM_WRITE)
+        before = len(self._lead_keywords)
+        self._lead_keywords = [
+            k for k in self._lead_keywords if not (k.id == keyword_id and k.agency_id == ctx.agency_id)
+        ]
+        return len(self._lead_keywords) < before
+
+    def qualify_lead(self, ctx_agency_id: str, lead: PublicInboundLead) -> LeadQualificationResult:
+        rules = [k for k in self._lead_keywords if k.agency_id == (lead.agency_id or ctx_agency_id)]
+        return compute_lead_qualification(lead, rules)

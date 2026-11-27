@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
+import { AdminV2GovernancePanels } from "./AdminV2GovernancePanels";
 import { HealthCheckDashboard } from "./HealthCheckDashboard";
 import type {
   AgencyFeatureFlags,
@@ -377,6 +378,8 @@ export function AdminSaasConsole({ role }: { role: MontyRole }) {
           )}
         </div>
       </div>
+
+      <AdminV2GovernancePanels onStatusMessage={setStatusMessage} onErrorMessage={setErrorMsg} />
     </div>
   );
 }
