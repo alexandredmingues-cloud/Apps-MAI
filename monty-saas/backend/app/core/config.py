@@ -68,7 +68,6 @@ class Settings:
     firebase_project_id: str = ""
     platform_admin_user_ids: tuple[str, ...] = ()
     local_llm_allow_private_hosts: bool = False
-    turnstile_site_key: str = ""
     turnstile_secret_key: str = ""
 
     @property
@@ -161,6 +160,5 @@ def load_settings() -> Settings:
         firebase_project_id=os.environ.get("FIREBASE_PROJECT_ID", "").strip(),
         platform_admin_user_ids=platform_admins,
         local_llm_allow_private_hosts=_parse_bool(os.environ.get("LOCAL_LLM_ALLOW_PRIVATE_HOSTS"), default=False),
-        turnstile_site_key=os.environ.get("TURNSTILE_SITE_KEY", "").strip(),
         turnstile_secret_key=os.environ.get("TURNSTILE_SECRET_KEY", "").strip(),
     )
