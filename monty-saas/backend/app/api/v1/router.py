@@ -547,7 +547,8 @@ async def exchange_firebase_session(
                         text("""
                             SELECT user_id, agency_id, role, agency_name, display_name, email, is_active
                             FROM monty_auth_firebase_exchange(
-                                :firebase_uid, :email, :email_verified, :agency_id
+                                CAST(:firebase_uid AS varchar(128)), CAST(:email AS citext),
+                                CAST(:email_verified AS boolean), CAST(:agency_id AS uuid)
                             )
                         """),
                         {
