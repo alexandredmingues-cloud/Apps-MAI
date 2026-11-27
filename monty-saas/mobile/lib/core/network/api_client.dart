@@ -18,8 +18,13 @@ class ApiClient {
       _request('POST', '/api/v1/auth/login',
           body: <String, Object>{'email': email.trim(), 'password': password});
   Future<Map<String, dynamic>> currentUser() => _request('GET', '/api/v1/auth/me', authenticated: true);
+  Future<Map<String, dynamic>> getJson(String path, {Map<String, String>? query}) =>
+      _request('GET', path, authenticated: true, query: query);
+  Future<Map<String, dynamic>> postJson(String path, {Map<String, Object?>? body}) =>
+      _request('POST', path, body: body, authenticated: true);
   Future<Map<String, dynamic>> _request(String method, String path,
-      {Map<String, Object>? body, bool authenticated = false}) async {
+      {Map<String, Object?>? body, bool authenticated = false,
+      Map<String, String>? query}) async {
     final headers = <String, String>{'Accept': 'application/json'};
     if (body != null) headers['Content-Type'] = 'application/json';
     if (authenticated && (accessToken?.isNotEmpty ?? false)) {
@@ -27,7 +32,8 @@ class ApiClient {
     }
     late http.Response response;
     try {
-      final uri = _baseUri.resolve(path);
+      final resolved = _baseUri.resolve(path);
+      final uri = query == null ? resolved : resolved.replace(queryParameters: query);
       response = method == 'POST'
           ? await _client.post(uri, headers: headers, body: jsonEncode(body))
           : await _client.get(uri, headers: headers);

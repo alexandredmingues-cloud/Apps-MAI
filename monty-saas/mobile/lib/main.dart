@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'core/network/api_client.dart';
 import 'features/auth/data/session_repository.dart';
+import 'features/crm/data/crm_repository.dart';
+import 'features/crm/presentation/crm_screen.dart';
 const _brand = Color(0xFF174B3A);
 const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 void main() {
@@ -57,7 +59,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_user != null) return HomeScreen(user: _user!, onSignOut: _signOut);
+    if (_user != null) return HomeScreen(user: _user!, sessions: widget.sessions, onSignOut: _signOut);
     return LoginScreen(sessions: widget.sessions, apiConfigured: widget.apiConfigured,
         initialError: _error, onSignedIn: _signedIn);
   }
@@ -140,8 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
   );
 }
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({required this.user, required this.onSignOut, super.key});
+  const HomeScreen({required this.user, required this.sessions, required this.onSignOut, super.key});
   final Map<String, dynamic> user;
+  final SessionRepository sessions;
   final Future<void> Function() onSignOut;
   @override
   Widget build(BuildContext context) {
@@ -156,7 +159,10 @@ class HomeScreen extends StatelessWidget {
           Text(role, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 24),
           const Text('Votre espace immobilier', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const _ModuleTile(Icons.people_alt_outlined, 'CRM & Contacts', 'Prospects, clients et suivi commercial'),
+          Card(child: ListTile(leading: const Icon(Icons.people_alt_outlined, color: _brand),
+            title: const Text('CRM & Contacts'), subtitle: const Text('Prospects, clients et suivi commercial'),
+            trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => CrmScreen(repository: CrmRepository(sessions.api))))),
           const _ModuleTile(Icons.home_work_outlined, 'Biens immobiliers', 'Portefeuille, mandats et visites'),
           const _ModuleTile(Icons.calculate_outlined, 'Estimation & DVF', 'Valeurs, comparables et analyse de marché'),
           const _ModuleTile(Icons.calendar_month_outlined, 'Agenda & Relances', 'Actions à venir et échéances'),
