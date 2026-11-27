@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import io
 import pathlib
 import sys
@@ -35,10 +34,10 @@ def _make_structurally_signed_test_apk() -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_STORED) as zf:
         zf.writestr("AndroidManifest.xml", b"<?xml version='1.0'?><manifest package='com.test'/>")
-        zf.writestr("classes.dex", b"dex\\n035\\x00" + b"\\x00" * 60_000)
-        zf.writestr("resources.arsc", b"\\x02\\x00\\x0c\\x00" + b"A" * 55_000)
-        zf.writestr("META-INF/MANIFEST.MF", b"Manifest-Version: 1.0\\n")
-        zf.writestr("META-INF/TEST.SF", b"Signature-Version: 1.0\\n")
+        zf.writestr("classes.dex", b"dex\n035\x00" + b"\x00" * 60_000)
+        zf.writestr("resources.arsc", b"\x02\x00\x0c\x00" + b"A" * 55_000)
+        zf.writestr("META-INF/MANIFEST.MF", b"Manifest-Version: 1.0\n")
+        zf.writestr("META-INF/TEST.SF", b"Signature-Version: 1.0\n")
         zf.writestr("META-INF/TEST.RSA", b"synthetic-test-signature-block")
     return buf.getvalue()
 
