@@ -146,7 +146,7 @@ jobs:
           npm run start -- --hostname 127.0.0.1 >/tmp/monagent-next.log 2>&1 &
           NEXT_PID=$!
           trap 'kill "$NEXT_PID" 2>/dev/null || true' EXIT
-          node - <<'JS'
+          node --input-type=module - <<'JS'
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
           for (let attempt = 0; attempt < 40; attempt++) {
             try {
