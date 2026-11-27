@@ -22,7 +22,11 @@ from app.db.postgres_v3_orchestrator_repository import (  # noqa: E402
     MobileReleaseVersionConflict,
     PostgresV3OrchestratorRepository,
 )
-from app.api.v1.mobile_releases_router import _persist_uploaded_mobile_release, _storage_for_environment  # noqa: E402
+from app.api.v1.mobile_releases_router import (  # noqa: E402
+    _persist_uploaded_mobile_release,
+    _storage_for_environment,
+    _verified_remote_download_info,
+)
 from app.core.rbac import MontyRole, TenantContext  # noqa: E402
 from app.domain.mobile_releases_service import (  # noqa: E402
     MobileReleasesService,
@@ -92,6 +96,25 @@ class MobileReleasesAndApkTests(unittest.TestCase):
             settings = load_settings()
         storage = _storage_for_environment(settings)
         self.assertEqual(storage.active_backend, "local")
+
+    def test_local_object_storage_reports_real_size_and_missing_file(self) -> None:
+        clean = {
+            "ENVIRONMENT": "development",
+            "SUPABASE_URL": "",
+            "SUPABASE_SERVICE_ROLE_KEY": "",
+            "S3_ENDPOINT": "",
+            "S3_BUCKET": "",
+            "S3_ACCESS_KEY": "",
+            "S3_SECRET_KEY": "",
+        }
+        with patch.dict(os.environ, clean, clear=False):
+            settings = load_settings()
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = ObjectStorageAdapter(settings, local_root=pathlib.Path(tmp) / "uploads")
+            storage.put_bytes(object_key="apk/test-release.apk", raw_bytes=b"verified-apk")
+            self.assertEqual(storage.get_object_size(object_key="apk/test-release.apk"), 12)
+            with self.assertRaises(FileNotFoundError):
+                storage.get_object_size(object_key="apk/missing.apk")
 
     def test_local_object_storage_delete_is_idempotent(self) -> None:
         clean = {
@@ -236,6 +259,42 @@ class MobileReleasePublicationCleanupTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(MobileReleaseVersionConflict):
             await repo.assert_mobile_release_version_available(release)
+
+    async def test_remote_download_rejects_missing_object_before_signing(self) -> None:
+        storage = SimpleNamespace(
+            get_object_size=Mock(side_effect=FileNotFoundError("missing")),
+            issue_signed_url=Mock(),
+        )
+        release = SimpleNamespace(id="rel-1", file_name="app.apk", storage_path="apk/rel-1-app.apk", file_size_bytes=100)
+        with self.assertRaises(HTTPException) as raised:
+            _verified_remote_download_info(storage, release)
+        self.assertEqual(raised.exception.status_code, 404)
+        storage.issue_signed_url.assert_not_called()
+
+    async def test_remote_download_rejects_size_mismatch_before_signing(self) -> None:
+        storage = SimpleNamespace(
+            get_object_size=Mock(return_value=99),
+            issue_signed_url=Mock(),
+        )
+        release = SimpleNamespace(id="rel-1", file_name="app.apk", storage_path="apk/rel-1-app.apk", file_size_bytes=100)
+        with self.assertRaises(HTTPException) as raised:
+            _verified_remote_download_info(storage, release)
+        self.assertEqual(raised.exception.status_code, 503)
+        storage.issue_signed_url.assert_not_called()
+
+    async def test_remote_download_signs_only_after_size_verification(self) -> None:
+        signed = SimpleNamespace(signed_url="https://storage.example/signed")
+        storage = SimpleNamespace(
+            get_object_size=Mock(return_value=100),
+            issue_signed_url=Mock(return_value=signed),
+        )
+        release = SimpleNamespace(id="rel-1", file_name="app.apk", storage_path="apk/rel-1-app.apk", file_size_bytes=100)
+        result = _verified_remote_download_info(storage, release)
+        self.assertIs(result, signed)
+        storage.get_object_size.assert_called_once_with(object_key="apk/rel-1-app.apk")
+        storage.issue_signed_url.assert_called_once_with(
+            object_key="apk/rel-1-app.apk", method="GET", expires_in_seconds=300
+        )
 
     async def test_database_failure_triggers_remote_apk_cleanup(self) -> None:
         from unittest.mock import patch as local_patch
