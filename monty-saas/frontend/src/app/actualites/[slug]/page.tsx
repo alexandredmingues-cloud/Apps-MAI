@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const article = getPublicArticleBySlugCatalog(slug);
   if (!article) {
-    return { title: "Actualité introuvable | Monty Immobilier" };
+    return { title: "Actualité introuvable | MON-AGENT" };
   }
   return {
     title: article.seo_meta_title || article.title,
@@ -43,7 +43,7 @@ export default async function PublicArticleDetailPage({ params }: PageProps) {
     inLanguage: article.locale,
     publisher: {
       "@type": "Organization",
-      name: "Monty Immobilier",
+      name: "MON-AGENT",
     },
     citation: article.source_url,
   };
