@@ -120,3 +120,45 @@ async def test_rls_blocks_cross_agency_reads_and_writes_as_non_superuser(monkeyp
                 """))
         finally:
             await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_agency_scoped_tables_force_rls_for_table_owners() -> None:
+    import os
+
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url:
+        pytest.skip("DATABASE_URL absent: PostgreSQL RLS integration test only")
+
+    expected = [
+        "news_sources",
+        "news_articles",
+        "monty_ai_memories",
+        "monty_ai_conversations",
+        "monty_ai_pending_actions",
+        "monty_ai_audit_events",
+        "agency_module_flags",
+        "lead_keyword_rules",
+        "monty_price_index_configs",
+        "monty_price_index_history",
+    ]
+    engine = create_async_engine(normalize_async_pg_url(database_url))
+    try:
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text("""
+                        SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public' AND c.relname = ANY(:tables)
+                    """),
+                    {"tables": expected},
+                )
+            ).all()
+        state = {row.relname: (row.relrowsecurity, row.relforcerowsecurity) for row in rows}
+        assert set(state) == set(expected), "Every expected agency-scoped table must exist"
+        assert all(enabled and forced for enabled, forced in state.values()), (
+            "Agency-scoped tables must have RLS enabled and FORCE RLS set"
+        )
+    finally:
+        await engine.dispose()
