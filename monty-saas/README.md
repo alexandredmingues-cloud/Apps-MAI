@@ -11,7 +11,7 @@
 ## Arborescence du Monorepo
 
 ```text
-mon-agent-saas/
+monty-saas/
 ├── docs/
 │   └── PHASE_0_AUDIT.md            # Audit intégral de l'existant & plan de migration
 ├── docker-compose.yml              # Stack locale PostgreSQL 16 + Redis 7 + FastAPI + Worker + Next.js
@@ -77,7 +77,7 @@ mon-agent-saas/
     │       ├── ai/AgentsAndScoutPanel.tsx
     │       ├── calculators/RealEstateSimulatorsSuite.tsx
     │       ├── crm/CrmCockpitPanel.tsx
-    │       ├── layout/{Mon-AgentShell.tsx,PublicWebHeader.tsx}
+    │       ├── layout/{MontyShell.tsx,PublicWebHeader.tsx}
     │       ├── legal/{NotariesAndRnicPanel.tsx,PreEtatDateWorkspace.tsx}
     │       ├── marketplace/MarketplaceAndPublishView.tsx
     │       ├── news/NewsHubExperience.tsx
@@ -110,7 +110,7 @@ mon-agent-saas/
 
 ```bash
 # Tests unitaires backend (Python 3.11)
-python3 -m unittest discover -s mon-agent-saas/backend/tests -v
+python3 -m unittest discover -s monty-saas/backend/tests -v
 
 # Lancement complet avec Docker Compose (sur poste local / CI avec Docker)
 cd monty-saas && docker compose up --build
