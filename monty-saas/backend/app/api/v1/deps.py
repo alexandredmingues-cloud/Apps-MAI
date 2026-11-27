@@ -57,6 +57,16 @@ async def get_db_session_factory(settings: Settings = Depends(get_settings)):
     return session_factory
 
 
+def ensure_production_persistence(session_factory, *, is_production: bool, service_name: str) -> None:
+    """Fail closed instead of silently using process-local memory in production."""
+    if is_production and session_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Le service {service_name} est indisponible : stockage PostgreSQL persistant non configuré.",
+            headers={"Retry-After": "60"},
+        )
+
+
 async def get_current_tenant(
     authorization: str | None = Header(default=None),
     settings: Settings = Depends(get_settings),
