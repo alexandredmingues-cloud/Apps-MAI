@@ -23,3 +23,10 @@
 - Compteurs publicitaires limités aux impressions/clics ; modération réservée au rôle SUPER_ADMIN.
 - Rate limiting distribué fail-closed en production si Redis est indisponible.
 - CI étendue à un PostgreSQL 16 vierge pour exécuter toutes les migrations Alembic avant les tests.
+
+## Protection anti-robot — 27 novembre 2026
+- Ajout du composant Cloudflare Turnstile réutilisable dans le frontend MON-AGENT.
+- Protection des connexions et inscriptions agence/particulier ainsi que des demandes publicitaires.
+- Vérification serveur via Cloudflare Siteverify, gestion des jetons expirés et refus fail-closed en production si le secret est absent ou la vérification indisponible.
+- Configuration documentée : `NEXT_PUBLIC_TURNSTILE_SITE_KEY` côté build frontend et `TURNSTILE_SECRET_KEY` côté backend.
+- Les contrôles de développement restent compatibles avec les tests automatisés lorsque le secret Turnstile n'est pas configuré.
