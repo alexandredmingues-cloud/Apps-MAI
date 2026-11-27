@@ -1,4 +1,5 @@
 "use client";
+/* Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code. */
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Megaphone } from "lucide-react";
