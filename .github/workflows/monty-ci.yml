@@ -2,9 +2,9 @@ name: Monty CI — Tri-Platform Verification
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, audit/production-readiness-2026-11, brand/mon-agent-identity-2026]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, audit/production-readiness-2026-11]
 
 permissions:
   contents: read
