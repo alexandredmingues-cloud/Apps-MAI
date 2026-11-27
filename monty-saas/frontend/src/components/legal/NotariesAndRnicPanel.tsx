@@ -518,6 +518,7 @@ export function NotariesAndRnicPanel({
             </p>
 
             {officialOffices.length > 0 && (
+              <>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slateMuted">
                 <span>{notaryTotalResults.toLocaleString("fr-FR")} établissements trouvés · page {notaryPage}{notaryTotalPages ? ` / ${notaryTotalPages}` : ""}</span>
                 <span>25 résultats maximum par page · recherche nationale</span>
@@ -583,6 +584,7 @@ export function NotariesAndRnicPanel({
                   </button>
                 </div>
               )}
+              </>
             )}
           </div>
 
