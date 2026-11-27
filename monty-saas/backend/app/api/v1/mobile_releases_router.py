@@ -338,11 +338,8 @@ async def admin_update_mobile_release(
             rel.is_recommended = bool(body.is_recommended)
         if body.release_notes is not None:
             rel.release_notes = body.release_notes[:1500]
-        if rel.is_recommended:
-            for other in releases:
-                if other.id != rel.id:
-                    other.is_recommended = False
-                    await repo.upsert_mobile_release(other)
+        # upsert_mobile_release clears the previous recommendation and writes the
+        # selected release in one PostgreSQL transaction; avoid per-row commits here.
         rel = await repo.upsert_mobile_release(rel)
     else:
         try:
