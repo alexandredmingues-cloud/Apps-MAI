@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 
 from app.api.v1.deps import ensure_production_persistence, get_db_session_factory, get_settings, require_permission
 from app.core.config import Settings
@@ -15,6 +16,15 @@ from app.db.postgres_v3_orchestrator_repository import MobileReleaseVersionConfl
 from app.domain.mobile_releases_service import MobileAppRelease, mobile_releases_service
 
 mobile_releases_router = APIRouter(tags=["Phase 28 — Distribution APK Mobile"])
+
+
+def _is_mobile_release_version_conflict(exc: Exception) -> bool:
+    """Recognize only the database uniqueness constraint for Android package/build pairs."""
+    if not isinstance(exc, IntegrityError):
+        return False
+    original = getattr(exc, "orig", None)
+    diagnostic = getattr(original, "diag", None)
+    return getattr(diagnostic, "constraint_name", None) == "uq_mobile_app_releases_package_version"
 
 
 def _storage_for_environment(settings: Settings) -> ObjectStorageAdapter:
@@ -44,7 +54,19 @@ async def _persist_uploaded_mobile_release(
 
     if storage.active_backend == "local":
         if repository is not None:
-            return await repository.upsert_mobile_release(rel)
+            try:
+                return await repository.upsert_mobile_release(rel)
+            except IntegrityError as exc:
+                if _is_mobile_release_version_conflict(exc):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Le numéro de version Android {rel.version_code} existe déjà pour ce package.",
+                    ) from exc
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Persistance de la publication APK temporairement indisponible.",
+                    headers={"Retry-After": "60"},
+                ) from exc
         return rel
 
     object_key = f"apk/{rel.id}-{rel.file_name}"
@@ -70,10 +92,13 @@ async def _persist_uploaded_mobile_release(
             )
         if isinstance(exc, HTTPException):
             raise
-        if isinstance(exc, MobileReleaseVersionConflict):
+        if isinstance(exc, MobileReleaseVersionConflict) or _is_mobile_release_version_conflict(exc):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
+                detail=(
+                    str(exc) if isinstance(exc, MobileReleaseVersionConflict)
+                    else f"Le numéro de version Android {rel.version_code} existe déjà pour ce package."
+                ),
             ) from exc
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
