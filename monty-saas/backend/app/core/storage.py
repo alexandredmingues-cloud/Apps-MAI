@@ -197,6 +197,63 @@ class ObjectStorageAdapter:
             expires_in_seconds=expires_in_seconds,
         )
 
+    def get_object_size(self, *, object_key: str) -> int:
+        """Vérifie l'existence de l'objet distant et retourne sa taille réelle."""
+        clean_key = self._clean_object_key(object_key)
+        backend = self.active_backend
+        self._ensure_backend_allowed(backend)
+
+        if backend == "local":
+            target = self._local_path(clean_key)
+            try:
+                return target.stat().st_size
+            except FileNotFoundError:
+                raise
+            except OSError as exc:
+                raise RuntimeError("Impossible de vérifier le fichier local.") from exc
+
+        if backend == "supabase":
+            bucket = self._settings.supabase_storage_bucket
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            endpoint = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{encoded_key}"
+            headers = {
+                "Authorization": f"Bearer {self._settings.supabase_service_role_key}",
+                "apikey": self._settings.supabase_service_role_key,
+            }
+        else:
+            endpoint = _build_s3_presigned_url(
+                endpoint=self._settings.s3_endpoint,
+                bucket=self._settings.s3_bucket,
+                access_key=self._settings.s3_access_key,
+                secret_key=self._settings.s3_secret_key,
+                region=self._settings.s3_region,
+                object_key=clean_key,
+                method="HEAD",
+                expires_in_seconds=300,
+            )
+            headers = {}
+
+        req = urllib.request.Request(endpoint, headers=headers, method="HEAD")
+        try:
+            with urllib.request.urlopen(req, timeout=10.0) as response:
+                raw_size = response.headers.get("Content-Length")
+                if raw_size is None:
+                    raise RuntimeError("Le stockage distant n'a pas fourni la taille de l'objet.")
+                size = int(raw_size)
+                if size < 0:
+                    raise RuntimeError("Taille d'objet distante invalide.")
+                return size
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise FileNotFoundError(clean_key) from exc
+            raise RuntimeError("Impossible de vérifier l'objet dans le stockage distant.") from exc
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Taille d'objet distante invalide.") from exc
+        except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError("Impossible de vérifier l'objet dans le stockage distant.") from exc
+
     def delete_object(self, *, object_key: str) -> None:
         """Supprime un objet après échec de publication ; l'opération est idempotente."""
         clean_key = self._clean_object_key(object_key)
