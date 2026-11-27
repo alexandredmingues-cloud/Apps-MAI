@@ -55,7 +55,6 @@ export function BuyerSearchTools({
   const [conciergeBusy, setConciergeBusy] = useState(false);
   const [conciergeError, setConciergeError] = useState<string | null>(null);
   const [conciergeSent, setConciergeSent] = useState(false);
-  const [conciergeSyncMode, setConciergeSyncMode] = useState<"api">("api");
 
   useEffect(() => {
     setConciergeCity(originAddress);
@@ -97,7 +96,7 @@ export function BuyerSearchTools({
       return;
     }
     if (!alertRgpd) {
-      setAlertFeedback("Cochez la case de consentement RGPD pour activer l'alerte.");
+      setAlertFeedback("Cochez la case pour autoriser l'enregistrement et le traitement de votre recherche.");
       return;
     }
     setAlertBusy(true);
@@ -176,7 +175,6 @@ export function BuyerSearchTools({
         notes: conciergeNotes.trim(),
         rgpd_consent_granted: true,
       });
-      setConciergeSyncMode("api");
       setConciergeSent(true);
     } catch {
       setConciergeError("La demande n'a pas pu être transmise au serveur. Rien n'a été enregistré : réessayez lorsque la connexion sera rétablie.");
@@ -220,14 +218,14 @@ export function BuyerSearchTools({
                 onChange={(e) => setAlertRgpd(e.target.checked)}
                 className="rounded border-borderSubtle"
               />
-              <span>J&apos;accepte de recevoir des alertes Monty (révocable à tout moment, Art. 6.1.a RGPD).</span>
+              <span>J&apos;autorise MON-AGENT à enregistrer ces critères et à transmettre ma demande à un conseiller. Les notifications automatiques ne sont pas garanties.</span>
             </label>
             <button
               type="submit"
               disabled={alertBusy}
               className="sm:col-span-2 px-4 py-2.5 rounded-xl bg-emeraldDeep text-goldChampagne font-bold hover:bg-emeraldMid disabled:opacity-60 transition"
             >
-              {alertBusy ? "Envoi..." : "M'alerter"}
+              {alertBusy ? "Enregistrement..." : "Enregistrer"}
             </button>
           </form>
           {alertFeedback && (
@@ -301,7 +299,7 @@ export function BuyerSearchTools({
             <p className="text-ivoryWarm/85">
               Critères transmis : <strong>{conciergeCity}</strong> • {conciergeRooms}+ pièces • budget max{" "}
               <strong>{conciergeBudget.toLocaleString("fr-FR")} €</strong> ({conciergeDelay}). Un récapitulatif sera
-adressé à <strong>{conciergeEmail}</strong> dès qu&apos;un conseiller aura étudié votre demande.
+adressé à <strong>{conciergeEmail}</strong> après étude de votre demande par un conseiller.
             </p>
             <button
               type="button"
