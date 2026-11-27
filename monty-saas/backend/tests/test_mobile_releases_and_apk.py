@@ -349,8 +349,9 @@ class MobileReleasePublicationCleanupTests(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_concurrent_duplicate_version_is_http_409_and_cleans_uploaded_object(self) -> None:
-        diagnostic = SimpleNamespace(constraint_name="uq_mobile_app_releases_package_version")
-        database_error = IntegrityError("INSERT mobile_app_releases", {}, SimpleNamespace(diag=diagnostic))
+        database_error = IntegrityError(
+            "INSERT mobile_app_releases", {}, SimpleNamespace(constraint_name="uq_mobile_app_releases_package_version")
+        )
         fake_storage = SimpleNamespace(
             active_backend="supabase",
             put_bytes=lambda **kwargs: SimpleNamespace(object_key=kwargs["object_key"]),
