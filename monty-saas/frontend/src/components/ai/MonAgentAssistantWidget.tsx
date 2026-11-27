@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Bot, MessageCircle, Send, X } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
 import type { MontyAIChatResponse } from "@/lib/types";
@@ -12,7 +12,7 @@ export function MonAgentAssistantWidget() {
   const [error, setError] = useState<string | null>(null);
   const [answer, setAnswer] = useState<MontyAIChatResponse | null>(null);
 
-  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const message = prompt.trim();
     if (message.length < 3 || busy) return;
