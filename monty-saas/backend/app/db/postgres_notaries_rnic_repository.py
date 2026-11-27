@@ -381,6 +381,9 @@ class PostgresNotariesRnicRepository:
                             ON CONFLICT (stripe_session_id) DO UPDATE SET
                               status = 'ACTIVE',
                               expires_at = EXCLUDED.expires_at
+                            WHERE rnic_access_passes.pass_token = EXCLUDED.pass_token
+                              AND rnic_access_passes.user_id IS NOT DISTINCT FROM EXCLUDED.user_id
+                              AND rnic_access_passes.amount_euro = EXCLUDED.amount_euro
                             RETURNING id, user_id, buyer_email::text AS buyer_email, pass_token,
                                       stripe_session_id, amount_euro, status, expires_at, created_at
                             """
