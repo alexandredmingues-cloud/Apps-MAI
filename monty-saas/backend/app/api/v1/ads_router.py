@@ -1,4 +1,5 @@
 """Brand advertising requests, moderated campaigns and privacy-friendly aggregate metrics."""
+# Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code.
 from __future__ import annotations
 
 import re
