@@ -1,0 +1,90 @@
+name: MON-AGENT Flutter Multiplatform
+
+on:
+  pull_request:
+    paths:
+      - "monty-saas/mobile/**"
+      - ".github/workflows/flutter-multiplatform.yml"
+  push:
+    branches:
+      - "migration/flutter-multiplatform-2026-11"
+    paths:
+      - "monty-saas/mobile/**"
+      - ".github/workflows/flutter-multiplatform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-verify:
+    name: Flutter analyze, test, Android and Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: monty-saas/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java for Android Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          cache: true
+      - name: Generate native platform scaffolding
+        run: flutter create --platforms=android,ios,web --project-name=mon_agent_mobile .
+      - name: Flutter version
+        run: flutter --version
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze
+      - name: Widget tests
+        run: flutter test --reporter expanded
+      - name: Build Android APK (debug verification)
+        run: flutter build apk --debug
+      - name: Build Flutter Web
+        run: flutter build web --release
+      - name: Upload verification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mon-agent-flutter-verification
+          path: |
+            monty-saas/mobile/build/app/outputs/flutter-apk/app-debug.apk
+            monty-saas/mobile/build/web/**
+          if-no-files-found: error
+          retention-days: 7
+
+  ios-source-check:
+    name: iOS source and dependency check
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: monty-saas/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          cache: true
+      - name: Generate iOS platform scaffolding
+        run: flutter create --platforms=ios --project-name=mon_agent_mobile .
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze and test
+        run: |
+          flutter analyze
+          flutter test --reporter expanded
+      - name: Build iOS simulator
+        run: flutter build ios --simulator --no-codesign

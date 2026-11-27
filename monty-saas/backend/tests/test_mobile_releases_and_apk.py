@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import io
 import pathlib
 import sys
@@ -30,21 +29,26 @@ def _make_unsigned_apk_zip(*, include_manifest: bool = True, include_dex: bool =
     return buf.getvalue()
 
 
-class MobileReleasesAndApkTests(unittest.TestCase):
-    def test_staged_production_apk_is_present_signed_and_verifiable(self) -> None:
-        svc = MobileReleasesService()
-        latest = svc.get_latest_published()
-        self.assertIsNotNone(latest)
-        assert latest is not None
-        self.assertTrue(latest.signature_verified)
-        self.assertTrue(latest.is_published)
-        self.assertTrue(latest.is_recommended)
-        self.assertEqual(len(latest.sha256), 64)
-        self.assertGreater(latest.file_size_bytes, 1_000_000)
-        self.assertTrue(pathlib.Path(latest.storage_path).exists())
+def _make_structurally_signed_test_apk() -> bytes:
+    """Synthetic ZIP fixture: signature entries exercise structure checks only."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("AndroidManifest.xml", b"<?xml version='1.0'?><manifest package='com.test'/>")
+        zf.writestr("classes.dex", b"dex\n035\x00" + b"\x00" * 60_000)
+        zf.writestr("resources.arsc", b"\x02\x00\x0c\x00" + b"A" * 55_000)
+        zf.writestr("META-INF/MANIFEST.MF", b"Manifest-Version: 1.0\n")
+        zf.writestr("META-INF/TEST.SF", b"Signature-Version: 1.0\n")
+        zf.writestr("META-INF/TEST.RSA", b"synthetic-test-signature-block")
+    return buf.getvalue()
 
-        disk_sha = hashlib.sha256(pathlib.Path(latest.storage_path).read_bytes()).hexdigest()
-        self.assertEqual(latest.sha256, disk_sha)
+
+class MobileReleasesAndApkTests(unittest.TestCase):
+    def test_no_production_release_is_published_without_explicit_signed_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svc = MobileReleasesService(storage_dir=pathlib.Path(tmp))
+            self.assertIsNone(svc.get_latest_published())
+            self.assertEqual(svc.list_public_releases(), [])
+            self.assertEqual(list(pathlib.Path(tmp).iterdir()), [])
 
     def test_validate_apk_bytes_rejects_fake_corrupt_and_unsigned_files(self) -> None:
         ok, _ = validate_apk_bytes(b"not-an-apk" * 8000, "monty.txt")
@@ -72,9 +76,7 @@ class MobileReleasesAndApkTests(unittest.TestCase):
         self.assertIn("non signé", err)
 
     def test_admin_upload_publish_recommend_and_download_counter(self) -> None:
-        staged_apk = BACKEND_DIR / "storage" / "apk" / "monty-immo-v1.0.apk"
-        self.assertTrue(staged_apk.exists())
-        real_apk_bytes = staged_apk.read_bytes()
+        real_apk_bytes = _make_structurally_signed_test_apk()
 
         admin_ctx = TenantContext(
             user_id="usr-admin",

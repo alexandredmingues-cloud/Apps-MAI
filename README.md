@@ -1,3 +1,5 @@
+> **Migration Flutter en cours — 27 novembre 2026 :** le client Flutter Android/iOS/Web est actuellement un socle initial, pas encore un remplacement fonctionnel du client Android historique. Consultez [l'état et les critères de migration](monty-saas/mobile/README.md) et [l'architecture cible](monty-saas/docs/ARCHITECTURE.md). Kotlin, Room et Firebase sont conservés jusqu'à validation documentée de la parité et des données.
+
 <div align="center">
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>

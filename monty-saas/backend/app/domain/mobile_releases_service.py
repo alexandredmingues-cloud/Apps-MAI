@@ -78,12 +78,9 @@ class MobileReleasesService:
 
     def _bootstrap_verified_release(self) -> None:
         staged = self._storage_dir / "monty-immo-v1.0.apk"
-        if not staged.exists():
-            # Fallback to Gradle output in repo if present
-            repo_apk = pathlib.Path(__file__).resolve().parents[4] / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
-            if repo_apk.exists():
-                staged.write_bytes(repo_apk.read_bytes())
-
+        # Never publish a debug build as a production release. Production APKs
+        # must be explicitly staged after the release-signing and verification
+        # pipeline has completed.
         if not staged.exists():
             return
 

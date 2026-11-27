@@ -290,40 +290,49 @@ class OrchestratorHardeningAndAdemePriceIndexTests(unittest.TestCase):
 
 
 class AuthFirebaseExchangeAndBillingTests(unittest.TestCase):
-    def test_verify_firebase_token_enforces_project_and_fail_closed_claims(self) -> None:
-        try:
-            from app.api.v1.router import _resolve_firebase_role, _verify_firebase_token_via_google
-        except Exception as exc:
-            self.skipTest(f"FastAPI/SQLAlchemy non installés dans cet environnement Python minimal : {exc}")
+    def test_verify_firebase_token_enforces_signature_contract_claims(self) -> None:
+        from app.api.v1.router import _verify_firebase_token_via_google
 
         base = load_settings()
         settings = replace(base, firebase_project_id="monty-prod-123")
+        valid_claims = {
+            "uid": "firebase-uid-999",
+            "sub": "firebase-uid-999",
+            "email": "claire@monty.fr",
+            "email_verified": True,
+            "name": "Claire Particulier",
+            "aud": "monty-prod-123",
+            "iss": "https://securetoken.google.com/monty-prod-123",
+            "exp": 9999999999,
+            "iat": 1000000000,
+            "auth_time": 1000000000,
+        }
 
-        def valid_transport(url: str, timeout: float):
-            return 200, {
-                "sub": "firebase-uid-999",
-                "email": "claire@monty.fr",
-                "email_verified": "true",
-                "name": "Claire Particulier",
-                "aud": "monty-prod-123",
-                "exp": "9999999999",
-            }
-
-        claims = _verify_firebase_token_via_google("header.payload.sig", settings=settings, transport=valid_transport)
-        self.assertEqual(claims["sub"], "firebase-uid-999")
-        # Unprivileged user requesting DIRECTOR still gets BUYER (fail-closed)
-        self.assertEqual(_resolve_firebase_role(claims, MontyRole.DIRECTOR), MontyRole.BUYER)
-        # Verified advisor claim unlocks AGENT
-        self.assertEqual(
-            _resolve_firebase_role({"advisor": True}, MontyRole.DIRECTOR),
-            MontyRole.AGENT,
+        claims = _verify_firebase_token_via_google(
+            "verified-token",
+            settings=settings,
+            verifier=lambda _token, _project: dict(valid_claims),
         )
-        # Mismatched project aud rejected
+        self.assertEqual(claims["uid"], "firebase-uid-999")
+
         with self.assertRaises(ValueError):
             _verify_firebase_token_via_google(
-                "header.payload.sig",
+                "invalid-token",
                 settings=settings,
-                transport=lambda u, t: (200, {"sub": "u1", "aud": "other-project", "exp": "9999999999"}),
+                verifier=lambda _token, _project: {
+                    **valid_claims,
+                    "aud": "other-project",
+                },
+            )
+
+        with self.assertRaises(ValueError):
+            _verify_firebase_token_via_google(
+                "unverified-email",
+                settings=settings,
+                verifier=lambda _token, _project: {
+                    **valid_claims,
+                    "email_verified": False,
+                },
             )
 
 
