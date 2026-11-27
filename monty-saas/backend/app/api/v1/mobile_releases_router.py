@@ -289,18 +289,41 @@ async def admin_update_mobile_release(
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     ensure_production_persistence(sf, is_production=settings.is_production, service_name="administration des versions mobiles")
-    try:
-        rel = mobile_releases_service.admin_update_release(
-            ctx,
-            release_id=release_id,
-            is_published=body.is_published,
-            is_recommended=body.is_recommended,
-            release_notes=body.release_notes,
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if sf is not None:
-        rel = await PostgresV3OrchestratorRepository(sf).upsert_mobile_release(rel)
-    return _release_dto(rel, storage=ObjectStorageAdapter(settings))
+        if not (ctx.has_permission(Permission.AGENCY_MANAGE) or ctx.has_permission(Permission.PLATFORM_ADMIN)):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs.")
+        repo = PostgresV3OrchestratorRepository(sf)
+        releases = await repo.list_mobile_releases(published_only=False)
+        rel = next((item for item in releases if item.id == release_id), None)
+        if rel is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version mobile introuvable.")
+        if body.is_published is not None:
+            rel.is_published = bool(body.is_published)
+            if not rel.is_published:
+                rel.is_recommended = False
+        if body.is_recommended is not None:
+            if body.is_recommended and not rel.is_published:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de recommander une version non publiée.")
+            rel.is_recommended = bool(body.is_recommended)
+        if body.release_notes is not None:
+            rel.release_notes = body.release_notes[:1500]
+        if rel.is_recommended:
+            for other in releases:
+                if other.id != rel.id:
+                    other.is_recommended = False
+                    await repo.upsert_mobile_release(other)
+        rel = await repo.upsert_mobile_release(rel)
+    else:
+        try:
+            rel = mobile_releases_service.admin_update_release(
+                ctx,
+                release_id=release_id,
+                is_published=body.is_published,
+                is_recommended=body.is_recommended,
+                release_notes=body.release_notes,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _release_dto(rel, storage=_storage_for_environment(settings))
