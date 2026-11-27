@@ -147,6 +147,19 @@ class V2ProductionCompletenessTests(unittest.TestCase):
             )
 
     def test_dvf_sync_rejects_incoherent_rows_and_falls_back_to_cache(self) -> None:
+        # Une panne avant toute ingestion ne doit pas produire de ventes DVF de démonstration.
+        cold_sync = DvfSyncService()
+        def down_fetcher(_url: str):
+            raise OSError("Source DVF temporairement indisponible")
+        cold_fallback = cold_sync.sync_sector_from_remote(
+            sector_code="69003",
+            source_url="https://api.cquest.org/dvf",
+            fetcher=down_fetcher,
+        )
+        self.assertEqual(cold_fallback.status, "fallback_cached")
+        self.assertEqual(cold_fallback.accepted_rows, 0)
+        self.assertEqual(cold_fallback.data_date, "N/A")
+
         dvf_sync = DvfSyncService()
         raw_rows = [
             {"id_mutation": "ok-1", "date_mutation": "2026-03-10", "valeur_fonciere": 340000, "surface_reelle_bati": 70, "type_local": "Appartement"},
