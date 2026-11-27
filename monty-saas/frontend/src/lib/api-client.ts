@@ -158,6 +158,7 @@ export const montyApi = {
       false
     ),
   registerAgency: (payload: {
+    captcha_token: string;
     agency_name: string;
     email: string;
     password: string;
@@ -170,7 +171,7 @@ export const montyApi = {
       { method: "POST", body: JSON.stringify(payload) },
       false
     ),
-  login: (payload: { email: string; password: string }) =>
+  login: (payload: { email: string; password: string; captcha_token: string }) =>
     requestJson<SessionInfo>(
       "/api/v1/auth/login",
       { method: "POST", body: JSON.stringify(payload) },
@@ -826,6 +827,7 @@ export const montyApi = {
 
   // Inscription Particulier (Acquéreur / Vendeur) sans créer d'agence
   registerClient: (payload: {
+    captcha_token: string;
     email: string;
     password: string;
     display_name: string;
