@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import io
 import pathlib
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from fastapi import HTTPException  # noqa: E402
+from app.core.config import load_settings  # noqa: E402
+from app.api.v1.mobile_releases_router import _storage_for_environment  # noqa: E402
 from app.core.rbac import MontyRole, TenantContext  # noqa: E402
 from app.domain.mobile_releases_service import (  # noqa: E402
     MobileReleasesService,
@@ -49,6 +54,38 @@ class MobileReleasesAndApkTests(unittest.TestCase):
 
         disk_sha = hashlib.sha256(pathlib.Path(latest.storage_path).read_bytes()).hexdigest()
         self.assertEqual(latest.sha256, disk_sha)
+
+
+    def test_production_apk_storage_requires_remote_backend(self) -> None:
+        clean = {
+            "ENVIRONMENT": "production",
+            "SUPABASE_URL": "",
+            "SUPABASE_SERVICE_ROLE_KEY": "",
+            "S3_ENDPOINT": "",
+            "S3_BUCKET": "",
+            "S3_ACCESS_KEY": "",
+            "S3_SECRET_KEY": "",
+        }
+        with patch.dict(os.environ, clean, clear=False):
+            settings = load_settings()
+        with self.assertRaises(HTTPException) as raised:
+            _storage_for_environment(settings)
+        self.assertEqual(raised.exception.status_code, 503)
+
+    def test_development_apk_storage_can_use_local_backend(self) -> None:
+        clean = {
+            "ENVIRONMENT": "development",
+            "SUPABASE_URL": "",
+            "SUPABASE_SERVICE_ROLE_KEY": "",
+            "S3_ENDPOINT": "",
+            "S3_BUCKET": "",
+            "S3_ACCESS_KEY": "",
+            "S3_SECRET_KEY": "",
+        }
+        with patch.dict(os.environ, clean, clear=False):
+            settings = load_settings()
+        storage = _storage_for_environment(settings)
+        self.assertEqual(storage.active_backend, "local")
 
     def test_validate_apk_bytes_rejects_fake_corrupt_and_unsigned_files(self) -> None:
         ok, _ = validate_apk_bytes(b"not-an-apk" * 8000, "monty.txt")
