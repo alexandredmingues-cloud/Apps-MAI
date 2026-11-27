@@ -1,46 +1,77 @@
-# Stratégie de Synchronisation & Convergence — Android (Kotlin/Compose) ↔ Monty SaaS (FastAPI + PostgreSQL 16 RLS)
+# Stratégie de synchronisation — MON-AGENT Flutter ↔ FastAPI
 
-## 1. État actuel des deux plateformes
+> Ce document remplace la stratégie de convergence centrée sur Ktor/Retrofit. La migration Flutter est en cours et n'est pas encore fonctionnelle ; le contenu décrit les décisions et critères cibles, pas des capacités déjà livrées.
 
-Monty repose aujourd'hui sur deux clients riches complémentaires :
+## 1. État de départ à préserver
 
-1. **Application mobile Android (`app/`)** :
-   - Authentification Google Sign-In via Jetpack `CredentialManager` et Firebase Auth.
-   - Persistance cloud temps réel via **Cloud Firestore** (`SaasAgencyRepository`, `MontyRepository`, `SellerRepository`) sécurisée par `firestore.rules` (vérification d'appartenance `memberUids` / `viewerUids`, RBAC agence, notes privées séparées) et **Firebase App Check**.
-   - Persistance locale hors ligne via **Room** (`MontyLocalDatabase`, `AcquereurRepository`).
-   - Moteurs métier déterministes embarqués (`DvfValuationService`, `SaleTimelineEngine`, `GeoCommuteService`, `ExcelCsvCodec`, `UrbanismCadastreService`, `HcsfCapacityScreen`).
+L'historique Android peut contenir Firebase Auth, Firestore, Room, App Check, FCM et des moteurs métier déterministes. Le SaaS comprend FastAPI, PostgreSQL/RLS, Redis/ARQ et les services métier Web. La PR Flutter indique que les sources Kotlin originales ne sont pas présentes dans l'arborescence consultée : leur récupération et leur inventaire sont un préalable bloquant.
 
-2. **Plateforme Web SaaS (`monty-saas/`)** :
-   - **Backend FastAPI (`monty-saas/backend/`)** connecté à **PostgreSQL 16 avec Row-Level Security (RLS)** (`0001` à `0009`), files asynchrones **ARQ / Redis**, connecteur **Stripe** (`INDIVIDUAL`, `AGENCY`, `NETWORK` + Pass RNIC Particulier 19 €), annuaire des **Notaires de France**, **Base Nationale des Copropriétés (RNIC)**, **11 Agents IA avec gouvernance** et **Pré-État Daté ALUR L. 721-2**.
-   - **Frontend Next.js 15 / React 19 (`monty-saas/frontend/`)** consommé en SaaS B2B (`Monty Pro`) et portail B2C (`Monty Particulier`).
+Le socle Flutter actuel ne comporte pas encore de client API, d'authentification, de persistance locale, de synchronisation ou de modules métier. Il ne faut donc pas prétendre que Flutter synchronise déjà avec le SaaS.
 
-Aujourd'hui, les deux bases de données (Firestore côté Android, PostgreSQL 16 RLS côté SaaS Web) sont **indépendantes** : un bien ou un contact créé sur Android n'est pas encore répliqué automatiquement dans PostgreSQL 16 RLS et inversement.
+## 2. Architecture cible
 
----
+- **Flutter Android/iOS/Web** : interface unique, règles de présentation, orchestration de cas d'usage et cache local limité.
+- **FastAPI** : point d'entrée métier, validation, authentification applicative, autorisations, transactions, audit et intégrations.
+- **PostgreSQL + RLS** : source de vérité des données métier SaaS, strictement isolée par agence.
+- **Redis/ARQ** : tâches asynchrones et traitements de synchronisation.
+- **Firebase** : conservation transitoire des usages historiques justifiés (par exemple App Check ou FCM) jusqu'à migration vérifiée.
 
-## 2. Architecture cible de convergence (3 phases progressives)
+Aucun client ne peut choisir librement son agence ou son rôle. Le serveur dérive l'appartenance de l'identité authentifiée et vérifie chaque ressource.
 
-### Phase A — Passerelle d'identité & JWT d'échange (Zéro rupture mobile)
-- Conserver **Google Sign-In (`CredentialManager`) + Firebase Auth** côté Android pour l'ergonomie mobile et la protection App Check.
-- Ajouter un endpoint FastAPI `POST /api/v1/auth/firebase-exchange` vérifiant le `Firebase ID Token` (via clé publique Google OIDC) et délivrant un JWT Monty court-terme (`sub`, `aid`, `role`) compatible avec l'ensemble des endpoints FastAPI et PostgreSQL RLS.
-- Mapper les identifiants `agencyId` et `userId` via une table de liaison PostgreSQL (`external_identity_links`) afin de préserver la compatibilité des comptes existants.
+## 3. Identité et sessions
 
-### Phase B — Client Ktor / Retrofit unifié sur Android (Source de vérité SaaS)
-- Introduire un client HTTP **Ktor** (ou Retrofit + `kotlinx.serialization`) dans `app/src/main/java/com/example/data/remote/MontySaasApiClient.kt` pointant vers `BuildConfig.MONTY_API_BASE_URL`.
-- Conserver **Room (`MontyLocalDatabase`)** comme cache hors-ligne et file d'attente de synchronisation (`SyncState = PENDING | SYNCED | CONFLICT`) via **WorkManager** pour les visites terrain sans réseau 4G/5G.
-- Basculer progressivement les flux métier critiques vers l'API FastAPI PostgreSQL RLS :
-  1. **CRM & Notes privées cloisonnées** (`/api/v1/crm/*`) — garantit l'unicité RGPD (durées 36/60 mois, portabilité Art. 15/20, purge globale et audit immuable).
-  2. **Portefeuille, Visites & Pipeline Transactions** (`/api/v1/portfolio/*`) — déclenche automatiquement les notifications agences, le matching acquéreurs et les tâches notaire au passage en `COMPROMIS`.
-  3. **Marketplace, Notaires & RNIC Copropriétés** (`/api/v1/marketplace/*`, `/api/v1/notaries/*`, `/api/v1/rnic/*`) — partage le même moteur de modération `A_VERIFIER -> PUBLIEE` et le contrôle serveur du Pass RNIC Stripe.
+1. Inventorier les identités existantes (Firebase UID, comptes SaaS, utilisateurs et agences).
+2. Définir une table de correspondance unique et contrainte entre identité externe et utilisateur interne.
+3. Vérifier côté serveur les jetons d'identité avec les clés, émetteurs, audiences et états de compte attendus.
+4. Émettre un jeton applicatif de courte durée avec identifiant utilisateur, agence autorisée, rôle, expiration et identifiant de session.
+5. Implémenter renouvellement, révocation, déconnexion, rotation et tests de rejeu.
+6. Ne jamais embarquer de secret serveur ou de clé privée dans Flutter.
 
-### Phase C — Décommissionnement graduel de la double écriture Firestore
-- Activer un job ARQ (`monty-saas/backend/app/workers/redis_tasks.py`) pour l'import/export initial des agences pilotes depuis Firestore vers PostgreSQL 16 RLS (avec journal d'audit `MIGRATION_IMPORT`).
-- Conserver uniquement **Firebase App Check** + **FCM (Notifications Push Android)** pour alerter les conseillers en temps réel lors d'un `BUYER_MATCH_FOUND`, d'un `VISIT_REQUEST` ou d'une échéance `TRANSACTION_COMPROMIS`.
+## 4. Synchronisation hors ligne
 
----
+Le stockage local Flutter est un cache et une outbox, pas une source de vérité concurrente.
 
-## 3. Règles invariantes pendant la transition
+Chaque commande hors ligne doit inclure :
+- un identifiant unique généré côté client pour l'idempotence ;
+- l'identité de l'utilisateur et le contexte d'agence établi par le serveur ;
+- l'identifiant de ressource et sa version connue ;
+- une date client informative et une date serveur faisant autorité ;
+- un état explicite : `PENDING`, `SYNCED`, `CONFLICT`, `FAILED`.
 
-- **Aucune divergence des calculs déterministes** : DVF (IQR + score Monty), HCSF 35 %, Pré-État Daté L. 721-2, matching acquéreurs/biens et frais de notaire doivent produire exactement les mêmes résultats sur Android et sur le SaaS Web (tests de parité croisée).
-- **Zéro secret embarqué dans l'APK** : seules les URL publiques HTTPS et l'authentification par jeton utilisateur échangé côté serveur sont autorisées dans `BuildConfig`.
-- **Conformité RGPD & Isolation Tenant** : toute donnée synchronisée reste strictement cloisonnée par `agency_id` (RLS PostgreSQL + règles Firestore pendant la phase transitoire).
+Le serveur doit traiter les commandes de manière idempotente et retourner un résultat de conflit structuré. Les conflits ne doivent jamais être écrasés silencieusement. Les données personnelles mises en cache doivent être minimisées, protégées sur l'appareil et effaçables à la déconnexion ou à la demande RGPD.
+
+## 5. Migration des données historiques
+
+- Exporter les données Firestore/Room avec inventaire des collections, volumes, pièces jointes et relations.
+- Définir les règles de mapping et conserver les identifiants historiques nécessaires à la traçabilité.
+- Importer par lots idempotents, avec journal d'audit et reprise après interruption.
+- Réconcilier les volumes, identifiants, relations, pièces jointes et échantillons fonctionnels.
+- Traiter explicitement doublons, données orphelines, suppressions et conflits.
+- Ne désactiver aucune écriture historique avant validation du rapprochement et plan de retour arrière.
+
+## 6. Parité des calculs et des parcours
+
+Les moteurs déterministes historiques (DVF/estimation, capacité HCSF, frais, fiscalité, échéanciers et autres calculateurs effectivement présents) doivent être inventoriés avant portage. Chaque moteur reçoit des jeux de référence anonymisés, des tests de limites et des comparaisons de résultats. Le même contrat de test doit pouvoir être exécuté contre l'ancien moteur, Flutter et l'API lorsque le calcul est serveur.
+
+## 7. Sécurité multi-agences
+
+Pour chaque ressource et rôle, tester :
+- lecture et écriture autorisées dans la bonne agence ;
+- refus d'accès à une autre agence ;
+- refus sans agence, avec agence falsifiée ou utilisateur désactivé ;
+- séparation des notes privées et des documents ;
+- tâches asynchrones exécutées avec le contexte d'autorisation correct.
+
+Les tests RLS doivent s'exécuter sur PostgreSQL réel ou un environnement de test représentatif, pas uniquement sur mocks.
+
+## 8. Critères avant retrait de l'ancien client
+
+Aucun retrait Kotlin/Room/Firestore avant :
+- inventaire fonctionnel et de données complet ;
+- parité validée des parcours et calculs ;
+- tests de permissions et RLS inter-agences réussis ;
+- synchronisation hors ligne testée avec perte réseau, doublons et conflits ;
+- import et réconciliation signés ;
+- builds Android, iOS et Web reproductibles ;
+- sauvegarde/restauration et rollback testés ;
+- pilote opérationnel et validation explicite du propriétaire.
