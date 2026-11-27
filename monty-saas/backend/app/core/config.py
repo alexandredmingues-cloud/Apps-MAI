@@ -69,6 +69,7 @@ class Settings:
     platform_admin_user_ids: tuple[str, ...] = ()
     local_llm_allow_private_hosts: bool = False
     turnstile_secret_key: str = ""
+    turnstile_allowed_hostnames: tuple[str, ...] = ()
 
     @property
     def effective_anthropic_keys(self) -> list[str]:
@@ -161,4 +162,5 @@ def load_settings() -> Settings:
         platform_admin_user_ids=platform_admins,
         local_llm_allow_private_hosts=_parse_bool(os.environ.get("LOCAL_LLM_ALLOW_PRIVATE_HOSTS"), default=False),
         turnstile_secret_key=os.environ.get("TURNSTILE_SECRET_KEY", "").strip(),
+        turnstile_allowed_hostnames=tuple(h.strip().lower() for h in os.environ.get("TURNSTILE_ALLOWED_HOSTNAMES", "").split(",") if h.strip()),
     )
