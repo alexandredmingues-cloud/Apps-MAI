@@ -159,6 +159,55 @@ class RedisRateLimiterAndStorageTests(unittest.TestCase):
             self.assertIn("X-Amz-Signature=", presigned.signed_url)
             self.assertIn("monty-vault", presigned.signed_url)
 
+    def test_production_storage_refuses_local_fallback_and_path_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = load_settings()
+            production = replace(
+                base,
+                environment="production",
+                supabase_url="",
+                supabase_service_role_key="",
+                s3_bucket="",
+                s3_endpoint="",
+                s3_access_key="",
+                s3_secret_key="",
+            )
+            adapter = ObjectStorageAdapter(production, local_root=pathlib.Path(tmpdir))
+            with self.assertRaisesRegex(RuntimeError, "stockage local est interdit"):
+                adapter.put_bytes(object_key="private/contract.pdf", raw_bytes=b"secret")
+            with self.assertRaises(ValueError):
+                adapter.issue_signed_url(object_key="../outside.txt")
+            with self.assertRaises(ValueError):
+                adapter.issue_signed_url(object_key="private//contract.pdf")
+
+    def test_production_remote_upload_failure_never_writes_local_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = load_settings()
+            production = replace(
+                base,
+                environment="production",
+                supabase_url="https://project.supabase.co",
+                supabase_service_role_key="service-role-test",
+            )
+            adapter = ObjectStorageAdapter(production, local_root=pathlib.Path(tmpdir))
+            with patch("urllib.request.urlopen", side_effect=OSError("storage offline")):
+                with self.assertRaisesRegex(RuntimeError, "Échec de l'envoi"):
+                    adapter.put_bytes(object_key="private/contract.pdf", raw_bytes=b"secret")
+            self.assertFalse((pathlib.Path(tmpdir) / "private" / "contract.pdf").exists())
+
+    def test_supabase_signed_url_failure_is_not_downgraded_to_authenticated_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = load_settings()
+            configured = replace(
+                base,
+                supabase_url="https://project.supabase.co",
+                supabase_service_role_key="service-role-test",
+            )
+            adapter = ObjectStorageAdapter(configured, local_root=pathlib.Path(tmpdir))
+            with patch("urllib.request.urlopen", side_effect=OSError("storage offline")):
+                with self.assertRaisesRegex(RuntimeError, "URL signée Supabase"):
+                    adapter.issue_signed_url(object_key="private/contract.pdf")
+
 
 class OrchestratorHardeningAndAdemePriceIndexTests(unittest.TestCase):
     def test_ssrf_guard_blocks_metadata_and_private_hosts_by_default(self) -> None:
