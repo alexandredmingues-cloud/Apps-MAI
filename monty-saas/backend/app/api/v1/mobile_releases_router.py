@@ -61,7 +61,7 @@ async def get_latest_mobile_release(
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     ensure_production_persistence(sf, is_production=settings.is_production, service_name="distribution mobile")
-    storage = ObjectStorageAdapter(settings)
+    storage = _storage_for_environment(settings)
     if sf is not None:
         pg_items = await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=True)
         if not pg_items:
@@ -93,7 +93,7 @@ async def list_public_mobile_releases(
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     ensure_production_persistence(sf, is_production=settings.is_production, service_name="distribution mobile")
-    storage = ObjectStorageAdapter(settings)
+    storage = _storage_for_environment(settings)
     items = (
         await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=True)
         if sf is not None
@@ -109,7 +109,7 @@ async def download_mobile_apk(
     sf=Depends(get_db_session_factory),
 ):
     ensure_production_persistence(sf, is_production=settings.is_production, service_name="distribution mobile")
-    storage = ObjectStorageAdapter(settings)
+    storage = _storage_for_environment(settings)
     if sf is not None:
         repo = PostgresV3OrchestratorRepository(sf)
         items = await repo.list_mobile_releases(published_only=True)
@@ -151,7 +151,7 @@ async def admin_list_mobile_releases(
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     ensure_production_persistence(sf, is_production=settings.is_production, service_name="administration des versions mobiles")
-    storage = ObjectStorageAdapter(settings)
+    storage = _storage_for_environment(settings)
     items = (
         await PostgresV3OrchestratorRepository(sf).list_mobile_releases(published_only=False)
         if sf is not None
@@ -189,7 +189,7 @@ async def admin_upload_mobile_apk(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Encodage base64 APK invalide.") from exc
 
     ensure_production_persistence(sf, is_production=settings.is_production, service_name="publication APK")
-    storage = ObjectStorageAdapter(settings)
+    storage = _storage_for_environment(settings)
     try:
         rel = mobile_releases_service.register_uploaded_apk(
             ctx,
