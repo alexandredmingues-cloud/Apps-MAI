@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import math
 import statistics
@@ -12,8 +12,7 @@ from app.core.rbac import Permission, TenantContext
 from app.core.security import InputSanitizer
 from app.domain.country_packs import CountryCode
 from app.domain.dvf_sync_service import DvfSyncService
-from app.domain.marketplace_service import CITY_COORDINATES
-from app.domain.real_estate_engines import DvfComparable, MONTPELLIER_SECTORS
+from app.domain.real_estate_engines import DvfComparable
 
 
 class PriceIndexCategory(str, Enum):
@@ -112,7 +111,6 @@ class ComparableTransactionService:
             pool = self._dvf.get_cached_comparables(postal_code)
             source_label = f"Base DVF officielle (secteur {postal_code})"
 
-        # Référentiel secteurs Montpellier
         if not pool:
             combined_loc = f"{city} {sector_label}".lower()
             for sec in MONTPELLIER_SECTORS:
@@ -174,16 +172,46 @@ class ComparableTransactionService:
                 data_date="",
             )
 
-        # Filtrage distance & type de bien compatible
-        dist_filtered = [
-            c for c in pool if c.distance_meters <= config.max_comparable_distance_m
-        ] or pool
-        kind_lower = property_kind.lower()
-        same_kind = [
-            c for c in dist_filtered
-            if (kind_lower in c.property_type.lower()) or (c.property_type.lower() in kind_lower)
+        # Une transaction trop ancienne, future, mal formée ou hors périmètre ne doit
+        # jamais contribuer à une estimation présentée comme fondée sur le marché actuel.
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=max(1, config.max_comparable_age_months) * 30)
+        dated_pool: list[DvfComparable] = []
+        for comparable in pool:
+            try:
+                mutation_date = datetime.fromisoformat(comparable.date_mutation[:10]).replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                continue
+            if (
+                cutoff <= mutation_date <= now
+                and comparable.price_euro > 0
+                and comparable.surface_m2 > 0
+                and comparable.distance_meters >= 0
+            ):
+                dated_pool.append(comparable)
+
+        # Pas de repli silencieux vers des ventes trop éloignées ou un autre type de bien.
+        kind_lower = property_kind.strip().lower()
+        working = [
+            c for c in dated_pool
+            if c.distance_meters <= config.max_comparable_distance_m
+            and kind_lower
+            and c.property_type.strip().lower() == kind_lower
         ]
-        working = same_kind if len(same_kind) >= 2 else dist_filtered
+        if not working:
+            return ComparableStats(
+                comparables_found_count=len(pool),
+                comparables_retained_count=0,
+                outliers_removed_count=0,
+                median_price_m2=0,
+                weighted_price_m2=0,
+                q1_price_m2=0,
+                q3_price_m2=0,
+                dispersion_cv=1.0,
+                avg_distance_m=0,
+                source_label="Aucune transaction récente, proche et de typologie strictement comparable",
+                data_date="",
+            )
 
         # Prix/m² + filtrage valeurs aberrantes IQR
         per_m2_pairs = sorted(
