@@ -96,7 +96,7 @@ export function MontyAIChatWorkspace() {
     setErrorMsg(null);
     setBusy(true);
     try {
-      const res = await montyApi.MontyAiChat({
+      const res = await montyApi.montyAiChat({
         prompt: prompt.trim(),
         task_type: taskType,
         confidential_mode: confidentialMode,
