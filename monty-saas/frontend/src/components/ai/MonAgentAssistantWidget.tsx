@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Bot, MessageCircle, Send, X } from "lucide-react";
 import { montyApi } from "@/lib/api-client";
 import type { MontyAIChatResponse } from "@/lib/types";
 
-export function MonAgentAssistantWidget() {
+export function MonAgentAssistantWidget({ authenticated = true }: { authenticated?: boolean }) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,7 +60,8 @@ export function MonAgentAssistantWidget() {
             <div className="max-w-[90%] rounded-2xl rounded-tl-sm bg-ivoryWarm p-3 text-obsidianInk">
               Bonjour ! Je suis l'assistant MON-AGENT. Je peux vous aider sur vos dossiers, vos estimations, vos annonces et vos questions immobilières.
             </div>
-            {answer && (
+            {!authenticated && <div className="space-y-3 rounded-xl border border-goldAntique/40 bg-ivoryWarm p-3 text-xs text-obsidianInk"><p>Pour démarrer une conversation personnalisée et protéger vos échanges, connectez-vous à votre espace MON-AGENT.</p><Link href="/mon-compte" className="inline-flex rounded-lg bg-emeraldDeep px-3 py-2 font-bold text-goldChampagne">Accéder à mon espace</Link></div>}
+            {authenticated && answer && (
               <div className="ml-auto max-w-[95%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-emeraldDeep p-3 text-ivoryWarm">
                 {answer.response_text}
                 {answer.sources.length > 0 && (
@@ -69,11 +71,11 @@ export function MonAgentAssistantWidget() {
                 )}
               </div>
             )}
-            {busy && <p role="status" className="text-xs text-slateMuted">MON-AGENT prépare une réponse…</p>}
-            {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">{error}</p>}
+            {authenticated && busy && <p role="status" className="text-xs text-slateMuted">MON-AGENT prépare une réponse…</p>}
+            {authenticated && error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">{error}</p>}
           </div>
 
-          <form onSubmit={sendMessage} className="border-t border-borderSubtle p-3">
+          {authenticated && <form onSubmit={sendMessage} className="border-t border-borderSubtle p-3">
             <label htmlFor="mon-agent-chat-prompt" className="sr-only">Votre message</label>
             <div className="flex items-end gap-2">
               <textarea
@@ -90,7 +92,7 @@ export function MonAgentAssistantWidget() {
               </button>
             </div>
             <p className="mt-2 text-[10px] text-slateMuted">Les réponses peuvent nécessiter une vérification. Les actions sensibles restent soumises à validation humaine.</p>
-          </form>
+          </form>}
         </section>
       )}
 
