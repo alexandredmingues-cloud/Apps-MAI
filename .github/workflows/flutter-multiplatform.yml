@@ -78,6 +78,8 @@ jobs:
         with:
           flutter-version: '3.41.2'
           cache: true
+      - name: Generate iOS platform scaffolding
+        run: flutter create --platforms=ios --project-name=mon_agent_mobile .
       - name: Resolve dependencies
         run: flutter pub get
       - name: Analyze and test
