@@ -1,4 +1,5 @@
 import React from "react";
+/* Copyright © 2024–2026 MON-AGENT. All rights reserved for original project code. */
 import type { Metadata } from "next";
 import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebHeader";
 import { NewsHubExperience } from "@/components/news/NewsHubExperience";
