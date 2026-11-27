@@ -119,6 +119,25 @@ class MontyPriceIndexTests(unittest.TestCase):
             self.assertEqual(result["comparables"]["comparables_retained_count"], 0)
             self.assertEqual(result["estimated_market_value"], 0)
 
+    def test_estimation_rejects_stale_distant_and_wrong_type_comparables(self) -> None:
+        engine = MontyPriceEngine()
+        bad_comparables = [
+            DvfComparable(mutation_id="old-sale", date_mutation="2020-01-15", year=2020, price_euro=320_000, surface_m2=80, property_type="Appartement", distance_meters=250),
+            DvfComparable(mutation_id="far-sale", date_mutation="2026-06-15", year=2026, price_euro=320_000, surface_m2=80, property_type="Appartement", distance_meters=20_000),
+            DvfComparable(mutation_id="wrong-kind", date_mutation="2026-06-15", year=2026, price_euro=320_000, surface_m2=80, property_type="Maison", distance_meters=250),
+        ]
+        for comparable in bad_comparables:
+            result = engine.evaluate_property(
+                title="Estimation test sans comparables fiables",
+                city="Montpellier",
+                property_kind="Appartement",
+                asking_price_euro=320_000,
+                surface_m2=80,
+                explicit_comparables=[comparable],
+            )
+            self.assertFalse(result["display_badge"])
+            self.assertEqual(result["confidence_tier"], PriceConfidenceTier.INSUFFICIENT.value)
+            self.assertEqual(result["comparables"]["comparables_retained_count"], 0)
     def test_admin_threshold_validation_and_tenant_history_isolation(self) -> None:
         engine = MontyPriceEngine()
         dir_a = TenantContext(user_id="u-a", agency_id="ag-a", role=MontyRole.DIRECTOR)
