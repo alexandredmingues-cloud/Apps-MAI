@@ -97,6 +97,30 @@ class MobileReleasesAndApkTests(unittest.TestCase):
         storage = _storage_for_environment(settings)
         self.assertEqual(storage.active_backend, "local")
 
+    def test_supabase_object_size_uses_authenticated_head_request(self) -> None:
+        settings = SimpleNamespace(
+            supabase_url="https://project.supabase.co",
+            supabase_service_role_key="test-service-role",
+            supabase_storage_bucket="mobile",
+            s3_endpoint="",
+            s3_bucket="",
+            s3_access_key="",
+            s3_secret_key="",
+            is_production=False,
+        )
+        storage = ObjectStorageAdapter(settings)
+        response = Mock()
+        response.headers = {"Content-Length": "12345"}
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        with patch("app.core.storage.urllib.request.urlopen", return_value=response) as urlopen:
+            self.assertEqual(storage.get_object_size(object_key="apk/release 1.apk"), 12345)
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_method(), "HEAD")
+        self.assertIn("/storage/v1/object/mobile/apk/release%201.apk", request.full_url)
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-service-role")
+        self.assertEqual(request.get_header("Apikey"), "test-service-role")
+
     def test_local_object_storage_reports_real_size_and_missing_file(self) -> None:
         clean = {
             "ENVIRONMENT": "development",
