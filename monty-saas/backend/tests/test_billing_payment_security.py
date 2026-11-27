@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.api.v1.billing_router import _is_paid_eur_checkout_session
+from app.api.v1.deps import _is_rls_safe_database_role
 
 
 def _session(**overrides):
@@ -36,3 +37,18 @@ def test_accepts_only_exact_paid_eur_one_time_checkout() -> None:
 )
 def test_rejects_unpaid_wrong_mode_currency_or_amount(session, expected_amount) -> None:
     assert not _is_paid_eur_checkout_session(session, expected_amount)
+
+
+@pytest.mark.parametrize(
+    ("role_state", "expected"),
+    [
+        ({"rolsuper": False, "rolbypassrls": False}, True),
+        ({"rolsuper": True, "rolbypassrls": False}, False),
+        ({"rolsuper": False, "rolbypassrls": True}, False),
+        ({"rolsuper": True, "rolbypassrls": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_production_database_role_must_not_bypass_rls(role_state, expected) -> None:
+    assert _is_rls_safe_database_role(role_state) is expected
