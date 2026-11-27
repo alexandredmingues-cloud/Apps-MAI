@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
 from app.api.v1.deps import get_db_session_factory, require_permission
@@ -23,7 +23,7 @@ class AdRequest(BaseModel):
     contact_email: str = Field(min_length=5, max_length=254)
     website_url: str = Field(default="", max_length=500)
     creative_image_url: str = Field(default="", max_length=1000)
-    target_url: str = Field(max_length=1000)
+    target_url: str = Field(min_length=8, max_length=1000)
     placement: Literal["HOME", "SEARCH", "CONTENT", "PRO"] = "HOME"
     country_code: Literal["FR", "PT", "GB"] = "FR"
     city: str = Field(default="", max_length=100)
