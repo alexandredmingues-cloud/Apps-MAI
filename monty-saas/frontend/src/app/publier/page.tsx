@@ -4,9 +4,10 @@ import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebH
 import { MarketplaceAndPublishView } from "@/components/marketplace/MarketplaceAndPublishView";
 
 export const metadata: Metadata = {
-  title: "Vendre & Publier une Annonce Gratuite | Monty Immobilier",
+  title: "Vendre un bien & publier une annonce | MON-AGENT",
   description:
-    "Publiez votre bien immobilier (particulier ou agence) avec aide intelligente à la rédaction sans fuite de données personnelles, prix au m² et estimation du délai probable de vente.",
+    "Préparez et publiez votre annonce immobilière avec une aide à la rédaction, des repères de prix et un parcours vendeur conçu pour protéger vos données personnelles.",
+  alternates: { canonical: "/publier" },
 };
 
 export default function PublicPublishListingPage() {
@@ -18,7 +19,7 @@ export default function PublicPublishListingPage() {
           initialTab="publish"
           initialCountry="FR"
           showTabs={true}
-          audienceLabel="Espace Vendeurs • Particuliers & Agences"
+          audienceLabel="MON-AGENT • Espace Vendeurs"
         />
       </main>
       <PublicWebFooter />
