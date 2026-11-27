@@ -281,7 +281,7 @@ export function NotariesAndRnicPanel({
         street_address: bookStreet.trim(),
         postal_code: bookPostal.trim(),
         city: bookCity.trim(),
-        source: bookSiret ? "DINUM_API_GOUV" : "MANUEL_AGENCE",
+        source: bookEmailVerified ? "CSN_DIRECTORY_VERIFIED" : bookSiret ? "DINUM_API_GOUV" : "MANUEL_AGENCE",
         notes: bookNotes.trim(),
       });
       setAgencyNotaries((prev) => [saved, ...prev.filter((item) => item.id !== saved.id)]);
