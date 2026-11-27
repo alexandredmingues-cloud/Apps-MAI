@@ -109,6 +109,42 @@ def _release_dto(rel: MobileAppRelease, *, storage: ObjectStorageAdapter | None 
     return dto
 
 
+def _verified_remote_download_info(storage: ObjectStorageAdapter, rel: MobileAppRelease):
+    object_key = rel.storage_path or f"apk/{rel.id}-{rel.file_name}"
+    try:
+        actual_size = storage.get_object_size(object_key=object_key)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fichier APK indisponible.",
+        ) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vérification du téléchargement temporairement indisponible.",
+            headers={"Retry-After": "60"},
+        ) from exc
+
+    if actual_size != rel.file_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Le fichier APK publié nécessite une vérification.",
+            headers={"Retry-After": "60"},
+        )
+    try:
+        return storage.issue_signed_url(
+            object_key=object_key,
+            method="GET",
+            expires_in_seconds=300,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Téléchargement temporairement indisponible.",
+            headers={"Retry-After": "60"},
+        ) from exc
+
+
 @mobile_releases_router.get("/mobile/releases/latest")
 async def get_latest_mobile_release(
     settings: Settings = Depends(get_settings),
@@ -171,11 +207,8 @@ async def download_mobile_apk(
         if rel is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version APK introuvable ou non publiée.")
         if storage.active_backend != "local":
-            object_key = rel.storage_path or f"apk/{rel.id}-{rel.file_name}"
-            try:
-                info = storage.issue_signed_url(object_key=object_key, method="GET", expires_in_seconds=300)
-            except (RuntimeError, ValueError) as exc:
-                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Téléchargement temporairement indisponible.") from exc
+            info = _verified_remote_download_info(storage, rel)
+            # Le compteur ne progresse qu'après vérification de l'objet et création du lien.
             await repo.increment_mobile_download(release_id)
             return RedirectResponse(
                 url=info.signed_url,
