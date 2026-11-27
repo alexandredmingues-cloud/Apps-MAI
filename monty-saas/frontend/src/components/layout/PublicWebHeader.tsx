@@ -13,7 +13,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
   const { locale, setLocale, t } = useMontyLocale();
 
   return (
-    <header className="sticky top-0 z-40 bg-emeraldDeep/95 backdrop-blur border-b border-goldAntique/30 text-ivoryWarm">
+    <header className="sticky top-0 z-40 bg-emeraldDeep/95 backdrop-blur-xl border-b border-goldAntique/30 text-ivoryWarm shadow-lg shadow-emeraldDeep/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         <Link href="/site" className="flex items-center gap-3 shrink-0">
           <div className="h-9 w-9 rounded-xl bg-goldAntique/20 border border-goldAntique/60 flex items-center justify-center text-goldChampagne font-display font-bold text-lg">
@@ -29,7 +29,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
           </div>
         </Link>
 
-        <nav className="hidden xl:flex items-center gap-1 text-xs font-medium">
+        <nav aria-label="Navigation principale" className="hidden xl:flex items-center gap-1 text-xs font-medium">
           <Link
             href="/site"
             className={`px-2.5 py-2 rounded-xl transition inline-flex items-center gap-1.5 ${
@@ -150,7 +150,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
       </div>
 
       {/* Navigation mobile compacte */}
-      <div className="xl:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap">
+      <nav aria-label="Navigation mobile" className="xl:hidden px-4 pb-2.5 flex items-center gap-2 overflow-x-auto text-xs font-semibold whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Link href="/site" className={`px-3 py-1.5 rounded-lg ${activePath === "site" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           {t.navHome}
         </Link>
@@ -176,7 +176,7 @@ export function PublicWebHeader({ activePath }: PublicWebHeaderProps) {
         <Link href="/mon-compte" className={`px-3 py-1.5 rounded-lg ${activePath === "mon-compte" ? "bg-emeraldSurface text-goldChampagne" : "bg-emeraldMid/50"}`}>
           {t.navMySpace}
         </Link>
-      </div>
+      </nav>
     </header>
   );
 }
