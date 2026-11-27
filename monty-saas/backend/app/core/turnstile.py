@@ -17,12 +17,22 @@ async def verify_turnstile(token: str, request: Request, settings: Settings) -> 
                 detail="La protection anti-robot n'est pas configurée. Réessayez ultérieurement.",
             )
         return
+
+    allowed_hosts = getattr(settings, "turnstile_allowed_hostnames", ())
+    if settings.is_production and not allowed_hosts:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Les domaines autorisés pour la protection anti-robot ne sont pas configurés.",
+        )
+
     clean_token = token.strip()
     if not clean_token or len(clean_token) > 2048:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Veuillez valider le contrôle anti-robot.")
+
     payload = {"secret": settings.turnstile_secret_key, "response": clean_token}
     if request.client and request.client.host:
         payload["remoteip"] = request.client.host
+
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as client:
             response = await client.post(VERIFY_URL, data=payload)
@@ -33,5 +43,11 @@ async def verify_turnstile(token: str, request: Request, settings: Settings) -> 
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Vérification anti-robot indisponible. Réessayez.",
         )
+
     if not isinstance(result, dict) or result.get("success") is not True:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contrôle anti-robot invalide ou expiré. Réessayez.")
+
+    if allowed_hosts:
+        hostname = str(result.get("hostname", "")).strip().lower()
+        if hostname not in allowed_hosts:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Jeton anti-robot émis pour un domaine non autorisé.")
