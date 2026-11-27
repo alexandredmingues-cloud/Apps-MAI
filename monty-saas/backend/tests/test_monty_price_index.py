@@ -99,31 +99,25 @@ class MontyPriceIndexTests(unittest.TestCase):
         self.assertEqual(res["confidence_tier"], PriceConfidenceTier.INSUFFICIENT.value)
         self.assertIn("minimum requis", res["explanation_grounded"])
 
-    def test_fr_and_pt_auto_reference_benchmarks(self) -> None:
+    def test_no_synthetic_transactions_are_created_for_known_cities(self) -> None:
         engine = MontyPriceEngine()
-        fr_res = engine.evaluate_property(
-            title="T3 Antigone",
-            city="Montpellier",
-            sector_label="Antigone",
-            property_kind="Appartement",
-            asking_price_euro=325_000,
-            surface_m2=75,
-            dpe="B",
-        )
-        self.assertTrue(fr_res["display_badge"])
-        self.assertGreater(fr_res["estimated_market_value"], 150_000)
-
-        pt_res = engine.evaluate_property(
-            title="Apartamento T2 Lisboa",
-            country_code=CountryCode.PT,
-            city="Lisboa",
-            property_kind="Appartement",
-            asking_price_euro=410_000,
-            surface_m2=80,
-            dpe="C",
-        )
-        self.assertTrue(pt_res["display_badge"])
-        self.assertIn("Portugal", pt_res["comparables"]["source_label"])
+        for city, country in (("Montpellier", CountryCode.FR), ("Lisboa", CountryCode.PT)):
+            result = engine.evaluate_property(
+                title=f"Bien sans actes vérifiés — {city}",
+                country_code=country,
+                city=city,
+                property_kind="Appartement",
+                asking_price_euro=325_000,
+                surface_m2=75,
+                dpe="B",
+            )
+            self.assertFalse(result["display_badge"])
+            self.assertEqual(
+                result["category"],
+                PriceIndexCategory.DONNEES_INSUFFISANTES.value,
+            )
+            self.assertEqual(result["comparables"]["comparables_retained_count"], 0)
+            self.assertEqual(result["estimated_market_value"], 0)
 
     def test_admin_threshold_validation_and_tenant_history_isolation(self) -> None:
         engine = MontyPriceEngine()
