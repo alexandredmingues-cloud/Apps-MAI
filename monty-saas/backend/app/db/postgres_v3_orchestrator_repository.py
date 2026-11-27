@@ -1058,6 +1058,7 @@ class PostgresV3OrchestratorRepository:
         stripe_session_id: str = "",
     ) -> dict[str, Any]:
         async with self._open_global_session() as session:
+            await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
             row = (
                 await session.execute(
                     self._text(
@@ -1091,6 +1092,7 @@ class PostgresV3OrchestratorRepository:
         stripe_session_id: str = "",
     ) -> dict[str, Any] | None:
         async with self._open_global_session() as session:
+            await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
             row = (
                 await session.execute(
                     self._text(
@@ -1112,6 +1114,7 @@ class PostgresV3OrchestratorRepository:
 
     async def get_seller_pack_order(self, order_id: str) -> dict[str, Any] | None:
         async with self._open_global_session() as session:
+            await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
             row = (
                 await session.execute(
                     self._text("SELECT * FROM seller_pack_orders WHERE order_id = :oid"),
