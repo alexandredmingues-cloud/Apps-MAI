@@ -57,6 +57,67 @@ jobs:
           python -m compileall -q app tests
           python -m pytest -q
 
+      - name: PostgreSQL backup, checksum and restore smoke test
+        env:
+          PGPASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monagent_test
+          BACKUP_DIR: ${{ runner.temp }}/monagent-backup-test
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE backup_restore_probe (id integer PRIMARY KEY, payload text NOT NULL)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO backup_restore_probe VALUES (1, 'restore-ok')"
+          bash scripts/backup_postgres.sh
+          DUMP_FILE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'monty_saas_*.dump' -type f -print -quit)"
+          test -n "$DUMP_FILE"
+          sha256sum -c "$DUMP_FILE.sha256"
+          createdb -h localhost -U postgres monagent_restore
+          pg_restore --exit-on-error --no-owner --no-acl --dbname=postgresql://postgres:postgres@localhost:5432/monagent_restore "$DUMP_FILE"
+          RESTORED="$(psql postgresql://postgres:postgres@localhost:5432/monagent_restore -Atc "SELECT payload FROM backup_restore_probe WHERE id = 1")"
+          test "$RESTORED" = "restore-ok"
+
+      - name: API health and concurrent latency smoke test
+        env:
+          ENVIRONMENT: development
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monagent_test
+          JWT_SECRET: ci-only-secret-not-for-production-000000000000
+        run: |
+          set -euo pipefail
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/monagent-api.log 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import asyncio
+          import time
+          import httpx
+
+          async def main():
+              async with httpx.AsyncClient(base_url="http://127.0.0.1:8000", timeout=5.0) as client:
+                  for _ in range(40):
+                      try:
+                          response = await client.get("/api/v1/health")
+                          if response.status_code == 200:
+                              break
+                      except httpx.HTTPError:
+                          pass
+                      await asyncio.sleep(0.5)
+                  else:
+                      raise SystemExit("API health endpoint did not become ready")
+                  async def hit():
+                      started = time.perf_counter()
+                      response = await client.get("/api/v1/health")
+                      response.raise_for_status()
+                      return (time.perf_counter() - started) * 1000
+                  samples = await asyncio.gather(*(hit() for _ in range(80)))
+                  samples.sort()
+                  p50, p95 = samples[39], samples[75]
+                  print(f"Health API smoke: 80 requests / concurrency=80, p50={p50:.1f}ms, p95={p95:.1f}ms")
+                  if p95 > 2000:
+                      raise SystemExit(f"Health API p95 too high for CI smoke threshold: {p95:.1f}ms")
+          asyncio.run(main())
+          PY
+
   frontend-nextjs:
     name: Frontend Next.js Typecheck & Build
     runs-on: ubuntu-latest
@@ -79,6 +140,49 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+      - name: Public landing page HTTP smoke test
+        run: |
+          set -euo pipefail
+          npm run start -- --hostname 127.0.0.1 >/tmp/monagent-next.log 2>&1 &
+          NEXT_PID=$!
+          trap 'kill "$NEXT_PID" 2>/dev/null || true' EXIT
+          node - <<'JS'
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+          for (let attempt = 0; attempt < 40; attempt++) {
+            try {
+              const response = await fetch("http://127.0.0.1:3000/");
+              const html = await response.text();
+              if (response.status === 200 && html.includes("MON-AGENT")) {
+                console.log("Public landing page returned HTTP 200 and contains MON-AGENT.");
+                process.exit(0);
+              }
+              if (response.status >= 500) throw new Error("HTTP " + response.status);
+            } catch (error) {
+              if (attempt === 39) throw error;
+            }
+            await sleep(500);
+          }
+          throw new Error("Next.js server did not become ready");
+          JS
+
+  firestore-rules:
+    name: Firestore Security Rules Emulator Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Install locked Firebase test dependencies
+        run: npm ci
+      - name: Execute Firestore emulator security suite
+        run: npm test
 
   android-kotlin:
     name: Android Kotlin Compile & Unit Tests
