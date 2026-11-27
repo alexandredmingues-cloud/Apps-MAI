@@ -179,6 +179,7 @@ async def create_rnic_particulier_checkout(
                 "metadata[pass_token]": pass_token,
                 "metadata[buyer_email]": clean_email,
                 "metadata[user_id]": ctx.user_id if ctx else "",
+                "metadata[amount_euro]": str(settings.rnic_particulier_price_euro),
             },
         )
     if resp.status_code >= 400:
@@ -288,9 +289,12 @@ async def create_seller_pack_checkout(
             detail="URLs success_url et cancel_url publiques HTTPS/HTTP valides obligatoires.",
         )
 
-    order_id = InputSanitizer.sanitize_text(body.order_id, 96) or f"sp_{secrets.token_hex(8)}"
+    # The order identifier is server-generated; never let a caller select or collide with another order.
+    order_id = f"sp_{secrets.token_hex(16)}"
     amount_euro = max(5, int(settings.seller_pack_price_euro))
 
+    if sf is None and settings.is_production:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stockage des commandes indisponible.")
     if not settings.stripe_secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -369,12 +373,17 @@ async def verify_seller_pack_order(
     settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> dict:
+    if sf is None and settings.is_production:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stockage des commandes indisponible.")
     order = (
         await PostgresV3OrchestratorRepository(sf).get_seller_pack_order(order_id)
         if sf is not None
         else _seller_pack_orders.get(order_id)
     )
-    if order and str(order.get("status")) in ("PAID", "DELIVERED"):
+    # An order ID alone is not proof of purchase. Require its exact Stripe session.
+    if not order or not session_id or str(order.get("stripe_session_id") or "") != session_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commande introuvable.")
+    if str(order.get("status")) in ("PAID", "DELIVERED"):
         return {
             "order_id": order_id,
             "paid": True,
@@ -392,9 +401,14 @@ async def verify_seller_pack_order(
                 sess = resp.json()
                 meta = sess.get("metadata", {}) or {}
                 if (
-                    sess.get("payment_status") == "paid"
+                    sess.get("id") == session_id
+                    and sess.get("mode") == "payment"
+                    and sess.get("payment_status") == "paid"
+                    and str(sess.get("currency") or "").lower() == "eur"
+                    and int(sess.get("amount_total") or 0) == int(order.get("amount_euro") or 0) * 100
                     and meta.get("order_type") == "SELLER_PACK"
-                    and str(meta.get("order_id") or order_id) == order_id
+                    and str(meta.get("order_id") or "") == order_id
+                    and str(meta.get("dossier_id") or "") == str(order.get("dossier_id") or "")
                 ):
                     if sf is not None:
                         await PostgresV3OrchestratorRepository(sf).mark_seller_pack_order_paid(
@@ -435,6 +449,18 @@ async def stripe_webhook_handler(
 
         if metadata.get("order_type") == "SELLER_PACK":
             order_id = str(metadata.get("order_id") or "").strip()
+            if event_type == "checkout.session.completed":
+                if obj.get("payment_status") != "paid" or obj.get("mode") != "payment" or str(obj.get("currency") or "").lower() != "eur":
+                    return {"status": "payment_not_confirmed", "event_id": event_id}
+                if sf is not None:
+                    stored_order = await PostgresV3OrchestratorRepository(sf).get_seller_pack_order(order_id)
+                    if (
+                        not stored_order
+                        or str(stored_order.get("stripe_session_id") or "") != str(obj.get("id") or "")
+                        or int(obj.get("amount_total") or 0) != int(stored_order.get("amount_euro") or 0) * 100
+                        or str(metadata.get("dossier_id") or "") != str(stored_order.get("dossier_id") or "")
+                    ):
+                        return {"status": "order_mismatch", "event_id": event_id}
             if sf is not None:
                 processed = await PostgresBillingRepository(sf).record_webhook_and_update_agency(
                     event_id=event_id,
@@ -483,6 +509,20 @@ async def stripe_webhook_handler(
             }
 
         if metadata.get("pass_type") == "RNIC_PARTICULIER":
+            if event_type == "checkout.session.completed":
+                try:
+                    paid_amount = int(metadata.get("amount_euro") or 0)
+                except (TypeError, ValueError):
+                    paid_amount = 0
+                if (
+                    obj.get("payment_status") != "paid"
+                    or obj.get("mode") != "payment"
+                    or str(obj.get("currency") or "").lower() != "eur"
+                    or paid_amount <= 0
+                    or int(obj.get("amount_total") or 0) != paid_amount * 100
+                    or not metadata.get("pass_token")
+                ):
+                    return {"status": "payment_not_confirmed", "event_id": event_id}
             if sf is not None:
                 processed = await PostgresBillingRepository(sf).record_webhook_and_update_agency(
                     event_id=event_id,
