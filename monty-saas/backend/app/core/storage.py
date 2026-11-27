@@ -209,7 +209,8 @@ class ObjectStorageAdapter:
         self._ensure_backend_allowed(backend)
         if backend == "supabase":
             bucket = self._settings.supabase_storage_bucket
-            url = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{clean_key}"
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            url = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{encoded_key}"
             try:
                 req = urllib.request.Request(
                     url,
@@ -224,10 +225,12 @@ class ObjectStorageAdapter:
                 )
                 with urllib.request.urlopen(req, timeout=20.0):
                     pass
-                return self.issue_signed_url(object_key=clean_key, method="GET")
             except Exception as exc:
                 if self._settings.is_production:
                     raise RuntimeError("Échec de l'envoi du fichier vers Supabase Storage.") from exc
+                backend = "local"
+            else:
+                return self.issue_signed_url(object_key=clean_key, method="GET")
         elif backend == "s3":
             put_url = _build_s3_presigned_url(
                 endpoint=self._settings.s3_endpoint,
@@ -248,10 +251,12 @@ class ObjectStorageAdapter:
                 )
                 with urllib.request.urlopen(req, timeout=20.0):
                     pass
-                return self.issue_signed_url(object_key=clean_key, method="GET")
             except Exception as exc:
                 if self._settings.is_production:
                     raise RuntimeError("Échec de l'envoi du fichier vers le stockage S3.") from exc
+                backend = "local"
+            else:
+                return self.issue_signed_url(object_key=clean_key, method="GET")
 
         # Fallback disque local uniquement hors production.
         if self._settings.is_production:
