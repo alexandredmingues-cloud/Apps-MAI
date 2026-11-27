@@ -6,7 +6,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Megaphone, ShieldCheck } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 type FormState = { advertiser_name: string; brand_name: string; contact_email: string; website_url: string; creative_image_url: string; target_url: string; placement: "HOME" | "SEARCH" | "CONTENT" | "PRO"; country_code: "FR" | "PT" | "GB"; city: string; headline: string; description: string; campaign_budget_euro: number; consent: boolean };
 const initial: FormState = { advertiser_name: "", brand_name: "", contact_email: "", website_url: "", creative_image_url: "", target_url: "", placement: "HOME", country_code: "FR", city: "", headline: "", description: "", campaign_budget_euro: 0, consent: false };
 
