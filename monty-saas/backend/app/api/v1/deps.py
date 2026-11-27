@@ -54,6 +54,22 @@ async def get_current_tenant(
         try:
             async with session_factory() as session:
                 async with session.begin():
+                    role_state = (
+                        await session.execute(
+                            text("""
+                                SELECT rolsuper, rolbypassrls
+                                FROM pg_roles
+                                WHERE rolname = current_user
+                            """)
+                        )
+                    ).mappings().first()
+                    if settings.is_production and (
+                        not role_state or bool(role_state["rolsuper"]) or bool(role_state["rolbypassrls"])
+                    ):
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Le rôle PostgreSQL de production doit être non-superutilisateur et sans BYPASSRLS.",
+                        )
                     row = (
                         await session.execute(
                             text("""
