@@ -136,6 +136,30 @@ export function InteractiveGeoMap({
     setZoom(bounded);
   }
 
+  function locateUser() {
+    if (!navigator.geolocation) {
+      setLocationError("La géolocalisation n’est pas disponible sur cet appareil.");
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (result) => {
+        const point = { lat: result.coords.latitude, lon: result.coords.longitude };
+        setUserLocation(point);
+        setCenter(point);
+        setZoom(16);
+        setLocating(false);
+        onReverseLookup?.(point.lat, point.lon);
+      },
+      () => {
+        setLocationError("Position indisponible. Vérifiez l’autorisation de localisation de votre navigateur.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }
+
   const refLat = originLat ?? selectedSuggestion?.latitude;
   const refLon = originLon ?? selectedSuggestion?.longitude;
   const originPoint = refLat !== undefined && refLon !== undefined ? position({ lat: refLat, lon: refLon }) : null;
