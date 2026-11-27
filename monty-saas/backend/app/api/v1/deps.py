@@ -20,8 +20,33 @@ def get_settings() -> Settings:
     return load_settings()
 
 
-def get_db_session_factory(settings: Settings = Depends(get_settings)):
+def get_db_session_factory_unchecked(settings: Settings = Depends(get_settings)):
+    """Raw factory reserved for health/diagnostic endpoints that must report unsafe DB state."""
     return get_session_factory(settings.database_url)
+
+
+async def get_db_session_factory(settings: Settings = Depends(get_settings)):
+    session_factory = get_session_factory(settings.database_url)
+    if session_factory is None or not settings.is_production:
+        return session_factory
+    try:
+        async with session_factory() as session:
+            role_state = (
+                await session.execute(
+                    text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
+                )
+            ).mappings().first()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Impossible de vérifier les privilèges du rôle PostgreSQL.",
+        ) from exc
+    if not role_state or bool(role_state["rolsuper"]) or bool(role_state["rolbypassrls"]):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Rôle PostgreSQL refusé : utiliser un rôle applicatif non-superutilisateur sans BYPASSRLS.",
+        )
+    return session_factory
 
 
 async def get_current_tenant(
