@@ -41,7 +41,7 @@ class MontyAICoreTests(unittest.TestCase):
             settings=settings,
             transport=fake_transport,
         )
-        self.assertEqual(res["assistant_name"], "Monty AI")
+        self.assertEqual(res["assistant_name"], "Monty")
         self.assertEqual(res["execution_mode"], "LOCAL_OPEN_SOURCE")
         self.assertIn("Synthèse locale Qwen", res["response_text"])
         self.assertIn("compute_hcsf_borrowing_capacity", res["tools_invoked"])
@@ -89,7 +89,7 @@ class MontyAICoreTests(unittest.TestCase):
             transport=total_outage,
         )
         self.assertEqual(res_offline["execution_mode"], "TOOL_ASSISTED_OFFLINE")
-        self.assertIn("Monty AI — Analyse structurée", res_offline["response_text"])
+        self.assertIn("Monty — Analyse structurée", res_offline["response_text"])
         self.assertIn("compute_hcsf_borrowing_capacity", res_offline["tools_invoked"])
 
     def test_confidential_mode_blocks_external_providers(self) -> None:
