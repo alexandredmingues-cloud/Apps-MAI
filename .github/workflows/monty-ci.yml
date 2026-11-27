@@ -1,4 +1,4 @@
-name: Monty CI — Tri-Platform Verification
+name: MON-AGENT CI — Tri-Platform Verification
 
 on:
   push:
@@ -16,8 +16,8 @@ concurrency:
 jobs:
   backend-python:
     name: Backend FastAPI & Domain Tests
-    needs: android-kotlin
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: monty-saas/backend
@@ -28,11 +28,6 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: monty-saas/backend/requirements.txt
-      - name: Download Android APK built by CI
-        uses: actions/download-artifact@v4
-        with:
-          name: monty-debug-apk
-          path: app/build/outputs/apk/debug
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Compile Python sources & run complete test suite
@@ -46,6 +41,7 @@ jobs:
   frontend-nextjs:
     name: Frontend Next.js Typecheck & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: monty-saas/frontend
@@ -68,6 +64,7 @@ jobs:
   android-kotlin:
     name: Android Kotlin Compile & Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       # Robolectric API 36 requires JDK 21. JDK 17 causes
@@ -87,9 +84,3 @@ jobs:
           fi
       - name: Compile Android & run JVM unit tests
         run: gradle :app:assembleDebug :app:testDebugUnitTest
-      - name: Upload Android APK for backend release tests
-        uses: actions/upload-artifact@v4
-        with:
-          name: monty-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
