@@ -87,9 +87,8 @@ def check_robots_txt_allowed(
         # 404 sur robots.txt signifie aucune restriction déclarée ; 403/401/429 => prudence : refus
         return exc.code == 404
     except Exception:
-        # En cas d'erreur réseau sur robots.txt, on autorise uniquement si appel explicite partenaire HTTPS,
-        # sauf si un robots_fetcher de test a levé explicitement une interdiction.
-        return True
+        # En cas d'incertitude réseau, on échoue en mode fermé : aucune collecte automatisée.
+        return False
 
 
 def parse_xml_listings(raw_xml: str) -> list[dict[str, Any]]:
@@ -303,7 +302,7 @@ class AuthorizedListingFeedsService:
                 cond = InputSanitizer.sanitize_text(str(item.get("condition_label") or "Non renseigné"), 40)
                 raw_desc = str(item.get("description") or "")
                 clean_desc = redact_direct_pii_for_ai(InputSanitizer.sanitize_text(raw_desc, 1600))
-                photo_count = max(0, int(float(item.get("photo_count") or 3)))
+                photo_count = max(0, int(float(item.get("photo_count") or 0)))
                 canonical_url = InputSanitizer.sanitize_public_http_url(str(item.get("canonical_url") or item.get("url") or ""))
 
                 if len(title) < 5 or len(city) < 2 or price < 10_000 or surface < 9 or len(clean_desc) < 10:
