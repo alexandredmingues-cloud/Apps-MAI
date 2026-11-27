@@ -516,7 +516,7 @@ export function CrmCockpitPanel({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-goldChampagne">
-              Phase 2 • CRM Multi-Agences, Relances Auto &amp; RGPD ({modeLabel === "api" ? "FastAPI Live" : "Mode Local"})
+              Phase 2 • CRM Multi-Agences, Relances Auto &amp; RGPD ({modeLabel === "api" ? "Données synchronisées" : "Démo locale · non persistée"})
             </p>
             <h2 className="mt-1 font-display text-2xl font-bold">
               Contacts, Notes Privées Isolées &amp; Automatisations Commerciales
