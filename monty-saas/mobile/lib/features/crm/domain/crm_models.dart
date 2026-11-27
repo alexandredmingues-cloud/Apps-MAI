@@ -17,9 +17,12 @@ enum SaasPlan {
   final String subtitle;
   final String priceMonthlyLabel;
 
-  static SaasPlan fromCode(String? code) =>
-      SaasPlan.values.where((plan) => plan.code == code).firstOrNull ??
-      SaasPlan.individual;
+  static SaasPlan fromCode(String? code) {
+    for (final plan in SaasPlan.values) {
+      if (plan.code == code) return plan;
+    }
+    return SaasPlan.individual;
+  }
 }
 
 enum AgencyRole {
@@ -34,9 +37,12 @@ enum AgencyRole {
 
   bool get isManagerOrAdmin => this == admin || this == director;
 
-  static AgencyRole fromCode(String? code) =>
-      AgencyRole.values.where((role) => role.code == code).firstOrNull ??
-      AgencyRole.agent;
+  static AgencyRole fromCode(String? code) {
+    for (final role in AgencyRole.values) {
+      if (role.code == code) return role;
+    }
+    return AgencyRole.agent;
+  }
 }
 
 abstract final class CrmCatalog {
@@ -182,7 +188,7 @@ class CrmContact {
   bool isRgpdRetentionExpired(String todayIso) {
     final clean = rgpdRetentionUntil.trim().substring(
       0,
-      rgpdRetentionUntil.trim().length.clamp(0, 10),
+      rgpdRetentionUntil.trim().length.clamp(0, 10).toInt(),
     );
     return clean.length >= 10 && clean.compareTo(todayIso) < 0;
   }
@@ -274,7 +280,7 @@ class FollowUpTask {
     if (status == 'Terminée' || dueDate.isEmpty) return false;
     if (dueDate.compareTo(todayIso) < 0) return true;
     if (dueDate == todayIso) {
-      final time = dueTime.isEmpty ? '23:59' : dueTime.substring(0, dueTime.length.clamp(0, 5));
+      final time = dueTime.isEmpty ? '23:59' : dueTime.substring(0, dueTime.length.clamp(0, 5).toInt());
       return time.compareTo(currentTimeHHmm) < 0;
     }
     return false;
