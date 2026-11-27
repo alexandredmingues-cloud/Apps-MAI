@@ -477,19 +477,29 @@ def _verify_firebase_token_via_google(
     if code != 200 or not isinstance(claims, dict):
         raise ValueError("Jeton Firebase/Google rejeté lors de la vérification.")
 
-    sub = str(claims.get("sub") or claims.get("user_id") or "").strip()
+    if not settings.firebase_project_id:
+        raise ValueError("Firebase non configuré : FIREBASE_PROJECT_ID obligatoire.")
+    sub = str(claims.get("user_id") or claims.get("sub") or "").strip()
     if not sub:
-        raise ValueError("Identifiant utilisateur Firebase (sub) absent.")
+        raise ValueError("Identifiant utilisateur Firebase absent.")
 
-    exp_raw = claims.get("exp")
-    if exp_raw is not None and int(exp_raw) < int(time.time()):
-        raise ValueError("Jeton Firebase expiré.")
+    try:
+        exp = int(claims.get("exp") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Expiration du jeton Firebase invalide.") from exc
+    if exp <= int(time.time()):
+        raise ValueError("Jeton Firebase expiré ou sans expiration valide.")
 
-    if settings.firebase_project_id:
-        aud = str(claims.get("aud") or "").strip()
-        iss = str(claims.get("iss") or "").strip()
-        if aud != settings.firebase_project_id and settings.firebase_project_id not in iss:
-            raise ValueError("Jeton émis pour un autre projet Firebase.")
+    aud = str(claims.get("aud") or "").strip()
+    iss = str(claims.get("iss") or "").strip()
+    expected_issuer = f"https://securetoken.google.com/{settings.firebase_project_id}"
+    if aud != settings.firebase_project_id or iss != expected_issuer:
+        raise ValueError("Jeton émis pour un autre projet ou un autre fournisseur.")
+    if claims.get("email_verified") is not True:
+        raise ValueError("Une adresse e-mail Firebase vérifiée est obligatoire.")
+    email = str(claims.get("email") or "").strip()
+    if not email or "@" not in email:
+        raise ValueError("Adresse e-mail Firebase absente ou invalide.")
     return claims
 
 
@@ -497,29 +507,70 @@ def _verify_firebase_token_via_google(
 async def exchange_firebase_session(
     body: FirebaseExchangeRequest,
     settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> SessionResponse:
-    """Échange un Firebase ID Token vérifié contre un JWT SaaS Monty (convergence Mobile <-> SaaS)."""
+    """Échange Firebase contre une session SaaS uniquement après contrôle de l'identité et du membership."""
     try:
         claims = _verify_firebase_token_via_google(body.id_token, settings=settings)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
-    uid = str(claims.get("sub") or claims.get("user_id") or "")
-    email = str(claims.get("email") or "")
-    display_name = str(claims.get("name") or email.split("@")[0] or "Utilisateur Mobile")
-    has_staff_claim = bool(claims.get("staff") is True or claims.get("advisor") is True)
-    # Fail-closed sur l'élévation de rôle : seuls les claims staff/advisor vérifiés peuvent demander un rôle pro
-    if has_staff_claim and body.preferred_role in (MontyRole.AGENT, MontyRole.DIRECTOR, MontyRole.ADMIN_STAFF):
-        eff_role = body.preferred_role
-    elif body.preferred_role == MontyRole.SELLER:
-        eff_role = MontyRole.SELLER
-    else:
-        eff_role = MontyRole.BUYER
+    # Pas de fallback mémoire : l'identité et les droits doivent provenir de la base persistante.
+    if sf is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Connexion Firebase indisponible : base PostgreSQL persistante requise.",
+        )
 
-    safe_agency = body.agency_id.strip() or "agency-france-reseau"
+    email = str(claims["email"]).strip().lower()
+    try:
+        async with sf() as session:
+            row = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT u.id::text AS user_id, u.email, u.display_name,
+                               u.is_active, u.is_super_admin,
+                               a.id::text AS agency_id, a.name AS agency_name,
+                               m.role
+                        FROM users u
+                        JOIN agency_memberships m ON m.user_id = u.id
+                        JOIN agencies a ON a.id = m.agency_id
+                        WHERE lower(u.email::text) = :email
+                          AND a.id::text = :agency_id
+                          AND u.is_active = true
+                          AND m.status = 'ACTIVE'
+                        LIMIT 1
+                        """
+                    ),
+                    {"email": email, "agency_id": body.agency_id.strip()},
+                )
+            ).mappings().first()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vérification de l'appartenance impossible auprès de la base.",
+        ) from exc
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Aucun compte actif avec appartenance active à cette agence.",
+        )
+
+    # Le rôle est lu exclusivement depuis agency_memberships. Les claims et preferred_role
+    # envoyés par le client ne donnent jamais de privilège.
+    try:
+        eff_role = MontyRole.SUPER_ADMIN if row["is_super_admin"] else MontyRole(row["role"])
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Rôle d'agence invalide.") from exc
+
+    user_id = str(row["user_id"])
+    agency_id = str(row["agency_id"])
+    display_name = str(row["display_name"] or claims.get("name") or email.split("@")[0])
     token = create_access_token(
-        subject_user_id=f"fb:{uid}",
-        agency_id=safe_agency,
+        subject_user_id=user_id,
+        agency_id=agency_id,
         role=eff_role.value,
         secret=settings.effective_jwt_secret,
         ttl_seconds=settings.jwt_ttl_minutes * 60,
@@ -527,11 +578,11 @@ async def exchange_firebase_session(
     perms = sorted(p.value for p in ROLE_PERMISSIONS[eff_role])
     return SessionResponse(
         access_token=token,
-        user_id=f"fb:{uid}",
-        agency_id=safe_agency,
-        agency_name="Monty Connect Mobile",
+        user_id=user_id,
+        agency_id=agency_id,
+        agency_name=str(row["agency_name"]),
         display_name=display_name,
-        email=email,
+        email=str(row["email"]),
         role=eff_role,
         permissions=perms,
     )
