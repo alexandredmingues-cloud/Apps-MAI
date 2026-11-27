@@ -20,6 +20,7 @@ from app.core.config import load_settings  # noqa: E402
 from app.core.rbac import MontyRole, TenantContext  # noqa: E402
 from app.core.security import create_access_token, decode_access_token  # noqa: E402
 from app.api.v1.crm_router import ensure_crm_persistence  # noqa: E402
+from app.db.session import get_engine_pool_options  # noqa: E402
 from app.domain.auth_and_billing import AuthService, BillingService  # noqa: E402
 from app.domain.country_packs import CountryCode  # noqa: E402
 from app.domain.crm_service import ContactRole, CrmService  # noqa: E402
@@ -32,6 +33,16 @@ from app.workers.redis_tasks import run_csv_excel_import_job, run_rgpd_retention
 
 
 class V2SecurityAndConfigTests(unittest.TestCase):
+    def test_database_pool_configuration_is_bounded_and_environment_driven(self) -> None:
+        with patch.dict(os.environ, {"DB_POOL_SIZE": "12", "DB_MAX_OVERFLOW": "8", "DB_POOL_TIMEOUT_SECONDS": "45"}, clear=False):
+            options = get_engine_pool_options()
+        self.assertEqual(options["pool_size"], 12)
+        self.assertEqual(options["max_overflow"], 8)
+        self.assertEqual(options["pool_timeout"], 45.0)
+        self.assertTrue(options["pool_pre_ping"])
+        with patch.dict(os.environ, {"DB_POOL_SIZE": "999"}, clear=False):
+            with self.assertRaises(RuntimeError):
+                get_engine_pool_options()
     def test_production_crm_refuses_non_persistent_fallback(self) -> None:
         with self.assertRaises(Exception) as caught:
             ensure_crm_persistence(None, is_production=True)
