@@ -26,7 +26,7 @@ import { PublicWebFooter, PublicWebHeader } from "@/components/layout/PublicWebH
 import { getPublicArticlesCatalog } from "@/lib/news-catalog";
 
 export const metadata: Metadata = {
-  title: "Monty Immobilier — Plateforme Immobilière Particuliers & Professionnels (France & Portugal)",
+  title: "MON-AGENT — Plateforme immobilière intelligente (France & Portugal)",
   description:
     "Recherchez un bien par temps de trajet, estimez le prix et le délai de vente, publiez votre annonce, suivez l'actualité immobilière sourcée et utilisez nos 6 simulateurs gratuits.",
 };
@@ -52,7 +52,7 @@ export default function MontyPublicWebsitePage() {
               le système d&apos;exploitation des <span className="text-goldChampagne">agences</span>.
             </h1>
             <p className="text-base sm:text-lg text-ivoryWarm/85 leading-relaxed max-w-2xl">
-              « L&apos;humain avant tout. La technologie au service du conseiller immobilier. »
+              « L&apos;humain avant tout. La technologie au service de l&apos;immobilier. »
               Recherchez votre bien selon votre trajet réel, estimez la valeur et le délai de vente,
               simulez votre financement et suivez l&apos;actualité immobilière vérifiée.
             </p>
@@ -147,7 +147,7 @@ export default function MontyPublicWebsitePage() {
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-goldAntique">
-                Monty Particulier • France entière &amp; Portugal
+                Mon-Agent Particulier • France entière &amp; Portugal
               </p>
               <h2 className="font-display text-2xl sm:text-3xl font-bold text-emeraldDeep">
                 Tout pour acheter, vendre et publier en confiance
@@ -196,11 +196,11 @@ export default function MontyPublicWebsitePage() {
             </Link>
           </div>
 
-          {/* Pourquoi Monty surpasse les portails généralistes */}
+          {/* Pourquoi MON-AGENT surpasse les portails généralistes */}
           <div className="rounded-2xl bg-ivoryCard border border-goldAntique/40 p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="font-display text-xl font-bold text-emeraldDeep">
-                Pourquoi Monty est conçu comme la référence face aux portails classiques
+                Pourquoi MON-AGENT est conçu comme la référence face aux portails classiques
               </h3>
               <span className="text-xs font-bold px-3 py-1 rounded-full bg-emeraldDeep text-goldChampagne">
                 Transparence • Mobilité • Zéro Spam
@@ -210,7 +210,7 @@ export default function MontyPublicWebsitePage() {
               <div className="rounded-xl bg-ivoryWarm border border-borderSubtle p-4 space-y-1">
                 <p className="font-bold text-emeraldDeep">1. Recherche par trajet réel (6 modes)</p>
                 <p className="text-slateMuted">
-                  Là où les portails classiques imposent un code postal ou un simple cercle km, Monty calcule le temps réel en
+                  Là où les portails classiques imposent un code postal ou un simple cercle km, MON-AGENT calcule le temps réel en
                   Train/TER, Tram/Métro, Bus, Vélo, À pied ou Voiture.
                 </p>
               </div>
@@ -376,7 +376,7 @@ export default function MontyPublicWebsitePage() {
           <div className="lg:col-span-7 space-y-4">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-goldAntique">
               <Building2 className="w-4 h-4" />
-              Monty Pro • SaaS Multi-Agences Sécurisé
+              Mon-Agent Pro • SaaS Multi-Agences Sécurisé
             </span>
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-emeraldDeep">
               Un cockpit métier complet pour vos conseillers et réseaux d&apos;agences
