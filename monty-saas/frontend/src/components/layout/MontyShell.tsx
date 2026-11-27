@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "estimation", label: "Estimation & Outils", phaseBadge: "6 Simulateurs", icon: Calculator },
   { key: "visits", label: "Visites", phaseBadge: "Phase 3", icon: CalendarCheck },
   { key: "transactions", label: "Transactions", phaseBadge: "Phase 3", icon: Handshake },
-  { key: "ai", label: "Intelligence artificielle", phaseBadge: "Phase 4", icon: Bot },
+  { key: "ai", label: "Monty • Assistant IA", phaseBadge: "Phase 4", icon: Bot },
   { key: "marketplace", label: "Marketplace", phaseBadge: "Phase 5", icon: Store },
   { key: "automations", label: "Automatisations", phaseBadge: "Phase 2", icon: Workflow },
   { key: "documents", label: "Documents", phaseBadge: "Phase 3", icon: FileText },
