@@ -24,6 +24,8 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 export function TurnstileWidget({ onVerify, resetKey = 0 }: { onVerify: (token: string) => void; resetKey?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const onVerifyRef = useRef(onVerify);
+  onVerifyRef.current = onVerify;
   const [scriptReady, setScriptReady] = useState(false);
 
   useEffect(() => {
@@ -32,9 +34,9 @@ export function TurnstileWidget({ onVerify, resetKey = 0 }: { onVerify: (token: 
     widgetIdRef.current = window.turnstile.render(containerRef.current, {
       sitekey: SITE_KEY,
       theme: "light",
-      callback: onVerify,
-      "expired-callback": () => onVerify(""),
-      "error-callback": () => onVerify(""),
+      callback: (token) => onVerifyRef.current(token),
+      "expired-callback": () => onVerifyRef.current(""),
+      "error-callback": () => onVerifyRef.current(""),
     });
     return () => {
       if (widgetIdRef.current && window.turnstile) {
@@ -42,7 +44,7 @@ export function TurnstileWidget({ onVerify, resetKey = 0 }: { onVerify: (token: 
         widgetIdRef.current = null;
       }
     };
-  }, [scriptReady, onVerify, resetKey]);
+  }, [scriptReady, resetKey]);
 
   if (!SITE_KEY) {
     return <p role="status" className="text-xs text-amber-700">Protection anti-robot en attente de configuration.</p>;
