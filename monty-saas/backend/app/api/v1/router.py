@@ -23,6 +23,7 @@ from app.api.v1.deps import (
     get_db_session_factory,
     get_db_session_factory_unchecked,
     get_settings,
+    _is_rls_safe_database_role,
     require_permission,
 )
 from app.api.v1.interconnect_router import interconnect_router
@@ -121,11 +122,7 @@ async def health_check(
                         text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
                     )
                 ).mappings().first()
-                db_role_rls_safe = bool(
-                    role_state
-                    and not bool(role_state["rolsuper"])
-                    and not bool(role_state["rolbypassrls"])
-                )
+                db_role_rls_safe = _is_rls_safe_database_role(role_state)
             db_reachable = True
             if settings.is_production and not db_role_rls_safe:
                 overall_status = "degraded"
