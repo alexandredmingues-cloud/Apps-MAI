@@ -22,8 +22,9 @@ services:
         value: "false"
       - key: JWT_SECRET
         generateValue: true
+      # Set the exact production/staging frontend origins in the Render dashboard.
       - key: ALLOWED_ORIGINS
-        value: https://apps-mai-1.onrender.com,https://monty-site.onrender.com
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
@@ -52,6 +53,11 @@ services:
         value: monty-vault
       - key: PLATFORM_ADMIN_USER_IDS
         sync: false
+      # Cloudflare Turnstile secrets stay server-side; never expose the secret to the frontend.
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_ALLOWED_HOSTNAMES
+        sync: false
       - key: LOCAL_LLM_ALLOW_PRIVATE_HOSTS
         value: "false"
 
@@ -67,3 +73,5 @@ services:
         value: "20"
       - key: NEXT_PUBLIC_API_BASE_URL
         value: https://monty-saas-api.onrender.com
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        sync: false
