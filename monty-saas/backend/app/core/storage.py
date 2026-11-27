@@ -88,6 +88,31 @@ class ObjectStorageAdapter:
         )
         self._local_root.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _clean_object_key(object_key: str) -> str:
+        raw = str(object_key or "")
+        if not raw or "\\" in raw or "\x00" in raw:
+            raise ValueError("Clé objet invalide.")
+        parts = raw.split("/")
+        if any(part in {"", ".", ".."} for part in parts):
+            raise ValueError("Clé objet invalide.")
+        return "/".join(parts)
+
+    def _local_path(self, object_key: str) -> pathlib.Path:
+        root = self._local_root.resolve()
+        target = (root / self._clean_object_key(object_key)).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("Chemin objet invalide.") from exc
+        return target
+
+    def _ensure_backend_allowed(self, backend: str) -> None:
+        if self._settings.is_production and backend == "local":
+            raise RuntimeError(
+                "Stockage objet distant non configuré : le stockage local est interdit en production."
+            )
+
     @property
     def active_backend(self) -> str:
         if self._settings.supabase_url and self._settings.supabase_service_role_key:
@@ -108,11 +133,13 @@ class ObjectStorageAdapter:
         method: str = "GET",
         expires_in_seconds: int = 900,
     ) -> StoredObjectInfo:
-        clean_key = object_key.lstrip("/")
+        clean_key = self._clean_object_key(object_key)
         backend = self.active_backend
+        self._ensure_backend_allowed(backend)
         if backend == "supabase":
             bucket = self._settings.supabase_storage_bucket
-            endpoint = f"{self._settings.supabase_url}/storage/v1/object/sign/{bucket}/{clean_key}"
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            endpoint = f"{self._settings.supabase_url}/storage/v1/object/sign/{bucket}/{encoded_key}"
             try:
                 req = urllib.request.Request(
                     endpoint,
@@ -139,14 +166,9 @@ class ObjectStorageAdapter:
                         signed_url=full_url,
                         expires_in_seconds=expires_in_seconds,
                     )
-            except Exception:
-                pass
-            return StoredObjectInfo(
-                backend="supabase",
-                object_key=clean_key,
-                signed_url=f"{self._settings.supabase_url}/storage/v1/object/authenticated/{bucket}/{clean_key}",
-                expires_in_seconds=expires_in_seconds,
-            )
+            except Exception as exc:
+                raise RuntimeError("Impossible de générer une URL signée Supabase.") from exc
+            raise RuntimeError("Supabase n'a pas retourné d'URL signée.")
 
         if backend == "s3":
             url = _build_s3_presigned_url(
@@ -166,9 +188,7 @@ class ObjectStorageAdapter:
                 expires_in_seconds=expires_in_seconds,
             )
 
-        local_target = (self._local_root / clean_key).resolve()
-        if not str(local_target).startswith(str(self._local_root.resolve())):
-            raise ValueError("Chemin objet invalide.")
+        local_target = self._local_path(clean_key)
         return StoredObjectInfo(
             backend="local",
             object_key=clean_key,
@@ -177,6 +197,116 @@ class ObjectStorageAdapter:
             expires_in_seconds=expires_in_seconds,
         )
 
+    def get_object_size(self, *, object_key: str) -> int:
+        """Vérifie l'existence de l'objet distant et retourne sa taille réelle."""
+        clean_key = self._clean_object_key(object_key)
+        backend = self.active_backend
+        self._ensure_backend_allowed(backend)
+
+        if backend == "local":
+            target = self._local_path(clean_key)
+            try:
+                return target.stat().st_size
+            except FileNotFoundError:
+                raise
+            except OSError as exc:
+                raise RuntimeError("Impossible de vérifier le fichier local.") from exc
+
+        if backend == "supabase":
+            bucket = self._settings.supabase_storage_bucket
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            endpoint = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{encoded_key}"
+            headers = {
+                "Authorization": f"Bearer {self._settings.supabase_service_role_key}",
+                "apikey": self._settings.supabase_service_role_key,
+            }
+        else:
+            endpoint = _build_s3_presigned_url(
+                endpoint=self._settings.s3_endpoint,
+                bucket=self._settings.s3_bucket,
+                access_key=self._settings.s3_access_key,
+                secret_key=self._settings.s3_secret_key,
+                region=self._settings.s3_region,
+                object_key=clean_key,
+                method="HEAD",
+                expires_in_seconds=300,
+            )
+            headers = {}
+
+        req = urllib.request.Request(endpoint, headers=headers, method="HEAD")
+        try:
+            with urllib.request.urlopen(req, timeout=10.0) as response:
+                raw_size = response.headers.get("Content-Length")
+                if raw_size is None:
+                    raise RuntimeError("Le stockage distant n'a pas fourni la taille de l'objet.")
+                size = int(raw_size)
+                if size < 0:
+                    raise RuntimeError("Taille d'objet distante invalide.")
+                return size
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise FileNotFoundError(clean_key) from exc
+            raise RuntimeError("Impossible de vérifier l'objet dans le stockage distant.") from exc
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Taille d'objet distante invalide.") from exc
+        except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError("Impossible de vérifier l'objet dans le stockage distant.") from exc
+
+    def delete_object(self, *, object_key: str) -> None:
+        """Supprime un objet après échec de publication ; l'opération est idempotente."""
+        clean_key = self._clean_object_key(object_key)
+        backend = self.active_backend
+        self._ensure_backend_allowed(backend)
+        if backend == "supabase":
+            bucket = self._settings.supabase_storage_bucket
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            endpoint = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{encoded_key}"
+            req = urllib.request.Request(
+                endpoint,
+                headers={
+                    "Authorization": f"Bearer {self._settings.supabase_service_role_key}",
+                    "apikey": self._settings.supabase_service_role_key,
+                },
+                method="DELETE",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=12.0):
+                    pass
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise RuntimeError("Impossible de supprimer l'objet Supabase orphelin.") from exc
+            except Exception as exc:
+                raise RuntimeError("Impossible de supprimer l'objet Supabase orphelin.") from exc
+            return
+        if backend == "s3":
+            delete_url = _build_s3_presigned_url(
+                endpoint=self._settings.s3_endpoint,
+                bucket=self._settings.s3_bucket,
+                access_key=self._settings.s3_access_key,
+                secret_key=self._settings.s3_secret_key,
+                region=self._settings.s3_region,
+                object_key=clean_key,
+                method="DELETE",
+                expires_in_seconds=300,
+            )
+            req = urllib.request.Request(delete_url, method="DELETE")
+            try:
+                with urllib.request.urlopen(req, timeout=12.0):
+                    pass
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise RuntimeError("Impossible de supprimer l'objet S3 orphelin.") from exc
+            except Exception as exc:
+                raise RuntimeError("Impossible de supprimer l'objet S3 orphelin.") from exc
+            return
+        target = self._local_path(clean_key)
+        try:
+            target.unlink(missing_ok=True)
+        except OSError as exc:
+            raise RuntimeError("Impossible de supprimer le fichier local orphelin.") from exc
+
     def put_bytes(
         self,
         *,
@@ -184,11 +314,13 @@ class ObjectStorageAdapter:
         raw_bytes: bytes,
         content_type: str = "application/octet-stream",
     ) -> StoredObjectInfo:
-        clean_key = object_key.lstrip("/")
+        clean_key = self._clean_object_key(object_key)
         backend = self.active_backend
+        self._ensure_backend_allowed(backend)
         if backend == "supabase":
             bucket = self._settings.supabase_storage_bucket
-            url = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{clean_key}"
+            encoded_key = urllib.parse.quote(clean_key, safe="/~_.-")
+            url = f"{self._settings.supabase_url}/storage/v1/object/{bucket}/{encoded_key}"
             try:
                 req = urllib.request.Request(
                     url,
@@ -203,9 +335,12 @@ class ObjectStorageAdapter:
                 )
                 with urllib.request.urlopen(req, timeout=20.0):
                     pass
+            except Exception as exc:
+                if self._settings.is_production:
+                    raise RuntimeError("Échec de l'envoi du fichier vers Supabase Storage.") from exc
+                backend = "local"
+            else:
                 return self.issue_signed_url(object_key=clean_key, method="GET")
-            except (urllib.error.URLError, TimeoutError, OSError):
-                pass
         elif backend == "s3":
             put_url = _build_s3_presigned_url(
                 endpoint=self._settings.s3_endpoint,
@@ -226,14 +361,17 @@ class ObjectStorageAdapter:
                 )
                 with urllib.request.urlopen(req, timeout=20.0):
                     pass
+            except Exception as exc:
+                if self._settings.is_production:
+                    raise RuntimeError("Échec de l'envoi du fichier vers le stockage S3.") from exc
+                backend = "local"
+            else:
                 return self.issue_signed_url(object_key=clean_key, method="GET")
-            except (urllib.error.URLError, TimeoutError, OSError):
-                pass
 
-        # Fallback disque local sécurisé
-        local_target = (self._local_root / clean_key).resolve()
-        if not str(local_target).startswith(str(self._local_root.resolve())):
-            raise ValueError("Chemin objet invalide.")
+        # Fallback disque local uniquement hors production.
+        if self._settings.is_production:
+            raise RuntimeError("Échec du stockage distant ; aucun repli local autorisé en production.")
+        local_target = self._local_path(clean_key)
         local_target.parent.mkdir(parents=True, exist_ok=True)
         local_target.write_bytes(raw_bytes)
         return StoredObjectInfo(

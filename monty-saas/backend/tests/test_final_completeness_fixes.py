@@ -355,6 +355,8 @@ class HealthEndpointTests(unittest.TestCase):
         self.assertIn("await redis_client.ping()", router_src)
         self.assertIn('await session.execute(text("SELECT 1"))', router_src)
         self.assertIn("await redis_client.aclose()", router_src)
+        self.assertIn("if sf is None and settings.is_production:", router_src)
+        self.assertIn('"unavailable" if settings.is_production', router_src)
 
 
 if __name__ == "__main__":

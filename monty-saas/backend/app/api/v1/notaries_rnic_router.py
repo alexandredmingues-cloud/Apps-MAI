@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from app.api.v1.deps import get_db_session_factory, get_settings, require_permission
+from app.api.v1.deps import ensure_production_persistence, get_db_session_factory, get_settings, require_permission
 from app.core.config import Settings
 from app.core.rbac import MontyRole, Permission, TenantContext
 from app.core.security import decode_access_token
@@ -259,6 +259,7 @@ async def get_rnic_access_status(
     settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
+    ensure_production_persistence(sf, is_production=settings.is_production, service_name="RNIC")
     ctx = _resolve_optional_tenant(authorization, settings)
     role = ctx.role if ctx else None
     free_for_role = is_rnic_free_for_role(role)
@@ -296,6 +297,7 @@ async def search_rnic_coproprietes_endpoint(
     settings: Settings = Depends(get_settings),
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
+    ensure_production_persistence(sf, is_production=settings.is_production, service_name="RNIC")
     ctx = _resolve_optional_tenant(authorization, settings)
     role = ctx.role if ctx else None
     has_full = is_rnic_free_for_role(role)

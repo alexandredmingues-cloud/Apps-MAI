@@ -21,6 +21,10 @@ from app.domain.monty_price_index_service import PriceIndexConfig, PriceIndexHis
 from app.domain.portfolio_and_leads_service import LeadKeywordRule
 
 
+class MobileReleaseVersionConflict(ValueError):
+    """Raised when an Android package already has the requested version_code."""
+
+
 def _default_sql_text(sql: str) -> Any:
     from sqlalchemy import text
 
@@ -628,6 +632,28 @@ class PostgresV3OrchestratorRepository:
             updated_at=_iso(r["updated_at"]),
         )
 
+    async def assert_mobile_release_version_available(self, rel: MobileAppRelease) -> None:
+        async with self._open_global_session() as session:
+            existing_id = (
+                await session.execute(
+                    self._text(
+                        """
+                        SELECT id
+                        FROM mobile_app_releases
+                        WHERE package_id = :pkg
+                          AND version_code = :vcode
+                          AND id <> :rid
+                        LIMIT 1
+                        """
+                    ),
+                    {"pkg": rel.package_id, "vcode": rel.version_code, "rid": rel.id},
+                )
+            ).scalar_one_or_none()
+            if existing_id is not None:
+                raise MobileReleaseVersionConflict(
+                    f"Le numéro de version Android {rel.version_code} existe déjà pour ce package."
+                )
+
     async def upsert_mobile_release(self, rel: MobileAppRelease) -> MobileAppRelease:
         async with self._open_global_session() as session:
             if rel.is_recommended:
@@ -1058,6 +1084,7 @@ class PostgresV3OrchestratorRepository:
         stripe_session_id: str = "",
     ) -> dict[str, Any]:
         async with self._open_global_session() as session:
+            await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
             row = (
                 await session.execute(
                     self._text(
@@ -1067,9 +1094,7 @@ class PostgresV3OrchestratorRepository:
                             amount_euro, status, stripe_session_id
                         )
                         VALUES (:oid, :did, :pid, :buid, :email, :amt, 'PENDING_PAYMENT', :sid)
-                        ON CONFLICT (order_id) DO UPDATE SET
-                            stripe_session_id = EXCLUDED.stripe_session_id,
-                            updated_at = now()
+                        ON CONFLICT (order_id) DO NOTHING
                         RETURNING *
                         """
                     ),
@@ -1093,6 +1118,7 @@ class PostgresV3OrchestratorRepository:
         stripe_session_id: str = "",
     ) -> dict[str, Any] | None:
         async with self._open_global_session() as session:
+            await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
             row = (
                 await session.execute(
                     self._text(
@@ -1103,6 +1129,7 @@ class PostgresV3OrchestratorRepository:
                             paid_at = COALESCE(paid_at, now()),
                             updated_at = now()
                         WHERE order_id = :oid
+                          AND stripe_session_id = :sid
                         RETURNING *
                         """
                     ),
@@ -1113,6 +1140,7 @@ class PostgresV3OrchestratorRepository:
 
     async def get_seller_pack_order(self, order_id: str) -> dict[str, Any] | None:
         async with self._open_global_session() as session:
+            await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
             row = (
                 await session.execute(
                     self._text("SELECT * FROM seller_pack_orders WHERE order_id = :oid"),

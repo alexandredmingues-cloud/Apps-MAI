@@ -369,6 +369,7 @@ class PostgresNotariesRnicRepository:
 
         async with self._sf() as session:
             async with session.begin():
+                await session.execute(self._text("SELECT set_config('app.payment_processor', 'on', true)"))
                 row = (
                     await session.execute(
                         self._text(
@@ -379,8 +380,10 @@ class PostgresNotariesRnicRepository:
                               CAST(NULLIF(:uid, '') AS uuid), :email, :token, :sid, :amt, 'ACTIVE', :exp
                             )
                             ON CONFLICT (stripe_session_id) DO UPDATE SET
-                              status = 'ACTIVE',
-                              expires_at = EXCLUDED.expires_at
+                              stripe_session_id = EXCLUDED.stripe_session_id
+                            WHERE rnic_access_passes.pass_token = EXCLUDED.pass_token
+                              AND rnic_access_passes.user_id IS NOT DISTINCT FROM EXCLUDED.user_id
+                              AND rnic_access_passes.amount_euro = EXCLUDED.amount_euro
                             RETURNING id, user_id, buyer_email::text AS buyer_email, pass_token,
                                       stripe_session_id, amount_euro, status, expires_at, created_at
                             """
@@ -418,12 +421,21 @@ class PostgresNotariesRnicRepository:
             return False
 
         async with self._sf() as session:
-            row = (
+            async with session.begin():
                 await session.execute(
-                    self._text(
-                        """
-                        SELECT 1
-                        FROM rnic_access_passes
+                    self._text("SELECT set_config('app.current_user_id', :uid, true)"),
+                    {"uid": uid_val},
+                )
+                await session.execute(
+                    self._text("SELECT set_config('app.rnic_pass_token', :tok, true)"),
+                    {"tok": pass_token.strip()},
+                )
+                row = (
+                    await session.execute(
+                        self._text(
+                            """
+                            SELECT 1
+                            FROM rnic_access_passes
                         WHERE status = 'ACTIVE'
                           AND expires_at > now()
                           AND (
@@ -433,7 +445,7 @@ class PostgresNotariesRnicRepository:
                         LIMIT 1
                         """
                     ),
-                    {"tok": pass_token.strip(), "uid": uid_val},
-                )
-            ).first()
-            return row is not None
+                        {"tok": pass_token.strip(), "uid": uid_val},
+                    )
+                ).first()
+                return row is not None

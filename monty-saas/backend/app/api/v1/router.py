@@ -5,6 +5,7 @@ import base64
 from datetime import datetime, timezone
 import json
 import time
+import uuid
 from typing import Any, Callable
 import urllib.error
 import urllib.parse
@@ -20,7 +21,9 @@ from app.api.v1.crm_router import crm_router
 from app.api.v1.deps import (
     get_current_tenant,
     get_db_session_factory,
+    get_db_session_factory_unchecked,
     get_settings,
+    _is_rls_safe_database_role,
     require_permission,
 )
 from app.api.v1.interconnect_router import interconnect_router
@@ -80,6 +83,7 @@ class HealthResponse(BaseModel):
     database_configured: bool
     database_reachable: bool | None = None
     database_latency_ms: float | None = None
+    database_role_rls_safe: bool | None = None
     storage_mode: str
     dev_auth_enabled: bool
     redis_configured: bool
@@ -93,23 +97,39 @@ class HealthResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check(
     settings: Settings = Depends(get_settings),
-    sf=Depends(get_db_session_factory),
+    sf=Depends(get_db_session_factory_unchecked),
 ) -> HealthResponse:
     db_reachable: bool | None = None
     db_latency_ms: float | None = None
+    db_role_rls_safe: bool | None = None
     redis_reachable: bool | None = None
     redis_latency_ms: float | None = None
     overall_status = "ok"
+
+    if sf is None and settings.is_production:
+        # A production API without PostgreSQL cannot serve durable tenant data.
+        # Report degraded instead of a misleading healthy/in-memory state.
+        db_reachable = False
+        overall_status = "degraded"
 
     if sf is not None:
         t0 = time.perf_counter()
         try:
             async with sf() as session:
                 await session.execute(text("SELECT 1"))
+                role_state = (
+                    await session.execute(
+                        text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
+                    )
+                ).mappings().first()
+                db_role_rls_safe = _is_rls_safe_database_role(role_state)
             db_reachable = True
+            if settings.is_production and not db_role_rls_safe:
+                overall_status = "degraded"
             db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         except Exception:
             db_reachable = False
+            db_role_rls_safe = False
             db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
             overall_status = "degraded"
 
@@ -147,7 +167,13 @@ async def health_check(
         database_configured=bool(settings.database_url),
         database_reachable=db_reachable,
         database_latency_ms=db_latency_ms,
-        storage_mode="postgresql_rls" if settings.database_url else "in_memory_fallback",
+        database_role_rls_safe=db_role_rls_safe,
+        storage_mode=(
+            "postgresql_rls" if sf is not None and (not settings.is_production or db_role_rls_safe)
+            else "unsafe_postgresql_role" if sf is not None
+            else "unavailable" if settings.is_production
+            else "in_memory_fallback"
+        ),
         dev_auth_enabled=settings.can_issue_dev_session,
         redis_configured=bool(settings.redis_url),
         redis_reachable=redis_reachable,
@@ -510,43 +536,85 @@ def _verify_firebase_token_via_google(
 async def exchange_firebase_session(
     body: FirebaseExchangeRequest,
     settings: Settings = Depends(get_settings),
+    sf=Depends(get_db_session_factory),
 ) -> SessionResponse:
-    """Échange un Firebase ID Token vérifié contre un JWT SaaS Monty (convergence Mobile <-> SaaS)."""
+    """Échange Firebase contre une identité SaaS déjà provisionnée et membre d'une agence."""
     try:
         claims = _verify_firebase_token_via_google(body.id_token, settings=settings)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton Firebase invalide.") from exc
 
-    uid = str(claims.get("sub") or claims.get("user_id") or "")
-    email = str(claims.get("email") or "")
-    display_name = str(claims.get("name") or email.split("@")[0] or "Utilisateur Mobile")
-    has_staff_claim = bool(claims.get("staff") is True or claims.get("advisor") is True)
-    # Fail-closed sur l'élévation de rôle : seuls les claims staff/advisor vérifiés peuvent demander un rôle pro
-    if has_staff_claim and body.preferred_role in (MontyRole.AGENT, MontyRole.DIRECTOR, MontyRole.ADMIN_STAFF):
-        eff_role = body.preferred_role
-    elif body.preferred_role == MontyRole.SELLER:
-        eff_role = MontyRole.SELLER
-    else:
-        eff_role = MontyRole.BUYER
+    if sf is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="L'échange Firebase nécessite la base d'identités persistante.",
+        )
 
-    safe_agency = body.agency_id.strip() or "agency-france-reseau"
+    uid = str(claims.get("sub") or claims.get("user_id") or "").strip()
+    email = str(claims.get("email") or "").strip().lower()
+    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
+    agency_ref = body.agency_id.strip()
+    agency_uuid = None
+    if agency_ref and agency_ref != "agency-france-reseau":
+        try:
+            agency_uuid = uuid.UUID(agency_ref)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="L'agence doit être sélectionnée avec son identifiant UUID.",
+            ) from exc
+
+    try:
+        async with sf() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        text("""
+                            SELECT user_id, agency_id, role, agency_name, display_name, email, is_active
+                            FROM monty_auth_firebase_exchange(
+                                CAST(:firebase_uid AS varchar(128)), CAST(:email AS citext),
+                                CAST(:email_verified AS boolean), CAST(:agency_id AS uuid)
+                            )
+                        """),
+                        {
+                            "firebase_uid": uid,
+                            "email": email or None,
+                            "email_verified": email_verified,
+                            "agency_id": agency_uuid,
+                        },
+                    )
+                ).mappings().first()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Impossible de vérifier l'appartenance Firebase à une agence.",
+        ) from exc
+
+    if row is None or not row["is_active"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Compte non associé à une appartenance active MON-AGENT. Contactez votre agence.",
+        )
+
+    effective_role = MontyRole(row["role"])
+    user_id = str(row["user_id"])
+    agency_id = str(row["agency_id"])
     token = create_access_token(
-        subject_user_id=f"fb:{uid}",
-        agency_id=safe_agency,
-        role=eff_role.value,
+        subject_user_id=user_id,
+        agency_id=agency_id,
+        role=effective_role.value,
         secret=settings.effective_jwt_secret,
         ttl_seconds=settings.jwt_ttl_minutes * 60,
     )
-    perms = sorted(p.value for p in ROLE_PERMISSIONS[eff_role])
     return SessionResponse(
         access_token=token,
-        user_id=f"fb:{uid}",
-        agency_id=safe_agency,
-        agency_name="Monty Connect Mobile",
-        display_name=display_name,
-        email=email,
-        role=eff_role,
-        permissions=perms,
+        user_id=user_id,
+        agency_id=agency_id,
+        agency_name=row["agency_name"],
+        display_name=row["display_name"],
+        email=row["email"],
+        role=effective_role,
+        permissions=sorted(p.value for p in ROLE_PERMISSIONS[effective_role]),
     )
 
 

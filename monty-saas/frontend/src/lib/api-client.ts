@@ -950,7 +950,7 @@ export const montyApi = {
     requestJson<{
       checkout_session_id: string;
       checkout_url: string;
-      pass_token: string;
+      pass_token?: string;
       amount_euro: number;
     }>("/api/v1/billing/rnic-pass", {
       method: "POST",

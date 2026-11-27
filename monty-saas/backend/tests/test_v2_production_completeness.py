@@ -201,7 +201,7 @@ class V2ProductionCompletenessTests(unittest.TestCase):
         self.assertTrue((BACKEND_DIR / "OPS_BACKUP_ROLLBACK.md").exists())
 
         render_yaml = (ROOT_DIR / "render.yaml").read_text(encoding="utf-8")
-        self.assertIn("https://apps-mai-1.onrender.com", render_yaml)
+        self.assertIn("- key: ALLOWED_ORIGINS\n        sync: false", render_yaml)
         self.assertIn("https://monty-saas-api.onrender.com", render_yaml)
 
 
