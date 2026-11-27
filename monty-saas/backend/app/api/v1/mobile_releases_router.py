@@ -11,7 +11,7 @@ from app.api.v1.deps import ensure_production_persistence, get_db_session_factor
 from app.core.config import Settings
 from app.core.rbac import Permission, TenantContext
 from app.core.storage import ObjectStorageAdapter
-from app.db.postgres_v3_orchestrator_repository import PostgresV3OrchestratorRepository
+from app.db.postgres_v3_orchestrator_repository import MobileReleaseVersionConflict, PostgresV3OrchestratorRepository
 from app.domain.mobile_releases_service import MobileAppRelease, mobile_releases_service
 
 mobile_releases_router = APIRouter(tags=["Phase 28 — Distribution APK Mobile"])
@@ -42,6 +42,8 @@ async def _persist_uploaded_mobile_release(
 
     object_key = f"apk/{rel.id}-{rel.file_name}"
     try:
+        if session_factory is not None:
+            await PostgresV3OrchestratorRepository(session_factory).assert_mobile_release_version_available(rel)
         stored = storage.put_bytes(
             object_key=object_key,
             raw_bytes=raw_bytes,
@@ -63,6 +65,11 @@ async def _persist_uploaded_mobile_release(
             )
         if isinstance(exc, HTTPException):
             raise
+        if isinstance(exc, MobileReleaseVersionConflict):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Publication APK interrompue ; le fichier distant a été nettoyé si possible.",
