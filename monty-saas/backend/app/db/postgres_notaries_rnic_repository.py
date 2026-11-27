@@ -380,8 +380,7 @@ class PostgresNotariesRnicRepository:
                               CAST(NULLIF(:uid, '') AS uuid), :email, :token, :sid, :amt, 'ACTIVE', :exp
                             )
                             ON CONFLICT (stripe_session_id) DO UPDATE SET
-                              status = 'ACTIVE',
-                              expires_at = EXCLUDED.expires_at
+                              stripe_session_id = EXCLUDED.stripe_session_id
                             WHERE rnic_access_passes.pass_token = EXCLUDED.pass_token
                               AND rnic_access_passes.user_id IS NOT DISTINCT FROM EXCLUDED.user_id
                               AND rnic_access_passes.amount_euro = EXCLUDED.amount_euro
