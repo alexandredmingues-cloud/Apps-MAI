@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Megaphone, ShieldCheck } from "lucide-react";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 type FormState = { advertiser_name: string; brand_name: string; contact_email: string; website_url: string; creative_image_url: string; target_url: string; placement: "HOME" | "SEARCH" | "CONTENT" | "PRO"; country_code: "FR" | "PT" | "GB"; city: string; headline: string; description: string; campaign_budget_euro: number; consent: boolean };
@@ -15,16 +16,20 @@ export default function AdvertiseWithMonAgentPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   function update<K extends keyof FormState>(key: K, value: FormState[K]) { setForm((current) => ({ ...current, [key]: value })); }
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSending(true); setError("");
+    event.preventDefault(); setError("");
+    if (!captchaToken) { setError("Veuillez valider le contrôle anti-robot."); return; }
+    setSending(true);
     try {
-      const response = await fetch(`${API_BASE}/api/v1/ads/public/requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const response = await fetch(`${API_BASE}/api/v1/ads/public/requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, captcha_token: captchaToken }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Impossible d'envoyer la demande.");
       setSubmitted(true);
     } catch (e) { setError(e instanceof Error ? e.message : "Erreur réseau. Réessayez."); }
-    finally { setSending(false); }
+    finally { setSending(false); setCaptchaToken(""); setCaptchaReset((value) => value + 1); }
   }
   const inputClass = "w-full rounded-xl border border-borderSubtle bg-white px-3 py-2.5 text-sm text-obsidianInk outline-none focus:border-emeraldDeep";
   return <main className="min-h-screen bg-ivoryWarm text-obsidianInk"><div className="max-w-3xl mx-auto px-4 py-10 sm:py-16 space-y-8">
@@ -36,7 +41,8 @@ export default function AdvertiseWithMonAgentPage() {
       <label className="block space-y-1.5 text-sm font-semibold">Description<textarea required minLength={10} maxLength={240} rows={3} className={inputClass} value={form.description} onChange={(e) => update("description", e.target.value)} placeholder="Décrivez votre offre en 240 caractères maximum." /></label>
       <label className="flex items-start gap-3 text-xs text-slateMuted"><input required type="checkbox" checked={form.consent} onChange={(e) => update("consent", e.target.checked)} className="mt-0.5" /><span>J'accepte que MON-AGENT traite ces informations afin d'étudier ma demande publicitaire. Je confirme être autorisé à représenter cette marque et disposer des droits sur les visuels et liens fournis. Les campagnes sont soumises à validation.</span></label>
       {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
-      <button disabled={sending} className="w-full rounded-xl bg-emeraldDeep px-5 py-3.5 text-sm font-bold text-ivoryWarm hover:bg-emeraldMid disabled:opacity-60">{sending ? "Envoi..." : "Envoyer ma demande publicitaire"}</button>
+      <TurnstileWidget onVerify={setCaptchaToken} resetKey={captchaReset} />
+      <button disabled={sending || !captchaToken} className="w-full rounded-xl bg-emeraldDeep px-5 py-3.5 text-sm font-bold text-ivoryWarm hover:bg-emeraldMid disabled:opacity-60">{sending ? "Envoi..." : "Envoyer ma demande publicitaire"}</button>
       <p className="flex items-center gap-2 text-[11px] text-slateMuted"><ShieldCheck className="h-4 w-4 shrink-0" /> Demande non publiée automatiquement. Validation éditoriale et commerciale préalable.</p>
     </form>}
     <p className="text-xs text-slateMuted">MON-AGENT · Copyright © 2024–2026. Tous droits réservés sur les éléments originaux, sous réserve des licences tierces.</p>
