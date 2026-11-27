@@ -1,6 +1,7 @@
 # ADR — Migration Flutter multiplateforme MON-AGENT
 
 - **Statut :** accepté — migration progressive, non destructive
+- **État P1 au 2026-11-27 :** sources Kotlin retrouvées sur `main` (57 fichiers `.kt`, tests inclus)
 - **Date :** 2026-11-27
 - **Branche :** `migration/flutter-multiplatform-2026-11`
 - **Cibles :** Android, iOS et Web
@@ -13,8 +14,8 @@ Créer un client Flutter partagé pour Android, iOS et Web. Conserver temporaire
 
 - Le monorepo `monty-saas/` contient le backend FastAPI, les migrations Alembic, les tests et le frontend Next.js.
 - `monty-saas/docs/PHASE_0_AUDIT.md` décrit précisément l'ancien client Kotlin/Compose, ses ViewModels, modèles, services DVF, géographiques, IA, CRM, coffre vendeur, Firebase/Firestore et Room.
-- **Les sources Kotlin originales ne sont pas présentes dans l'arborescence GitHub consultable sur la branche `main` au moment de cette préparation.** L'audit indique qu'elles se trouvaient dans un workspace extrait. Une migration fidèle des écrans, règles et comportements ne peut donc pas être déclarée faite tant que ces sources et, si nécessaire, les jeux de tests/données de référence n'ont pas été versés dans un emplacement de travail contrôlé.
-- Les fonctionnalités Android répertoriées dans l'audit sont des exigences à préserver, pas des fonctionnalités Flutter déjà portées.
+- **Correction du constat initial :** les sources Kotlin sont bien présentes dans `app/src/main/` sur la branche `main`. L'arborescence contient 57 fichiers `.kt` au total, dont l'activité principale, les modèles, les dépôts, les services, les écrans Compose et les tests.
+- Les sources sont désormais accessibles pour caractérisation et portage. Elles ne sont pas encore portées dans Flutter : les fonctionnalités Android répertoriées restent des exigences de parité, pas des fonctionnalités Flutter déjà disponibles.
 
 ## Règles non négociables
 
@@ -46,16 +47,18 @@ Créer un client Flutter partagé pour Android, iOS et Web. Conserver temporaire
 
 ## Phases et portes de sortie
 
-### P0 — Préparation (ce commit)
+### P0 — Préparation (socle initial)
+- Livré sur cette branche : projet Flutter minimal et workflow multiplateforme.
+- La première exécution CI a révélé des diagnostics Flutter SDK 3.50.1 : imports Material marqués info et un import de test inutilisé. Le workflow est ajusté pour ne pas rendre les seuls diagnostics `info` bloquants ; les avertissements/erreurs restent bloquants.
 - Créer le projet Flutter non destructif et le pipeline de vérification.
 - Documenter l'inventaire connu, les risques et les preuves attendues.
 - Résultat : squelette compilable, pas encore une parité métier.
 
 ### P1 — Récupération et caractérisation de l'existant
-- Récupérer le dépôt/source Kotlin original, ressources, tests, règles Firestore et schéma Room sans secrets.
-- Inventorier tous les écrans, routes, modèles, événements, permissions et dépendances.
-- Capturer des jeux de tests anonymisés et résultats attendus.
-- Résultat : inventaire exhaustif signé avant portage.
+- Sources Kotlin, ressources, tests, règles Firestore et schéma Room retrouvés dans le dépôt ; aucun secret ne doit être recopié.
+- Inventaire de départ consigné dans `monty-saas/docs/FLUTTER_PORTING_INVENTORY.md`.
+- Reste à faire : caractériser tous les flux, événements, permissions, contrats de données et dépendances ; établir des jeux de tests de référence anonymisés.
+- Résultat attendu : inventaire exhaustif validé avant portage fonctionnel.
 
 ### P2 — Socle Flutter
 - Architecture par fonctionnalités, navigation, thème, localisation FR/EN/PT, gestion d'état, client API, erreurs, observabilité.
@@ -94,4 +97,4 @@ Un module n'est « terminé » que si son code, tests automatisés, tests réels
 
 ## Limites de cette première livraison
 
-Cette branche prépare l'architecture et la CI. Elle ne prétend pas avoir migré les fonctionnalités Kotlin, les données Firebase/Room, ni produit un binaire iOS signé. L'absence des sources Kotlin dans le dépôt empêche de porter fidèlement les comportements à ce stade.
+Cette branche prépare l'architecture et la CI. Elle ne prétend pas avoir migré les fonctionnalités Kotlin, les données Firebase/Room, ni produit un binaire iOS signé. Les sources Kotlin sont présentes et inventoriées. Le portage fonctionnel n'a pas encore commencé ; le socle Flutter reste provisoire jusqu'à l'implémentation et la validation des modules.
