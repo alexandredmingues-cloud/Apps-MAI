@@ -102,6 +102,12 @@ async def health_check(
     redis_latency_ms: float | None = None
     overall_status = "ok"
 
+    if sf is None and settings.is_production:
+        # A production API without PostgreSQL cannot serve durable tenant data.
+        # Report degraded instead of a misleading healthy/in-memory state.
+        db_reachable = False
+        overall_status = "degraded"
+
     if sf is not None:
         t0 = time.perf_counter()
         try:
@@ -148,7 +154,11 @@ async def health_check(
         database_configured=bool(settings.database_url),
         database_reachable=db_reachable,
         database_latency_ms=db_latency_ms,
-        storage_mode="postgresql_rls" if settings.database_url else "in_memory_fallback",
+        storage_mode=(
+            "postgresql_rls" if sf is not None
+            else "unavailable" if settings.is_production
+            else "in_memory_fallback"
+        ),
         dev_auth_enabled=settings.can_issue_dev_session,
         redis_configured=bool(settings.redis_url),
         redis_reachable=redis_reachable,
