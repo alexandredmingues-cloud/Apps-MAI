@@ -239,10 +239,13 @@ async def admin_upload_mobile_apk_binary(
     sf=Depends(get_db_session_factory),
 ) -> dict[str, Any]:
     raw_bytes = await request.body()
+    ensure_production_persistence(sf, is_production=settings.is_production, service_name="publication APK")
+    storage = _storage_for_environment(settings)
     try:
         rel = mobile_releases_service.register_uploaded_apk(
             ctx,
             raw_bytes=raw_bytes,
+            persist_local=(storage.active_backend == "local"),
             file_name=file_name,
             version_name=version_name,
             version_code=version_code,
@@ -256,13 +259,16 @@ async def admin_upload_mobile_apk_binary(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    storage = ObjectStorageAdapter(settings)
     if storage.active_backend != "local":
-        storage.put_bytes(
-            object_key=f"apk/{rel.id}-{rel.file_name}",
-            raw_bytes=raw_bytes,
-            content_type="application/vnd.android.package-archive",
-        )
+        try:
+            stored = storage.put_bytes(
+                object_key=f"apk/{rel.id}-{rel.file_name}",
+                raw_bytes=raw_bytes,
+                content_type="application/vnd.android.package-archive",
+            )
+            rel.storage_path = stored.object_key
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stockage objet indisponible ; version non publiée.") from exc
     if sf is not None:
         rel = await PostgresV3OrchestratorRepository(sf).upsert_mobile_release(rel)
     return _release_dto(rel, storage=storage)
