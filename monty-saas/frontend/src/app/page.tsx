@@ -299,6 +299,11 @@ export default function MontySaasCockpitPage() {
               <Newspaper className="w-3.5 h-3.5" />
               Espace Particulier
             </Link>
+            {session?.role === "SUPER_ADMIN" && (
+              <Link href="/admin/publicite" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-goldAntique bg-ivoryWarm text-emeraldDeep font-semibold hover:border-emeraldMid">
+                Modération publicitaire
+              </Link>
+            )}
             <Link
               href="/simulateurs"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-borderSubtle bg-ivoryWarm text-emeraldDeep font-semibold hover:border-emeraldMid"
