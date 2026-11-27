@@ -36,6 +36,8 @@ async def _persist_uploaded_mobile_release(
     session_factory: Any,
 ) -> MobileAppRelease:
     if storage.active_backend == "local":
+        if session_factory is not None:
+            return await PostgresV3OrchestratorRepository(session_factory).upsert_mobile_release(rel)
         return rel
 
     object_key = f"apk/{rel.id}-{rel.file_name}"
