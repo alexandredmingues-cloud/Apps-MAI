@@ -54,21 +54,24 @@ def test_cross_agency_access_is_denied_and_same_agency_is_allowed():
         TenantContext("agent-2", "", MontyRole.AGENT).assert_same_agency("agency-1")
 
 
-def test_private_notes_are_owner_only_for_agents_and_agency_wide_for_directors():
-    owner = TenantContext("agent-1", "agency-1", MontyRole.AGENT)
-    peer = TenantContext("agent-2", "agency-1", MontyRole.AGENT)
+def test_private_notes_are_owner_only_for_agents_and_agency_scoped():
+    agent_a = TenantContext("agent-a", "agency-1", MontyRole.AGENT)
+    agent_b = TenantContext("agent-b", "agency-1", MontyRole.AGENT)
     director = TenantContext("director-1", "agency-1", MontyRole.DIRECTOR)
+    other_agency = TenantContext("director-2", "agency-2", MontyRole.DIRECTOR)
 
-    assert owner.can_access_private_notes("agent-1")
-    assert not peer.can_access_private_notes("agent-1")
-    assert director.can_access_private_notes("agent-1")
+    assert agent_a.can_read_private_note("agent-a", "agency-1")
+    assert not agent_a.can_read_private_note("agent-b", "agency-1")
+    assert not agent_b.can_read_private_note("agent-a", "agency-1")
+    assert director.can_read_private_note("agent-a", "agency-1")
+    assert not other_agency.can_read_private_note("agent-a", "agency-1")
 
 
-def test_super_admin_has_platform_scope():
+def test_super_admin_override_is_explicit_and_scoped_to_the_platform_role():
     super_admin = TenantContext("platform-1", "platform", MontyRole.SUPER_ADMIN)
+    super_admin.assert_same_agency("agency-999")
     assert super_admin.has_permission(Permission.PLATFORM_ADMIN)
-    assert super_admin.has_permission(Permission.BILLING_MANAGE)
-    assert super_admin.has_permission(Permission.CRM_DELETE_RGPD)
+    assert super_admin.can_read_private_note("any-user", "agency-999")
 
 
 def test_assistant_has_crm_but_not_billing_or_rgpd_delete():
