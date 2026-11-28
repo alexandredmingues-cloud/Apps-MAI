@@ -9,6 +9,7 @@ const nextPlugin = require("@next/eslint-plugin-next");
 
 const sourceFiles = ["**/*.{js,jsx,ts,tsx}"];
 
+/** @type {import('eslint').Linter.Config[]} */
 export default [
   {
     ignores: [
@@ -23,6 +24,11 @@ export default [
   {
     ...js.configs.recommended,
     files: sourceFiles,
+    linterOptions: {
+      // Disable comments target rules we load as plugins but do not enable yet.
+      // Real rule violations still fail under --max-warnings=0.
+      reportUnusedDisableDirectives: "off",
+    },
   },
   {
     files: ["**/*.{ts,tsx}"],
@@ -38,6 +44,9 @@ export default [
       "@typescript-eslint": tsPlugin,
       "react-hooks": reactHooks,
       "@next/next": nextPlugin,
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: "off",
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
@@ -58,6 +67,9 @@ export default [
     plugins: {
       "react-hooks": reactHooks,
       "@next/next": nextPlugin,
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: "off",
     },
   },
 ];
