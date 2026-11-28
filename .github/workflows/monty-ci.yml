@@ -143,6 +143,10 @@ jobs:
           cache-dependency-path: monty-saas/frontend/package-lock.json
       - name: Install locked dependencies
         run: npm ci
+      - name: Install pinned ESLint tooling without changing the application lockfile
+        run: npm install --no-save --package-lock=false eslint@9.39.1 @eslint/js@9.39.1 @typescript-eslint/parser@8.48.1 @typescript-eslint/eslint-plugin@8.48.1
+      - name: Strict ESLint validation
+        run: npm run lint
       - name: TypeScript validation
         run: npm run typecheck
       - name: Production build
