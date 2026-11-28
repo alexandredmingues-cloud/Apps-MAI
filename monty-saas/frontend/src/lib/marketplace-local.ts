@@ -134,7 +134,7 @@ export function computeLocalSaleTimeline(params: {
 export function redactPiiText(raw: string): string {
   return raw
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email-masqué-rgpd]")
-    .replace(/(?:\+?\d[\d .\-]{7,}\d)/g, "[tél-masqué-rgpd]");
+    .replace(/(?:\+?\d[\d .-]{7,}\d)/g, "[tél-masqué-rgpd]");
 }
 
 export function buildLocalListingCopy(params: {
