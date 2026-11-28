@@ -1,6 +1,11 @@
+import { createRequire } from "module";
 import js from "@eslint/js";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+
+const require = createRequire(import.meta.url);
+const reactHooks = require("eslint-plugin-react-hooks");
+const nextPlugin = require("@next/eslint-plugin-next");
 
 const sourceFiles = ["**/*.{js,jsx,ts,tsx}"];
 
@@ -31,6 +36,8 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
+      "react-hooks": reactHooks,
+      "@next/next": nextPlugin,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
@@ -47,6 +54,10 @@ export default [
       ecmaVersion: "latest",
       sourceType: "module",
       parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: {
+      "react-hooks": reactHooks,
+      "@next/next": nextPlugin,
     },
   },
 ];
